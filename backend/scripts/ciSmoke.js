@@ -8,6 +8,7 @@ const query = process.env.SMOKE_QUERY || 'test plomberie';
 const host = process.env.API_HOST || 'localhost';
 const port = process.env.API_PORT || 3000;
 const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 8000);
+const realMode = String(process.env.REAL_MODE || 'false').toLowerCase() === 'true';
 
 function fail(msg) {
     console.error('\n[ciSmoke] FAIL:', msg);
@@ -45,6 +46,12 @@ const req = http.request(
                 }
                 if (!json.videoUrl || typeof json.videoUrl !== 'string') {
                     return fail('Missing videoUrl string.');
+                }
+                if (realMode) {
+                    // In real mode, ensure we did not hit mock path
+                    if (json.source && String(json.source).includes('mock')) {
+                        return fail('Unexpected mock source in REAL_MODE.');
+                    }
                 }
                 ok(`Search succeeded: title="${json.title}" steps=${json.steps.length}`);
                 process.exit(0);
