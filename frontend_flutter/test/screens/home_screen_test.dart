@@ -1,4 +1,5 @@
-@Skip('Legacy HomeScreen tests (pre-chat) – disabled pending migration to new chat UI.')
+@Skip(
+    'Legacy HomeScreen tests (pre-chat) – disabled pending migration to new chat UI.')
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
