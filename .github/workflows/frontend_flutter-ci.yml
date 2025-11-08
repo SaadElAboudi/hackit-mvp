@@ -1,0 +1,51 @@
+name: Frontend Flutter CI (widgets)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend_flutter/**'
+      - '.github/workflows/frontend_flutter-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'frontend_flutter/**'
+      - '.github/workflows/frontend_flutter-ci.yml'
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_flutter
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Cache pub
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ~/.dartServer
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run widget tests (stable subset)
+        run: |
+          flutter test -r compact test/widgets
