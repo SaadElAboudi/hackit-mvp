@@ -2,22 +2,14 @@
 
 ![Frontend Flutter CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/frontend_flutter-ci.yml/badge.svg)
 ![Backend CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-ci.yml/badge.svg)
+![Backend REAL CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-real-ci.yml/badge.svg)
 
 ## Description
 Hackit MVP is a project designed to provide users with quick and clear answers to their questions through a chat interface. The application leverages AI to summarize information and find relevant video content from platforms like YouTube and TikTok.
 
 ## Features
-- User-friendly chat interface for asking questions.
-- AI-powered question reformulation and summarization.
-- Integration with YouTube and TikTok APIs to fetch relevant video content.
-- Step-by-step guides generated from video content.
 
 ## Tech Stack
-- **Frontend**: Flutter (Web/Desktop/Mobile) in `frontend_flutter`.
-- **Backend**: Node.js (Express) in `backend/`.
-- **Database**: Supabase or MongoDB Atlas for storing user queries and feedback.
-- **AI Services**: OpenAI API for natural language processing and summarization.
-- **Video Services**: YouTube Data API and TikTok API for video retrieval.
 
 ## Project Structure
 ```
@@ -63,6 +55,16 @@ hackit-mvp
    ```bash
    npm run test:smoke
    ```
+
+### Real-mode CI (YouTube Data API)
+To exercise the production YouTube API path daily, a scheduled workflow `backend-real-ci.yml` runs the backend with `MOCK_MODE=false` and performs the smoke test with `REAL_MODE=true`.
+
+Setup steps:
+1. In your GitHub repo settings, add a secret `YT_API_KEY` containing a valid YouTube Data API v3 key.
+2. (Optional) Adjust the cron schedule inside `.github/workflows/backend-real-ci.yml`.
+3. Manually trigger via the Actions tab ("Run workflow") if you want an immediate check.
+
+The REAL smoke will fail if the response still indicates a mock source, ensuring keys are wired correctly and fallback logic doesn’t silently mask issues.
 
 ## Usage
 - Open the frontend application and enter your question in the chat interface.
