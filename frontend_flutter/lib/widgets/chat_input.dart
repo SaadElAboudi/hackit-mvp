@@ -8,12 +8,14 @@ class ChatInput extends StatefulWidget {
   final bool disabled;
   final VoidCallback? onRegenerate;
   final VoidCallback? onEditLast;
+  final String Function()? getLastQuery;
   const ChatInput({
     super.key,
     required this.onSearch,
     this.disabled = false,
     this.onRegenerate,
     this.onEditLast,
+    this.getLastQuery,
   });
 
   @override
@@ -90,8 +92,9 @@ class _ChatInputState extends State<ChatInput> {
                   onKeyEvent: _handleKey,
                   child: TextField(
                     controller: _controller,
+                    // Enter simple = envoyer, Shift+Enter = nouvelle ligne géré via _handleKey
                     onSubmitted: (_) => _submit(),
-                    textInputAction: TextInputAction.search,
+                    textInputAction: TextInputAction.newline,
                     style: TextStyle(fontSize: SizeConfig.adaptiveFontSize(14)),
                     decoration: InputDecoration(
                       hintText: 'Posez votre question…',
@@ -135,11 +138,15 @@ class _ChatInputState extends State<ChatInput> {
                     onPressed: widget.disabled
                         ? null
                         : () {
-                            widget.onEditLast!();
-                            if (_controller.text.isEmpty &&
-                                widget.onEditLast != null) {
-                              // consumer will have set lastQuery back; rely on external state
+                            final last = widget.getLastQuery?.call();
+                            if (last != null && last.isNotEmpty) {
+                              setState(() {
+                                _controller.text = last;
+                                _controller.selection = TextSelection.collapsed(
+                                    offset: last.length);
+                              });
                             }
+                            widget.onEditLast!();
                           },
                     icon: const Icon(Icons.edit_rounded),
                   ),

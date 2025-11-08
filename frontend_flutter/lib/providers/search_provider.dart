@@ -158,6 +158,76 @@ class SearchProvider extends ChangeNotifier {
     await search((lastQuery ?? result?.title ?? '').trim());
   }
 
+  Future<void> regenerateLast() async {
+    if (loading) return;
+    final q = (lastQuery ?? '').trim();
+    if (q.isEmpty) return;
+
+    final analytics = AnalyticsManager();
+    final stopwatch = Stopwatch()..start();
+
+    loading = true;
+    error = null;
+    notifyListeners();
+
+    // If offline and no cache, fail fast
+    if (_isOffline) {
+      error = 'Mode hors ligne - Regénération impossible';
+      _appendError(error!);
+      loading = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final newResult = await _api.searchVideos(q);
+      result = newResult;
+      lastUpdated = DateTime.now();
+      error = null;
+
+      stopwatch.stop();
+      await analytics.logSearch(
+        query: q,
+        isSuccess: true,
+      );
+      await analytics.logSearchResult(
+        result: newResult,
+        searchDurationMs: stopwatch.elapsedMilliseconds,
+      );
+
+      // Cache
+      if (_cacheManager != null) {
+        await _cacheManager.cacheSearchResult(q, newResult);
+      }
+
+      // Append assistant response only (pas de bulle user en plus)
+      _appendAssistantFromResult(newResult);
+    } on ApiException catch (e) {
+      error = e.message;
+      await analytics.logSearch(
+        query: q,
+        isSuccess: false,
+        errorMessage: e.message,
+      );
+      await analytics.logError(
+        errorType: 'api_error',
+        message: e.message,
+      );
+      _appendError(error!);
+    } catch (e, stackTrace) {
+      error = 'Une erreur inattendue est survenue';
+      await analytics.logError(
+        errorType: 'unexpected_error',
+        message: e.toString(),
+        stackTrace: stackTrace,
+      );
+      _appendError(error!);
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
   void reset() {
     loading = false;
     error = null;
