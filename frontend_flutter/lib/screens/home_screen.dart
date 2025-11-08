@@ -7,6 +7,7 @@ import '../providers/search_provider.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
+import '../widgets/chat_bubbles.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -28,83 +29,84 @@ class _HomeMobileLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<SearchProvider>();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (provider.result != null &&
-          !provider.loading &&
-          provider.error == null) {
-        Navigator.pushNamed(context, '/result', arguments: provider.result);
-      }
-    });
     final scheme = Theme.of(context).colorScheme;
+    final bg = scheme.brightness == Brightness.dark
+        ? const Color(0xFF121212)
+        : const Color(0xFFF7F8FA);
     return Scaffold(
-      appBar: AppBar(title: const Text('Hackit MVP')),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              scheme.primaryContainer.withValues(alpha: 0.15),
-              scheme.surface,
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  vertical: AdaptiveSpacing.medium,
-                  horizontal: AdaptiveSpacing.large,
-                ),
-                child: Text(
-                  'Posez votre question',
-                  style: TextStyle(
-                    fontSize: SizeConfig.adaptiveFontSize(18),
-                  ),
-                ),
+      backgroundColor: bg,
+      appBar: AppBar(
+        backgroundColor: bg,
+        elevation: 0,
+        title: const Text('Hackit'),
+        centerTitle: false,
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: AdaptiveSpacing.medium,
               ),
-              ChatInput(
-                onSearch: (query) => provider.search(query),
-                disabled: provider.loading,
+              child: ListView(
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  SizedBox(height: AdaptiveSpacing.small),
+                  if (provider.lastQuery != null)
+                    UserBubble(text: provider.lastQuery!),
+                  if (provider.loading) const LoadingBubbles(),
+                  if (provider.error != null)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        top: AdaptiveSpacing.small,
+                        right: AdaptiveSpacing.small,
+                        left: AdaptiveSpacing.small,
+                      ),
+                      child: Text(
+                        '❌ ${provider.error}',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontSize: SizeConfig.adaptiveFontSize(14),
+                        ),
+                      ),
+                    ),
+                  if (provider.result != null && !provider.loading) ...[
+                    AssistantContainer(
+                      child: SummaryView(
+                        title: provider.result!.title,
+                        steps: provider.result!.steps,
+                      ),
+                    ),
+                    SizedBox(height: AdaptiveSpacing.small),
+                    AssistantContainer(
+                      child: VideoCard(
+                        title: provider.result!.title,
+                        videoUrl: provider.result!.videoUrl,
+                      ),
+                    ),
+                  ],
+                  SizedBox(height: AdaptiveSpacing.large * 2),
+                ],
               ),
-              if (provider.loading)
-                const Expanded(
-                    child: Center(child: CircularProgressIndicator())),
-              if (provider.error != null)
-                Padding(
-                  padding: EdgeInsets.all(AdaptiveSpacing.medium),
-                  child: Text(
-                    '❌ ${provider.error}',
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontSize: SizeConfig.adaptiveFontSize(14),
-                    ),
-                  ),
-                ),
-              if (provider.result != null && !provider.loading)
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(AdaptiveSpacing.medium),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SummaryView(
-                          title: provider.result!.title,
-                          steps: provider.result!.steps,
-                        ),
-                        SizedBox(height: AdaptiveSpacing.small),
-                        VideoCard(
-                          title: provider.result!.title,
-                          videoUrl: provider.result!.videoUrl,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
+            ),
           ),
-        ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, -2),
+                )
+              ],
+            ),
+            child: ChatInput(
+              onSearch: (query) => provider.search(query),
+              disabled: provider.loading,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -117,92 +119,68 @@ class _HomeTabletLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<SearchProvider>();
     final scheme = Theme.of(context).colorScheme;
+    final bg = scheme.brightness == Brightness.dark
+        ? const Color(0xFF121212)
+        : const Color(0xFFF7F8FA);
     return Scaffold(
-      appBar: AppBar(title: const Text('Hackit MVP')),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              scheme.primaryContainer.withValues(alpha: 0.12),
-              scheme.surface,
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: AdaptiveSpacing.maxContentWidth,
-              ),
-              child: Padding(
-                padding: AdaptiveSpacing.screenPadding,
-                child: Column(
+      backgroundColor: bg,
+      appBar: AppBar(
+        backgroundColor: bg,
+        elevation: 0,
+        title: const Text('Hackit'),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 860),
+          child: Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AdaptiveSpacing.large,
+                    vertical: AdaptiveSpacing.medium,
+                  ),
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Posez votre question',
-                                style: TextStyle(
-                                  fontSize: SizeConfig.adaptiveFontSize(20),
-                                ),
-                              ),
-                              SizedBox(height: AdaptiveSpacing.medium),
-                              ChatInput(
-                                onSearch: (query) => provider.search(query),
-                                disabled: provider.loading,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (provider.loading)
-                      const Expanded(
-                          child: Center(child: CircularProgressIndicator())),
+                    if (provider.lastQuery != null)
+                      UserBubble(text: provider.lastQuery!),
+                    if (provider.loading) const LoadingBubbles(),
                     if (provider.error != null)
                       Padding(
-                        padding: EdgeInsets.all(AdaptiveSpacing.medium),
+                        padding: EdgeInsets.only(
+                          top: AdaptiveSpacing.small,
+                        ),
                         child: Text(
                           '❌ ${provider.error}',
                           style: TextStyle(
                             color: Colors.red,
-                            fontSize: SizeConfig.adaptiveFontSize(16),
+                            fontSize: SizeConfig.adaptiveFontSize(14),
                           ),
                         ),
                       ),
-                    if (provider.result != null && !provider.loading)
-                      Expanded(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: SummaryView(
-                                title: provider.result!.title,
-                                steps: provider.result!.steps,
-                              ),
-                            ),
-                            SizedBox(width: AdaptiveSpacing.medium),
-                            Expanded(
-                              flex: 2,
-                              child: VideoCard(
-                                title: provider.result!.title,
-                                videoUrl: provider.result!.videoUrl,
-                              ),
-                            ),
-                          ],
+                    if (provider.result != null && !provider.loading) ...[
+                      AssistantContainer(
+                        child: SummaryView(
+                          title: provider.result!.title,
+                          steps: provider.result!.steps,
                         ),
                       ),
+                      SizedBox(height: AdaptiveSpacing.small),
+                      AssistantContainer(
+                        child: VideoCard(
+                          title: provider.result!.title,
+                          videoUrl: provider.result!.videoUrl,
+                        ),
+                      ),
+                    ],
+                    SizedBox(height: AdaptiveSpacing.large * 2),
                   ],
                 ),
               ),
-            ),
+              ChatInput(
+                onSearch: (query) => provider.search(query),
+                disabled: provider.loading,
+              ),
+            ],
           ),
         ),
       ),
@@ -217,101 +195,68 @@ class _HomeDesktopLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<SearchProvider>();
     final scheme = Theme.of(context).colorScheme;
+    final bg = scheme.brightness == Brightness.dark
+        ? const Color(0xFF111213)
+        : const Color(0xFFF5F6F7);
     return Scaffold(
-      appBar: AppBar(title: const Text('Hackit MVP')),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              scheme.primaryContainer.withValues(alpha: 0.10),
-              scheme.surface,
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: AdaptiveSpacing.maxContentWidth,
-              ),
-              child: Padding(
-                padding: AdaptiveSpacing.screenPadding,
-                child: Column(
+      backgroundColor: bg,
+      appBar: AppBar(
+        title: const Text('Hackit'),
+        backgroundColor: bg,
+        elevation: 0,
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 980),
+          child: Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AdaptiveSpacing.large,
+                    vertical: AdaptiveSpacing.medium,
+                  ),
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Posez votre question',
-                                style: TextStyle(
-                                  fontSize: SizeConfig.adaptiveFontSize(24),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: AdaptiveSpacing.large),
-                              SizedBox(
-                                width: SizeConfig.screenWidth * 0.6,
-                                child: ChatInput(
-                                  onSearch: (query) => provider.search(query),
-                                  disabled: provider.loading,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (provider.loading)
-                      const Expanded(
-                          child: Center(child: CircularProgressIndicator())),
+                    if (provider.lastQuery != null)
+                      UserBubble(text: provider.lastQuery!),
+                    if (provider.loading) const LoadingBubbles(),
                     if (provider.error != null)
                       Padding(
-                        padding: EdgeInsets.all(AdaptiveSpacing.medium),
+                        padding: EdgeInsets.only(
+                          top: AdaptiveSpacing.small,
+                        ),
                         child: Text(
                           '❌ ${provider.error}',
                           style: TextStyle(
                             color: Colors.red,
-                            fontSize: SizeConfig.adaptiveFontSize(16),
+                            fontSize: SizeConfig.adaptiveFontSize(14),
                           ),
                         ),
                       ),
-                    if (provider.result != null && !provider.loading)
-                      Expanded(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: SummaryView(
-                                title: provider.result!.title,
-                                steps: provider.result!.steps,
-                              ),
-                            ),
-                            SizedBox(width: AdaptiveSpacing.large),
-                            Expanded(
-                              flex: 1,
-                              child: Column(
-                                children: [
-                                  VideoCard(
-                                    title: provider.result!.title,
-                                    videoUrl: provider.result!.videoUrl,
-                                  ),
-                                  // Placeholder for future desktop-only widgets
-                                ],
-                              ),
-                            ),
-                          ],
+                    if (provider.result != null && !provider.loading) ...[
+                      AssistantContainer(
+                        child: SummaryView(
+                          title: provider.result!.title,
+                          steps: provider.result!.steps,
                         ),
                       ),
+                      SizedBox(height: AdaptiveSpacing.small),
+                      AssistantContainer(
+                        child: VideoCard(
+                          title: provider.result!.title,
+                          videoUrl: provider.result!.videoUrl,
+                        ),
+                      ),
+                    ],
+                    SizedBox(height: AdaptiveSpacing.large * 2),
                   ],
                 ),
               ),
-            ),
+              ChatInput(
+                onSearch: (query) => provider.search(query),
+                disabled: provider.loading,
+              ),
+            ],
           ),
         ),
       ),

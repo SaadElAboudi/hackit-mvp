@@ -14,6 +14,7 @@ class SearchProvider extends ChangeNotifier {
   BaseSearchResult? result;
   DateTime? lastUpdated;
   bool _isOffline = false;
+  String? lastQuery;
 
   SearchProvider({
     ApiService? api,
@@ -62,6 +63,7 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
+    lastQuery = query.trim();
     loading = true;
     error = null;
     notifyListeners();
@@ -139,7 +141,7 @@ class SearchProvider extends ChangeNotifier {
     if (!hasError || loading) return;
     error = null;
     notifyListeners();
-    await search(result?.title ?? '');
+    await search((lastQuery ?? result?.title ?? '').trim());
   }
 
   void reset() {
@@ -147,6 +149,7 @@ class SearchProvider extends ChangeNotifier {
     error = null;
     result = null;
     lastUpdated = null;
+    // Keep lastQuery so we can display previous prompt in the chat view context
     notifyListeners();
   }
 }
