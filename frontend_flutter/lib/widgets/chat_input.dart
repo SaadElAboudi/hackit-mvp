@@ -9,6 +9,9 @@ class ChatInput extends StatefulWidget {
   final VoidCallback? onRegenerate;
   final VoidCallback? onEditLast;
   final String Function()? getLastQuery;
+  // Whether the input field should be cleared after sending a query.
+  // Default: false to preserve the last prompt for visibility & easy editing.
+  final bool clearOnSend;
   const ChatInput({
     super.key,
     required this.onSearch,
@@ -16,6 +19,7 @@ class ChatInput extends StatefulWidget {
     this.onRegenerate,
     this.onEditLast,
     this.getLastQuery,
+    this.clearOnSend = false,
   });
 
   @override
@@ -24,10 +28,12 @@ class ChatInput extends StatefulWidget {
 
 class _ChatInputState extends State<ChatInput> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -35,7 +41,13 @@ class _ChatInputState extends State<ChatInput> {
     final q = _controller.text.trim();
     if (q.isNotEmpty && !widget.disabled) {
       widget.onSearch(q);
-      _controller.clear();
+      if (widget.clearOnSend) {
+        _controller.clear();
+      } else {
+        // Keep the text; optionally move cursor to end for convenience.
+        _controller.selection =
+            TextSelection.collapsed(offset: _controller.text.length);
+      }
     }
   }
 
@@ -88,7 +100,7 @@ class _ChatInputState extends State<ChatInput> {
             children: [
               Expanded(
                 child: KeyboardListener(
-                  focusNode: FocusNode(),
+                  focusNode: _focusNode,
                   onKeyEvent: _handleKey,
                   child: TextField(
                     controller: _controller,
@@ -144,6 +156,8 @@ class _ChatInputState extends State<ChatInput> {
                                 _controller.text = last;
                                 _controller.selection = TextSelection.collapsed(
                                     offset: last.length);
+                                // Focus the input so the user can immediately continue typing.
+                                _focusNode.requestFocus();
                               });
                             }
                             widget.onEditLast!();
