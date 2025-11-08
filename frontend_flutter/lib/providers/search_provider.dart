@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/cache_manager.dart';
@@ -6,6 +7,37 @@ import '../services/analytics_manager.dart';
 import '../models/base_search_result.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/chat_message.dart';
+import 'dart:math' show Random, pow;
+
+// Error taxonomy to tailor user-facing messages.
+enum ErrorType {
+  network,
+  timeout,
+  quota,
+  validation,
+  server,
+  unexpected,
+  unknown
+}
+
+String errorTypeToMessage(ErrorType type) {
+  switch (type) {
+    case ErrorType.network:
+      return 'Problème de connexion réseau.';
+    case ErrorType.timeout:
+      return 'Délai dépassé, veuillez réessayer.';
+    case ErrorType.quota:
+      return 'Quota / limite de requêtes atteint.';
+    case ErrorType.validation:
+      return 'Requête invalide.';
+    case ErrorType.server:
+      return 'Erreur serveur. Réessayez plus tard.';
+    case ErrorType.unexpected:
+      return 'Erreur inattendue.';
+    case ErrorType.unknown:
+      return 'Erreur inconnue.';
+  }
+}
 
 class SearchProvider extends ChangeNotifier {
   final ApiService _api;
@@ -22,14 +54,20 @@ class SearchProvider extends ChangeNotifier {
   // Draft prompt temporarily set when user chooses to edit a previous message.
   String? _draftText;
 
+  final bool _testMode;
+
   SearchProvider({
     ApiService? api,
     CacheManager? cacheManager,
     SharedPreferences? prefs,
+    bool testMode = false,
   })  : _api = api ?? ApiService.create(),
         _cacheManager = cacheManager,
-        _prefs = prefs {
-    _initConnectivity();
+        _prefs = prefs,
+        _testMode = testMode {
+    if (!_testMode) {
+      _initConnectivity();
+    }
     _loadMessages();
   }
 
@@ -40,6 +78,8 @@ class SearchProvider extends ChangeNotifier {
       lastUpdated == null ||
       DateTime.now().difference(lastUpdated!) > const Duration(minutes: 5);
   String? get draftText => _draftText;
+  String? _lastTemplate;
+  String? get lastTemplate => _lastTemplate;
 
   Future<void> _initConnectivity() async {
     try {
@@ -58,8 +98,32 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  ErrorType _classifyError(Object e) {
+    if (e is ApiException) {
+      final msg = e.message.toLowerCase();
+      final code = e.statusCode;
+      if (msg.contains('timeout')) return ErrorType.timeout;
+      if (msg.contains('socketexception') || msg.contains('failed host')) {
+        return ErrorType.network;
+      }
+      if (code == 429 || msg.contains('quota') || msg.contains('rate limit')) {
+        return ErrorType.quota;
+      }
+      if (code == 400 || msg.contains('validation')) {
+        return ErrorType.validation;
+      }
+      if (code != null && code >= 500) return ErrorType.server;
+      return ErrorType.unexpected;
+    }
+    if (e is TimeoutException) return ErrorType.timeout;
+    return ErrorType.unknown;
+  }
+
+  bool _isTransient(ErrorType type) {
+    return type == ErrorType.network || type == ErrorType.timeout;
+  }
+
   Future<void> search(String query) async {
-    // Use the singleton AnalyticsManager (legacy MVP version) via factory.
     final analytics = AnalyticsManager();
     final stopwatch = Stopwatch()..start();
 
@@ -79,7 +143,7 @@ class SearchProvider extends ChangeNotifier {
     error = null;
     notifyListeners();
 
-    // Try to get cached result first
+    // Try cached first
     if (_cacheManager != null) {
       final cached = await _cacheManager.getCachedResult(query);
       if (cached != null) {
@@ -87,13 +151,10 @@ class SearchProvider extends ChangeNotifier {
         lastUpdated = DateTime.now();
         loading = false;
         notifyListeners();
-
-        // If we're offline, stop here
-        if (_isOffline) return;
+        if (_isOffline) return; // offline short-circuit
       }
     }
 
-    // If we're offline and have no cache, show error
     if (_isOffline) {
       error = 'Mode hors ligne - Pas de résultat en cache';
       _appendError(error!);
@@ -102,56 +163,62 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
-    try {
-      result = await _api.searchVideos(query);
-      lastUpdated = DateTime.now();
-      error = null;
-
-      // Log successful search
-      stopwatch.stop();
-      await analytics.logSearch(
-        query: query,
-        isSuccess: true,
-      );
-      await analytics.logSearchResult(
-        result: result!,
-        searchDurationMs: stopwatch.elapsedMilliseconds,
-      );
-
-      // Cache the new result
-      if (_cacheManager != null) {
-        await _cacheManager.cacheSearchResult(query, result!);
+    final maxRetries = 2; // 1–2 automatic retries requirement
+    int attempt = 0;
+    Object? lastErr;
+    ErrorType? lastType;
+    while (attempt <= maxRetries) {
+      try {
+        final r = await _api.searchVideos(query);
+        result = r;
+        lastUpdated = DateTime.now();
+        error = null;
+        stopwatch.stop();
+        await analytics.logSearch(query: query, isSuccess: true);
+        await analytics.logSearchResult(
+          result: r,
+          searchDurationMs: stopwatch.elapsedMilliseconds,
+        );
+        if (_cacheManager != null) {
+          await _cacheManager.cacheSearchResult(query, r);
+        }
+        _appendAssistantFromResult(r);
+        loading = false;
+        notifyListeners();
+        return; // success -> exit
+      } catch (e, stack) {
+        lastErr = e;
+        lastType = _classifyError(e);
+        await analytics.logError(
+          errorType: 'search_attempt_error',
+          message: e.toString(),
+          stackTrace: stack,
+        );
+        final canRetry = attempt < maxRetries && _isTransient(lastType);
+        if (canRetry) {
+          attempt++;
+          // Exponential backoff with jitter (base 500ms)
+          final base = 500 * pow(2, attempt - 1);
+          final jitter = Random().nextInt(250); // 0-250ms
+          final delay = Duration(milliseconds: (base + jitter).toInt());
+          await Future.delayed(delay);
+          continue; // retry
+        }
+        break; // no retry path
       }
-
-      // Append assistant messages (steps + video)
-      _appendAssistantFromResult(result!);
-    } on ApiException catch (e) {
-      error = e.message;
-      await analytics.logSearch(
-        query: query,
-        isSuccess: false,
-        errorMessage: e.message,
-      );
-      await analytics.logError(
-        errorType: 'api_error',
-        message: e.message,
-      );
-      // Keep cached result if available
-      result ??= null;
-      _appendError(error!);
-    } catch (e, stackTrace) {
-      error = 'Une erreur inattendue est survenue';
-      await analytics.logError(
-        errorType: 'unexpected_error',
-        message: e.toString(),
-        stackTrace: stackTrace,
-      );
-      result ??= null;
-      _appendError(error!);
-    } finally {
-      loading = false;
-      notifyListeners();
     }
+    // Final failure
+    final et = lastType ?? ErrorType.unknown;
+    final msg = errorTypeToMessage(et);
+    error = msg;
+    _appendError(msg);
+    await analytics.logSearch(
+      query: query,
+      isSuccess: false,
+      errorMessage: lastErr.toString(),
+    );
+    loading = false;
+    notifyListeners();
   }
 
   // Streaming variant: progressively updates steps, then appends video at the end.
@@ -494,6 +561,7 @@ class SearchProvider extends ChangeNotifier {
       if (raw != null && raw.isNotEmpty) {
         messages = ChatMessage.decodeList(raw);
       }
+      _lastTemplate = _prefs?.getString(_lastTemplateKey);
     } catch (_) {
       messages = [];
     }
@@ -503,5 +571,44 @@ class SearchProvider extends ChangeNotifier {
     try {
       await _prefs?.setString(_messagesKey, ChatMessage.encodeList(messages));
     } catch (_) {}
+  }
+
+  static const _lastTemplateKey = 'last_template_id';
+  Future<void> setLastTemplate(String? id) async {
+    _lastTemplate = id;
+    if (id == null) {
+      await _prefs?.remove(_lastTemplateKey);
+    } else {
+      await _prefs?.setString(_lastTemplateKey, id);
+    }
+    notifyListeners();
+  }
+
+  // Apply a prompt template to the provided text.
+  // Supported ids: 'resume', 'tutoriel', 'eli5', 'fr2en', 'en2fr'
+  String applyTemplateText(String id, String current) {
+    final base = current.trim();
+    switch (id) {
+      case 'resume':
+        return base.isEmpty ? 'Résume ce contenu:' : 'Résume: $base';
+      case 'tutoriel':
+        return base.isEmpty
+            ? 'Fais un tutoriel étape par étape sur …'
+            : 'Fais un tutoriel étape par étape sur: $base';
+      case 'eli5':
+        return base.isEmpty
+            ? "Explique comme si j'avais 5 ans:"
+            : "Explique comme si j'avais 5 ans: $base";
+      case 'fr2en':
+        return base.isEmpty
+            ? 'Translate to English:'
+            : 'Translate to English: $base';
+      case 'en2fr':
+        return base.isEmpty
+            ? 'Traduire en français:'
+            : 'Traduire en français: $base';
+      default:
+        return current;
+    }
   }
 }

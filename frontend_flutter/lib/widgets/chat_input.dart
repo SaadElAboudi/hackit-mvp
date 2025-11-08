@@ -31,6 +31,7 @@ class ChatInput extends StatefulWidget {
 class _ChatInputState extends State<ChatInput> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  String? _selectedTemplate; // local UI state
 
   @override
   void dispose() {
@@ -118,48 +119,102 @@ class _ChatInputState extends State<ChatInput> {
         ),
         child: Padding(
           padding: EdgeInsets.all(AdaptiveSpacing.small),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: KeyboardListener(
-                  focusNode: _focusNode,
-                  onKeyEvent: _handleKey,
-                  child: TextField(
-                    controller: _controller,
-                    // Enter simple = envoyer, Shift+Enter = nouvelle ligne géré via _handleKey
-                    onSubmitted: (_) => _submit(),
-                    textInputAction: TextInputAction.newline,
-                    style: TextStyle(fontSize: SizeConfig.adaptiveFontSize(14)),
-                    decoration: InputDecoration(
-                      hintText: 'Posez votre question…',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: _controller.text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Effacer',
-                              onPressed: () => setState(_controller.clear),
-                              icon: const Icon(Icons.close_rounded),
-                            ),
+              _TemplateChips(
+                selected: _selectedTemplate ?? provider?.lastTemplate,
+                onSelected: (id) {
+                  setState(() => _selectedTemplate = id);
+                  provider?.setLastTemplate(id);
+                  if (id != null) {
+                    final transformed =
+                        provider?.applyTemplateText(id, _controller.text) ??
+                            _controller.text;
+                    setState(() {
+                      _controller.text = transformed;
+                      _controller.selection =
+                          TextSelection.collapsed(offset: transformed.length);
+                    });
+                  }
+                  _focusNode.requestFocus();
+                },
+              ),
+              SizedBox(height: AdaptiveSpacing.small),
+              Row(
+                children: [
+                  Expanded(
+                    child: KeyboardListener(
+                      focusNode: _focusNode,
+                      onKeyEvent: _handleKey,
+                      child: TextField(
+                        controller: _controller,
+                        onSubmitted: (_) => _submit(),
+                        textInputAction: TextInputAction.newline,
+                        style: TextStyle(
+                            fontSize: SizeConfig.adaptiveFontSize(14)),
+                        decoration: InputDecoration(
+                          hintText: 'Posez votre question…',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: _controller.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Effacer',
+                                  onPressed: () => setState(_controller.clear),
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              SizedBox(width: AdaptiveSpacing.small),
-              ElevatedButton(
-                onPressed: widget.disabled ? null : _submit,
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.play_arrow_rounded),
-                    SizedBox(width: 8),
-                    Text('Rechercher'),
-                  ],
-                ),
+                  SizedBox(width: AdaptiveSpacing.small),
+                  ElevatedButton(
+                    onPressed: widget.disabled ? null : _submit,
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.play_arrow_rounded),
+                        SizedBox(width: 8),
+                        Text('Rechercher'),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TemplateChips extends StatelessWidget {
+  final String? selected;
+  final void Function(String?) onSelected;
+  const _TemplateChips({required this.selected, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    final templates = const [
+      ('resume', 'Résumé'),
+      ('tutoriel', 'Tutoriel'),
+      ('eli5', 'ELI5'),
+      ('fr2en', 'FR→EN'),
+      ('en2fr', 'EN→FR'),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        for (final (id, label) in templates)
+          ChoiceChip(
+            label: Text(label),
+            selected: selected == id,
+            onSelected: (v) => onSelected(v ? id : null),
+          ),
+      ],
     );
   }
 }
