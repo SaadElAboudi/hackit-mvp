@@ -53,6 +53,7 @@ class SearchProvider extends ChangeNotifier {
   List<ChatMessage> messages = [];
   // Draft prompt temporarily set when user chooses to edit a previous message.
   String? _draftText;
+  bool _draftRestored = false;
 
   final bool _testMode;
 
@@ -78,6 +79,7 @@ class SearchProvider extends ChangeNotifier {
       lastUpdated == null ||
       DateTime.now().difference(lastUpdated!) > const Duration(minutes: 5);
   String? get draftText => _draftText;
+  bool get draftRestored => _draftRestored;
   String? _lastTemplate;
   String? get lastTemplate => _lastTemplate;
 
@@ -446,12 +448,26 @@ class SearchProvider extends ChangeNotifier {
   // Set a draft from an existing user message to allow editing in the input field.
   void setDraft(String text) {
     _draftText = text;
+    try {
+      _prefs?.setString(_draftKey, text);
+    } catch (_) {}
     notifyListeners();
   }
 
   void clearDraft() {
     _draftText = null;
+    _draftRestored = false;
+    try {
+      _prefs?.remove(_draftKey);
+    } catch (_) {}
     notifyListeners();
+  }
+
+  void consumeDraftRestoredFlag() {
+    if (_draftRestored) {
+      _draftRestored = false;
+      notifyListeners();
+    }
   }
 
   // Regenerate using an arbitrary previous prompt without re-adding a user bubble.
@@ -562,6 +578,11 @@ class SearchProvider extends ChangeNotifier {
         messages = ChatMessage.decodeList(raw);
       }
       _lastTemplate = _prefs?.getString(_lastTemplateKey);
+      final d = _prefs?.getString(_draftKey);
+      if (d != null && d.isNotEmpty) {
+        _draftText = d;
+        _draftRestored = true;
+      }
     } catch (_) {
       messages = [];
     }
@@ -574,6 +595,7 @@ class SearchProvider extends ChangeNotifier {
   }
 
   static const _lastTemplateKey = 'last_template_id';
+  static const _draftKey = 'draft_text';
   Future<void> setLastTemplate(String? id) async {
     _lastTemplate = id;
     if (id == null) {

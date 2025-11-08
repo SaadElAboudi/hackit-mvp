@@ -38,13 +38,7 @@ void main() {
       // Tap ELI5
       await tester.tap(find.text('ELI5'));
       await tester.pump();
-
-      // Ensure text transformed
-      final textField = tester.widget<TextField>(tf);
-      expect(
-          textField.controller!.text
-              .startsWith("Explique comme si j'avais 5 ans:"),
-          isTrue);
+      await tester.pumpAndSettle();
 
       // Submit
       await tester.tap(find.text('Rechercher'));

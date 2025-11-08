@@ -32,6 +32,7 @@ class _ChatInputState extends State<ChatInput> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   String? _selectedTemplate; // local UI state
+  bool _restoredToastShown = false;
 
   @override
   void dispose() {
@@ -41,8 +42,20 @@ class _ChatInputState extends State<ChatInput> {
   }
 
   void _submit() {
-    final q = _controller.text.trim();
+    String q = _controller.text.trim();
     if (q.isNotEmpty && !widget.disabled) {
+      // Apply selected template at submission time to guarantee payload transformation.
+      try {
+        final provider = Provider.of<SearchProvider>(context, listen: false);
+        final id = _selectedTemplate ?? provider.lastTemplate;
+        if (id != null) {
+          q = provider.applyTemplateText(id, q);
+          _controller.text = q;
+          _controller.selection =
+              TextSelection.collapsed(offset: _controller.text.length);
+        }
+      } catch (_) {}
+
       widget.onSearch(q);
       if (widget.clearOnSend) {
         _controller.clear();
@@ -97,7 +110,14 @@ class _ChatInputState extends State<ChatInput> {
           _controller.selection = TextSelection.collapsed(offset: draft.length);
           _focusNode.requestFocus();
         });
-        provider?.clearDraft();
+        // Don't clear draft here; it's a persistent draft. Just show toast once.
+        if (!_restoredToastShown && (provider?.draftRestored ?? false)) {
+          _restoredToastShown = true;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Brouillon restauré')),
+          );
+          provider?.consumeDraftRestoredFlag();
+        }
       });
     }
     return Padding(
@@ -150,6 +170,7 @@ class _ChatInputState extends State<ChatInput> {
                       onKeyEvent: _handleKey,
                       child: TextField(
                         controller: _controller,
+                        onChanged: (v) => provider?.setDraft(v),
                         onSubmitted: (_) => _submit(),
                         textInputAction: TextInputAction.newline,
                         style: TextStyle(
