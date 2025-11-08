@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class SizeConfig {
+  static bool _initialized = false;
+  static bool get initialized => _initialized;
   static late MediaQueryData _mediaQueryData;
   static late double screenWidth;
   static late double screenHeight;
@@ -29,8 +31,14 @@ class SizeConfig {
     safeBlockVertical = (screenHeight - _safeAreaVertical) / 100;
 
     devicePixelRatio = _mediaQueryData.devicePixelRatio;
-    textScalerFactor = _mediaQueryData.textScaler
-        .scale(1.0); // approximate scale from new TextScaler API
+    textScalerFactor = _mediaQueryData.textScaler.scale(1.0);
+    _initialized = true;
+  }
+
+  static void ensureInitialized(BuildContext context) {
+    if (!_initialized) {
+      init(context);
+    }
   }
 
   static double getProportionateScreenHeight(double inputHeight) {

@@ -30,38 +30,63 @@ class _ChatInputState extends State<ChatInput> {
 
   @override
   Widget build(BuildContext context) {
+    SizeConfig.ensureInitialized(context);
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: AdaptiveSpacing.large,
         vertical: AdaptiveSpacing.small,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              onSubmitted: (_) => _submit(),
-              textInputAction: TextInputAction.search,
-              style: TextStyle(fontSize: SizeConfig.adaptiveFontSize(14)),
-              decoration: InputDecoration(
-                hintText: 'Posez votre question…',
-                prefixIcon: const Icon(Icons.search),
-                hintStyle: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.6),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              scheme.primary.withValues(alpha: 0.05),
+              scheme.primaryContainer.withValues(alpha: 0.06),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(AdaptiveSpacing.small),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  onSubmitted: (_) => _submit(),
+                  textInputAction: TextInputAction.search,
+                  style: TextStyle(fontSize: SizeConfig.adaptiveFontSize(14)),
+                  decoration: InputDecoration(
+                    hintText: 'Posez votre question…',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _controller.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Effacer',
+                            onPressed: () => setState(_controller.clear),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
                 ),
               ),
-            ),
+              SizedBox(width: AdaptiveSpacing.small),
+              ElevatedButton(
+                onPressed: widget.disabled ? null : _submit,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.play_arrow_rounded),
+                    SizedBox(width: 8),
+                    Text('Rechercher'),
+                  ],
+                ),
+              )
+            ],
           ),
-          SizedBox(width: AdaptiveSpacing.small),
-          ElevatedButton.icon(
-            onPressed: widget.disabled ? null : _submit,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Rechercher'),
-          )
-        ],
+        ),
       ),
     );
   }

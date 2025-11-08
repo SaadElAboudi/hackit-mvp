@@ -13,6 +13,15 @@ class AppTheme {
         ? Typography.material2021().white
         : Typography.material2021().black;
 
+    // Layered surfaces for depth
+    // surfaceTint reserved for future surfaces
+    // final surfaceTint = scheme.primary;
+    // Elevated overlay reserved for future containers (currently unused)
+    // final elevatedOverlay = scheme.surface.withValues(alpha: isDark ? 0.3 : 0.6);
+    final glassOverlay = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.white.withValues(alpha: 0.4);
+
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
@@ -46,13 +55,8 @@ class AppTheme {
             bodyMedium: const TextStyle(height: 1.35),
           ),
       // CardThemeData is required by Flutter 3.35+ (CardTheme is an InheritedTheme)
-      cardTheme: const CardThemeData(
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-          side: BorderSide(width: 1),
-        ),
-      ),
+      cardTheme: const CardThemeData(), // use CardThemeData placeholder
+      // Custom card styling extension through theme extensions (kept simple to avoid type mismatch)
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant,
         thickness: 1,
@@ -60,52 +64,82 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        // Modern Material3 container surface usage
-        fillColor: isDark
-            ? scheme.surfaceContainerHighest.withValues(alpha: 0.85)
-            : scheme.surfaceContainerHighest,
+        fillColor: glassOverlay,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(18),
+          borderSide:
+              BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(18),
+          borderSide:
+              BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.25)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        hintStyle: TextStyle(color: scheme.onSurface.withValues(alpha: 0.55)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
           ),
-          elevation: 1,
+          elevation: 2,
+          shadowColor: scheme.primary.withValues(alpha: 0.3),
+        ).copyWith(
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return scheme.primaryContainer.withValues(alpha: 0.25);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return scheme.primaryContainer.withValues(alpha: 0.15);
+            }
+            return null;
+          }),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: scheme.primary,
-          side: BorderSide(color: scheme.primary),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          side: BorderSide(
+              color: scheme.primary.withValues(alpha: 0.7), width: 1.2),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ).copyWith(
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.hovered)) {
+              return scheme.primary.withValues(alpha: 0.08);
+            }
+            if (states.contains(WidgetState.pressed)) {
+              return scheme.primary.withValues(alpha: 0.20);
+            }
+            return null;
+          }),
         ),
       ),
       listTileTheme: ListTileThemeData(
         iconColor: scheme.primary,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        tileColor: scheme.surfaceContainerHighest
+            .withValues(alpha: isDark ? 0.25 : 0.6),
       ),
       splashFactory: InkSparkle.splashFactory,
       // withOpacity deprecated; prefer withValues for precise alpha handling
-      hoverColor: scheme.primary.withValues(alpha: 0.08),
+      hoverColor: scheme.primary.withValues(alpha: 0.10),
+      splashColor: scheme.primary.withValues(alpha: 0.18),
+      highlightColor: scheme.primary.withValues(alpha: 0.12),
     );
   }
 
