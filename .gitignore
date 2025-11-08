@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+
+# VS Code / IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Logs
+logs/
+*.log
+
+# Env files
+.env
+*.env
+backend/.env
+
+# Flutter / Dart
+frontend_flutter/.dart_tool/
+frontend_flutter/build/
+frontend_flutter/.flutter-plugins
+frontend_flutter/.flutter-plugins-dependencies
+frontend_flutter/.packages
+frontend_flutter/ios/Flutter/Flutter.podspec
+frontend_flutter/ios/Pods/
+frontend_flutter/ios/Podfile.lock
+frontend_flutter/macos/Pods/
+frontend_flutter/macos/Podfile.lock
+frontend_flutter/android/.gradle/
+frontend_flutter/android/.idea/
+frontend_flutter/android/local.properties
+frontend_flutter/web/.dart_tool/
+
+# Coverage
+coverage/

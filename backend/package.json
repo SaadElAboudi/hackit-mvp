@@ -1,0 +1,28 @@
+{
+  "name": "hackit-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "prestart": "node scripts/checkNodeVersion.js",
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.5.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "morgan": "^1.10.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-native-web": "^0.21.0",
+    "yt-search": "^2.10.8"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}

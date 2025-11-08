@@ -1,0 +1,13 @@
+name: hackit_mvp
+version: 1.0.0
+scripts:
+  test: flutter test
+  test:coverage: flutter test --coverage
+  test:integration: flutter test integration_test
+  test:golden: flutter test --update-goldens
+  test:all: |
+    flutter test --coverage &&
+    flutter test integration_test &&
+    flutter test --update-goldens
+
+# Le reste de votre pubspec.yaml suit...
