@@ -4,42 +4,92 @@ import '../core/responsive/size_config.dart';
 
 class UserBubble extends StatelessWidget {
   final String text;
-  const UserBubble({super.key, required this.text});
+  final VoidCallback? onEdit;
+  final VoidCallback? onRegenerate;
+  final bool disabled;
+  const UserBubble({
+    super.key,
+    required this.text,
+    this.onEdit,
+    this.onRegenerate,
+    this.disabled = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
     final scheme = Theme.of(context).colorScheme;
+    final bubble = DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16).copyWith(
+          bottomRight: const Radius.circular(4),
+        ),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: AdaptiveSpacing.medium,
+          vertical: AdaptiveSpacing.small + 2,
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: SizeConfig.adaptiveFontSize(14),
+            height: 1.35,
+          ),
+        ),
+      ),
+    );
+
+    final actions = (onEdit != null || onRegenerate != null)
+        ? Padding(
+            padding: EdgeInsets.only(top: AdaptiveSpacing.tiny),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (onRegenerate != null)
+                  Tooltip(
+                    message: 'Relancer',
+                    child: IconButton(
+                      visualDensity: VisualDensity.compact,
+                      iconSize: 18,
+                      onPressed: disabled ? null : onRegenerate,
+                      icon: const Icon(Icons.refresh_rounded),
+                    ),
+                  ),
+                if (onEdit != null)
+                  Tooltip(
+                    message: 'Modifier',
+                    child: IconButton(
+                      visualDensity: VisualDensity.compact,
+                      iconSize: 18,
+                      onPressed: disabled ? null : onEdit,
+                      icon: const Icon(Icons.edit_rounded),
+                    ),
+                  ),
+              ],
+            ),
+          )
+        : const SizedBox.shrink();
+
     return Align(
       alignment: Alignment.centerRight,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: SizeConfig.screenWidth * 0.85,
         ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(16).copyWith(
-              bottomRight: const Radius.circular(4),
-            ),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.25),
-              width: 1,
-            ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: AdaptiveSpacing.medium,
-              vertical: AdaptiveSpacing.small + 2,
-            ),
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: SizeConfig.adaptiveFontSize(14),
-                height: 1.35,
-              ),
-            ),
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            bubble,
+            actions,
+          ],
         ),
       ),
     );

@@ -116,7 +116,17 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
     for (final m in messages) {
       if (m.role.name == 'user') {
         final text = (m.content['text'] ?? '') as String;
-        if (text.isNotEmpty) children.add(UserBubble(text: text));
+        if (text.isNotEmpty) {
+          children.add(
+            UserBubble(
+              text: text,
+              onEdit: provider.loading ? null : () => provider.setDraft(text),
+              onRegenerate:
+                  provider.loading ? null : () => provider.regenerateFor(text),
+              disabled: provider.loading,
+            ),
+          );
+        }
       } else {
         switch (m.kind) {
           case ChatKind.steps:

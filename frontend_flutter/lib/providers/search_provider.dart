@@ -19,6 +19,8 @@ class SearchProvider extends ChangeNotifier {
   String? lastQuery;
   final SharedPreferences? _prefs;
   List<ChatMessage> messages = [];
+  // Draft prompt temporarily set when user chooses to edit a previous message.
+  String? _draftText;
 
   SearchProvider({
     ApiService? api,
@@ -37,6 +39,7 @@ class SearchProvider extends ChangeNotifier {
   bool get isStale =>
       lastUpdated == null ||
       DateTime.now().difference(lastUpdated!) > const Duration(minutes: 5);
+  String? get draftText => _draftText;
 
   Future<void> _initConnectivity() async {
     try {
@@ -235,6 +238,78 @@ class SearchProvider extends ChangeNotifier {
     lastUpdated = null;
     // Keep lastQuery so we can display previous prompt in the chat view context
     notifyListeners();
+  }
+
+  // Set a draft from an existing user message to allow editing in the input field.
+  void setDraft(String text) {
+    _draftText = text;
+    notifyListeners();
+  }
+
+  void clearDraft() {
+    _draftText = null;
+    notifyListeners();
+  }
+
+  // Regenerate using an arbitrary previous prompt without re-adding a user bubble.
+  Future<void> regenerateFor(String query) async {
+    if (loading) return;
+    final q = query.trim();
+    if (q.isEmpty) return;
+    final analytics = AnalyticsManager();
+    final stopwatch = Stopwatch()..start();
+    loading = true;
+    error = null;
+    notifyListeners();
+    if (_isOffline) {
+      error = 'Mode hors ligne - Regénération impossible';
+      _appendError(error!);
+      loading = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      final newResult = await _api.searchVideos(q);
+      result = newResult;
+      lastUpdated = DateTime.now();
+      error = null;
+      stopwatch.stop();
+      await analytics.logSearch(
+        query: q,
+        isSuccess: true,
+      );
+      await analytics.logSearchResult(
+        result: newResult,
+        searchDurationMs: stopwatch.elapsedMilliseconds,
+      );
+      if (_cacheManager != null) {
+        await _cacheManager.cacheSearchResult(q, newResult);
+      }
+      _appendAssistantFromResult(newResult);
+    } on ApiException catch (e) {
+      error = e.message;
+      await analytics.logSearch(
+        query: q,
+        isSuccess: false,
+        errorMessage: e.message,
+      );
+      await analytics.logError(
+        errorType: 'api_error',
+        message: e.message,
+      );
+      _appendError(error!);
+    } catch (e, stackTrace) {
+      error = 'Une erreur inattendue est survenue';
+      await analytics.logError(
+        errorType: 'unexpected_error',
+        message: e.toString(),
+        stackTrace: stackTrace,
+      );
+      _appendError(error!);
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
   }
 
   // --- Messages helpers & persistence ---

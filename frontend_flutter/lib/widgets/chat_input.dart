@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../core/responsive/size_config.dart';
+import 'package:provider/provider.dart';
+import '../providers/search_provider.dart';
 
 class ChatInput extends StatefulWidget {
   final void Function(String) onSearch;
@@ -77,6 +79,20 @@ class _ChatInputState extends State<ChatInput> {
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
     final scheme = Theme.of(context).colorScheme;
+    // Consume draft text from provider to prefill & focus when requested from a message action.
+    final provider = context.watch<SearchProvider>();
+    final draft = provider.draftText;
+    if (draft != null && draft != _controller.text) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _controller.text = draft;
+          _controller.selection = TextSelection.collapsed(offset: draft.length);
+          _focusNode.requestFocus();
+        });
+        provider.clearDraft();
+      });
+    }
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: AdaptiveSpacing.large,
@@ -134,37 +150,6 @@ class _ChatInputState extends State<ChatInput> {
                   ],
                 ),
               ),
-              SizedBox(width: AdaptiveSpacing.small),
-              if (widget.onRegenerate != null)
-                Tooltip(
-                  message: 'Regénérer la dernière réponse',
-                  child: IconButton(
-                    onPressed: widget.disabled ? null : widget.onRegenerate,
-                    icon: const Icon(Icons.refresh_rounded),
-                  ),
-                ),
-              if (widget.onEditLast != null)
-                Tooltip(
-                  message: 'Rééditer le dernier prompt',
-                  child: IconButton(
-                    onPressed: widget.disabled
-                        ? null
-                        : () {
-                            final last = widget.getLastQuery?.call();
-                            if (last != null && last.isNotEmpty) {
-                              setState(() {
-                                _controller.text = last;
-                                _controller.selection = TextSelection.collapsed(
-                                    offset: last.length);
-                                // Focus the input so the user can immediately continue typing.
-                                _focusNode.requestFocus();
-                              });
-                            }
-                            widget.onEditLast!();
-                          },
-                    icon: const Icon(Icons.edit_rounded),
-                  ),
-                ),
             ],
           ),
         ),
