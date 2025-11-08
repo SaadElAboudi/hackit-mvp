@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../core/responsive/size_config.dart';
 
 class ChatInput extends StatefulWidget {
   final void Function(String) onSearch;
   final bool disabled;
-  const ChatInput({super.key, required this.onSearch, this.disabled = false});
+  final VoidCallback? onRegenerate;
+  final VoidCallback? onEditLast;
+  const ChatInput({
+    super.key,
+    required this.onSearch,
+    this.disabled = false,
+    this.onRegenerate,
+    this.onEditLast,
+  });
 
   @override
   State<ChatInput> createState() => _ChatInputState();
@@ -25,6 +34,28 @@ class _ChatInputState extends State<ChatInput> {
     if (q.isNotEmpty && !widget.disabled) {
       widget.onSearch(q);
       _controller.clear();
+    }
+  }
+
+  void _handleKey(KeyEvent e) {
+    if (widget.disabled) return;
+    if (e is KeyDownEvent) {
+      final isMeta = HardwareKeyboard.instance.isMetaPressed ||
+          HardwareKeyboard
+              .instance.isControlPressed; // Cmd(Mac) / Ctrl(Win/Linux)
+      final isShift = HardwareKeyboard.instance.isShiftPressed;
+      if (isMeta && e.logicalKey.keyLabel.toLowerCase() == 'enter') {
+        _submit();
+      } else if (isShift && e.logicalKey.keyLabel.toLowerCase() == 'enter') {
+        // Insert newline
+        final selection = _controller.selection;
+        final text = _controller.text;
+        final newText = text.replaceRange(selection.start, selection.end, '\n');
+        _controller.value = TextEditingValue(
+          text: newText,
+          selection: TextSelection.collapsed(offset: selection.start + 1),
+        );
+      }
     }
   }
 
@@ -54,21 +85,25 @@ class _ChatInputState extends State<ChatInput> {
           child: Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _controller,
-                  onSubmitted: (_) => _submit(),
-                  textInputAction: TextInputAction.search,
-                  style: TextStyle(fontSize: SizeConfig.adaptiveFontSize(14)),
-                  decoration: InputDecoration(
-                    hintText: 'Posez votre question…',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: _controller.text.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Effacer',
-                            onPressed: () => setState(_controller.clear),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
+                child: KeyboardListener(
+                  focusNode: FocusNode(),
+                  onKeyEvent: _handleKey,
+                  child: TextField(
+                    controller: _controller,
+                    onSubmitted: (_) => _submit(),
+                    textInputAction: TextInputAction.search,
+                    style: TextStyle(fontSize: SizeConfig.adaptiveFontSize(14)),
+                    decoration: InputDecoration(
+                      hintText: 'Posez votre question…',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: _controller.text.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Effacer',
+                              onPressed: () => setState(_controller.clear),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                    ),
                   ),
                 ),
               ),
@@ -83,7 +118,32 @@ class _ChatInputState extends State<ChatInput> {
                     Text('Rechercher'),
                   ],
                 ),
-              )
+              ),
+              SizedBox(width: AdaptiveSpacing.small),
+              if (widget.onRegenerate != null)
+                Tooltip(
+                  message: 'Regénérer la dernière réponse',
+                  child: IconButton(
+                    onPressed: widget.disabled ? null : widget.onRegenerate,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ),
+              if (widget.onEditLast != null)
+                Tooltip(
+                  message: 'Rééditer le dernier prompt',
+                  child: IconButton(
+                    onPressed: widget.disabled
+                        ? null
+                        : () {
+                            widget.onEditLast!();
+                            if (_controller.text.isEmpty &&
+                                widget.onEditLast != null) {
+                              // consumer will have set lastQuery back; rely on external state
+                            }
+                          },
+                    icon: const Icon(Icons.edit_rounded),
+                  ),
+                ),
             ],
           ),
         ),

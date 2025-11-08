@@ -176,9 +176,19 @@ class SearchProvider extends ChangeNotifier {
   }
 
   void _appendAssistantFromResult(BaseSearchResult r) {
-    final stepsMsg = ChatMessage.assistantSteps(_newId(), r.title, r.steps);
+    final stepsMsg = ChatMessage.assistantSteps(
+      _newId(),
+      r.title,
+      r.steps,
+      source: r.source,
+    );
     _push(stepsMsg);
-    final videoMsg = ChatMessage.assistantVideo(_newId(), r.title, r.videoUrl);
+    final videoMsg = ChatMessage.assistantVideo(
+      _newId(),
+      r.title,
+      r.videoUrl,
+      source: r.source,
+    );
     _push(videoMsg);
   }
 

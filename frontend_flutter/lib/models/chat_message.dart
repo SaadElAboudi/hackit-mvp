@@ -28,7 +28,8 @@ class ChatMessage {
       );
 
   factory ChatMessage.assistantSteps(
-          String id, String title, List<String> steps) =>
+          String id, String title, List<String> steps,
+          {String? source}) =>
       ChatMessage(
         id: id,
         role: ChatRole.assistant,
@@ -36,12 +37,13 @@ class ChatMessage {
         content: {
           "title": title,
           "steps": steps,
+          if (source != null) "source": source,
         },
         ts: DateTime.now(),
       );
 
-  factory ChatMessage.assistantVideo(
-          String id, String title, String videoUrl) =>
+  factory ChatMessage.assistantVideo(String id, String title, String videoUrl,
+          {String? source}) =>
       ChatMessage(
         id: id,
         role: ChatRole.assistant,
@@ -49,6 +51,7 @@ class ChatMessage {
         content: {
           "title": title,
           "videoUrl": videoUrl,
+          if (source != null) "source": source,
         },
         ts: DateTime.now(),
       );

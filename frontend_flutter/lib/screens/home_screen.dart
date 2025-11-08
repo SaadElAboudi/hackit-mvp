@@ -40,7 +40,6 @@ class _HomeMobileLayout extends StatelessWidget {
         backgroundColor: bg,
         elevation: 0,
         title: const Text('Hackit'),
-        centerTitle: false,
       ),
       body: Column(
         children: [
@@ -127,6 +126,10 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
                 ),
               ),
             );
+            final source = m.content['source'] as String?;
+            if (source != null && source.isNotEmpty) {
+              children.add(_SourceChip(source: source));
+            }
             break;
           case ChatKind.video:
             children.add(
@@ -137,6 +140,10 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
                 ),
               ),
             );
+            final sourceV = m.content['source'] as String?;
+            if (sourceV != null && sourceV.isNotEmpty) {
+              children.add(_SourceChip(source: sourceV));
+            }
             break;
           case ChatKind.text:
             children.add(
@@ -153,9 +160,31 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
               AssistantContainer(
                 child: Padding(
                   padding: EdgeInsets.all(AdaptiveSpacing.small),
-                  child: Text(
-                    (m.content['message'] ?? 'Erreur') as String,
-                    style: const TextStyle(color: Colors.red),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          (m.content['message'] ?? 'Erreur') as String,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ),
+                      SizedBox(width: AdaptiveSpacing.small),
+                      Builder(
+                        builder: (context) {
+                          final lastQ = provider.lastQuery;
+                          return TextButton.icon(
+                            onPressed: (provider.loading ||
+                                    lastQ == null ||
+                                    lastQ.isEmpty)
+                                ? null
+                                : () => provider.search(lastQ),
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Réessayer'),
+                          );
+                        },
+                      )
+                    ],
                   ),
                 ),
               ),
@@ -181,6 +210,59 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         vertical: AdaptiveSpacing.medium,
       ),
       children: children,
+    );
+  }
+}
+
+class _SourceChip extends StatelessWidget {
+  final String source;
+  const _SourceChip({required this.source});
+
+  Color _color(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final s = source.toLowerCase();
+    if (s.contains('youtube')) return scheme.primary;
+    if (s.contains('yt-search')) return scheme.secondary;
+    return scheme.tertiary;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _color(context);
+    return Padding(
+      padding: EdgeInsets.only(
+          left: AdaptiveSpacing.small, bottom: AdaptiveSpacing.small / 2),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.withValues(alpha: 0.35), width: 1),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: AdaptiveSpacing.small,
+              vertical: AdaptiveSpacing.tiny + 2,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.bolt_rounded, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  source,
+                  style: TextStyle(
+                    fontSize: SizeConfig.adaptiveFontSize(11),
+                    letterSpacing: 0.3,
+                    color: c.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
