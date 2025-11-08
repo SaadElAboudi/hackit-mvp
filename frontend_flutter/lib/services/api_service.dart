@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'dart:io'
+    show Platform; // best-effort; on web, Platform.environment is empty
 import 'package:injectable/injectable.dart';
 import '../models/base_search_result.dart';
 import '../models/stream_event.dart';
@@ -17,7 +19,15 @@ class ApiException implements Exception {
 
 @singleton
 class ApiService {
-  static const String baseUrl = 'http://localhost:3000';
+  // Resolve base URL with priority: dart-define > environment fallback > default.
+  // Use --dart-define=API_BASE_URL=https://prod.example.com when building.
+  static final String baseUrl =
+      const String.fromEnvironment('API_BASE_URL', defaultValue: '')
+              .trim()
+              .isNotEmpty
+          ? const String.fromEnvironment('API_BASE_URL')
+          : (Platform.environment['API_BASE_URL'] ?? 'http://localhost:3000');
+
   static const int maxRetries = 3;
   static const int timeoutSeconds = 10;
   final http.Client _client;
@@ -146,6 +156,24 @@ class ApiService {
       buffer
         ..clear()
         ..write(text);
+    }
+  }
+
+  // Simple health ping to detect backend availability and meta info.
+  Future<Map<String, dynamic>> pingHealth(
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    final uri = Uri.parse('$baseUrl/health');
+    try {
+      final resp = await _client.get(uri).timeout(timeout);
+      if (resp.statusCode == 200) {
+        final map = json.decode(resp.body) as Map<String, dynamic>;
+        return map;
+      }
+      return {'ok': false, 'status': resp.statusCode};
+    } on TimeoutException {
+      return {'ok': false, 'timeout': true};
+    } catch (e) {
+      return {'ok': false, 'error': e.toString()};
     }
   }
 

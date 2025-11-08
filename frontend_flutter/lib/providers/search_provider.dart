@@ -184,6 +184,17 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
+    // Quick reachability ping to backend to provide clearer error if server is down.
+    final health = await _api.pingHealth(timeout: const Duration(seconds: 2));
+    if (health['ok'] != true) {
+      error =
+          'Serveur indisponible. Vérifiez que le backend tourne sur ${ApiService.baseUrl}';
+      _appendError(error!);
+      loading = false;
+      notifyListeners();
+      return;
+    }
+
     List<String> partialSteps = [];
     String? currentTitle;
     String? currentVideo;
