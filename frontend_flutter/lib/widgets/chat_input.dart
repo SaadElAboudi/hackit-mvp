@@ -80,8 +80,14 @@ class _ChatInputState extends State<ChatInput> {
     SizeConfig.ensureInitialized(context);
     final scheme = Theme.of(context).colorScheme;
     // Consume draft text from provider to prefill & focus when requested from a message action.
-    final provider = context.watch<SearchProvider>();
-    final draft = provider.draftText;
+    // Provider is optional so ChatInput can be tested/rendered standalone.
+    SearchProvider? provider;
+    try {
+      provider = Provider.of<SearchProvider>(context, listen: true);
+    } catch (_) {
+      provider = null;
+    }
+    final draft = provider?.draftText;
     if (draft != null && draft != _controller.text) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -90,7 +96,7 @@ class _ChatInputState extends State<ChatInput> {
           _controller.selection = TextSelection.collapsed(offset: draft.length);
           _focusNode.requestFocus();
         });
-        provider.clearDraft();
+        provider?.clearDraft();
       });
     }
     return Padding(
