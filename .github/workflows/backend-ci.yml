@@ -1,0 +1,50 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Node version check
+        run: node scripts/checkNodeVersion.js || exit 1
+
+      - name: Start server (MOCK_MODE)
+        run: |
+          MOCK_MODE=true USE_GEMINI=false USE_GEMINI_REFORMULATION=false node src/index.js &
+          echo $! > server.pid
+          sleep 3
+
+      - name: Smoke test /api/search
+        run: |
+          npm run test:smoke
+
+      - name: Shutdown server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then kill $(cat server.pid) || true; fi

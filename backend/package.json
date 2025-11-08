@@ -6,7 +6,8 @@
   "scripts": {
     "prestart": "node scripts/checkNodeVersion.js",
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "test:smoke": "node scripts/ciSmoke.js"
   },
   "engines": {
     "node": ">=20.0.0"

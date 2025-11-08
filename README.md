@@ -1,5 +1,8 @@
 # Hackit MVP
 
+![Frontend Flutter CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/frontend_flutter-ci.yml/badge.svg)
+![Backend CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-ci.yml/badge.svg)
+
 ## Description
 Hackit MVP is a project designed to provide users with quick and clear answers to their questions through a chat interface. The application leverages AI to summarize information and find relevant video content from platforms like YouTube and TikTok.
 
@@ -10,8 +13,8 @@ Hackit MVP is a project designed to provide users with quick and clear answers t
 - Step-by-step guides generated from video content.
 
 ## Tech Stack
-- **Frontend**: React Native (Expo) with Tailwind CSS for styling.
-- **Backend**: Node.js with Express for API development.
+- **Frontend**: Flutter (Web/Desktop/Mobile) in `frontend_flutter`.
+- **Backend**: Node.js (Express) in `backend/`.
 - **Database**: Supabase or MongoDB Atlas for storing user queries and feedback.
 - **AI Services**: OpenAI API for natural language processing and summarization.
 - **Video Services**: YouTube Data API and TikTok API for video retrieval.
@@ -29,15 +32,20 @@ hackit-mvp
 
 ## Setup Instructions
 
-### Frontend
-1. Navigate to the `frontend` directory.
+### Frontend (Flutter)
+1. Navigate to the `frontend_flutter` directory.
 2. Install dependencies:
+   ```bash
+   flutter pub get
    ```
-   npm install
+3. Run analyzer and tests (widgets subset):
+   ```bash
+   flutter analyze
+   flutter test -r compact test/widgets
    ```
-3. Start the development server:
-   ```
-   npx expo start
+4. Run on web (dev):
+   ```bash
+   flutter run -d chrome
    ```
 
 ### Backend
@@ -48,8 +56,12 @@ hackit-mvp
    ```
 3. Create a `.env` file based on `.env.example` and add your API keys.
 4. Start the server:
+   ```bash
+   npm start
    ```
-   node src/index.js
+5. Smoke test locally:
+   ```bash
+   npm run test:smoke
    ```
 
 ## Usage
