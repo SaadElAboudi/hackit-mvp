@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:injectable/injectable.dart';
 import '../models/base_search_result.dart';
+import '../models/stream_event.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -99,6 +100,53 @@ class ApiService {
     }
 
     throw lastError ?? ApiException('Unknown error after $maxRetries attempts');
+  }
+
+  // Stream search via SSE endpoint. Emits meta/partial/done events.
+  Stream<StreamEvent> searchVideosStream(String query) async* {
+    final uri = Uri.parse(
+        '$baseUrl/api/search/stream?query=${Uri.encodeQueryComponent(query)}');
+    final request = http.Request('GET', uri);
+    final streamed = await _client.send(request);
+    if (streamed.statusCode != 200) {
+      final body = await streamed.stream.bytesToString();
+      throw ApiException('Stream error: HTTP ${streamed.statusCode} $body',
+          statusCode: streamed.statusCode);
+    }
+
+    // SSE is a text stream with lines; we read as utf8 and parse data: lines.
+    // We'll collect lines until a blank line, then parse the JSON after 'data: '.
+    final decoder = utf8.decoder.bind(streamed.stream);
+    final buffer = StringBuffer();
+    await for (final chunk in decoder) {
+      buffer.write(chunk);
+      var text = buffer.toString();
+      int idx;
+      // Process complete events separated by double newlines.
+      while ((idx = text.indexOf('\n\n')) != -1) {
+        final eventBlock = text.substring(0, idx);
+        text = text.substring(idx + 2);
+        // Extract data lines
+        final lines = eventBlock.split('\n');
+        final dataLine = lines.firstWhere(
+          (l) => l.startsWith('data:'),
+          orElse: () => '',
+        );
+        if (dataLine.isNotEmpty) {
+          final jsonStr = dataLine.substring(5).trim();
+          try {
+            final map = json.decode(jsonStr) as Map<String, dynamic>;
+            yield StreamEvent.fromJson(map);
+          } catch (_) {
+            // ignore malformed chunks
+          }
+        }
+      }
+      // Keep leftover in buffer
+      buffer
+        ..clear()
+        ..write(text);
+    }
   }
 
   // Removed getVideoDetails to simplify API surface; not used by the app.

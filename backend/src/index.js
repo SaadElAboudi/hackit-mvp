@@ -251,6 +251,125 @@ app.post("/api/search", async (req, res) => {
   }
 });
 
+// Server-Sent Events streaming endpoint for progressive UI updates
+// Usage: GET /api/search/stream?query=...
+app.get("/api/search/stream", async (req, res) => {
+  const query = String(req.query.query || "").trim();
+  if (!query) return res.status(400).json({ error: "query is required" });
+
+  // Set SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const writeEvent = (obj) => {
+    try {
+      res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    } catch (e) {
+      // client likely disconnected
+    }
+  };
+
+  const end = () => {
+    try { res.end(); } catch (_) { }
+  };
+
+  const mockDefault = process.env.YT_API_KEY ? "false" : "true";
+  if ((process.env.MOCK_MODE || mockDefault) === "true") {
+    // Stream mock in small chunks
+    const mock = makeMockResponse();
+    writeEvent({ type: "meta", title: mock.title, videoUrl: mock.videoUrl, source: mock.source });
+    const steps = mock.steps || [];
+    let idx = 0;
+    const interval = setInterval(() => {
+      if (idx < steps.length) {
+        writeEvent({ type: "partial", step: steps[idx] });
+        idx++;
+      } else {
+        clearInterval(interval);
+        writeEvent({ type: "done" });
+        end();
+      }
+    }, 220);
+    req.on("close", () => clearInterval(interval));
+    return;
+  }
+
+  (async () => {
+    try {
+      let searchTerm = query;
+      const useGemini = USE_GEMINI_ENV && GEMINI_OPERATIONAL && (req.query?.useGemini !== "false");
+      let reformulationTimedOut = false;
+      if (useGemini && USE_GEMINI_REFORMULATION) {
+        const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
+        try {
+          let reform = await generateWithGemini(reformPrompt, 32);
+          reform = String(reform)
+            .split(/\r?\n/)[0]
+            .replace(/^[-*•\s>"]+/, "")
+            .replace(/[\"`]+/g, "")
+            .trim();
+          if (reform && reform.length <= 80) searchTerm = reform;
+        } catch (e) {
+          if (/timeout/i.test(e.message || "")) reformulationTimedOut = true;
+          console.warn("Gemini reformulation (stream) failed:", e.message);
+        }
+      }
+
+      // Search video first and emit meta
+      let videoTitle, videoUrl, source;
+      try {
+        const video = await searchYouTube(searchTerm);
+        videoTitle = video.title;
+        videoUrl = video.url;
+        source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+      } catch (videoErr) {
+        if ((process.env.ALLOW_FALLBACK || "true") === "true") {
+          const mock = makeMockResponse();
+          writeEvent({ type: "meta", title: mock.title, videoUrl: mock.videoUrl, source: "mock-fallback" });
+          for (const s of mock.steps) {
+            writeEvent({ type: "partial", step: s });
+            await new Promise(r => setTimeout(r, 180));
+          }
+          writeEvent({ type: "done" });
+          return end();
+        }
+        throw videoErr;
+      }
+
+      writeEvent({ type: "meta", title: videoTitle, videoUrl, source });
+
+      // Summarize and stream steps one by one (Gemini returns full text; we simulate token streaming)
+      let summaryText = "";
+      const attemptGeminiSummary = useGemini && !reformulationTimedOut;
+      if (attemptGeminiSummary) {
+        const summaryPrompt = `Résume cette vidéo YouTube en 5 étapes claires: ${videoTitle}`;
+        try {
+          summaryText = await generateWithGemini(summaryPrompt, 300);
+        } catch (e) {
+          console.warn("Gemini summary (stream) failed:", e.message);
+          summaryText = heuristicSummary(videoTitle);
+        }
+      } else {
+        summaryText = heuristicSummary(videoTitle);
+      }
+
+      const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
+      for (const s of steps) {
+        writeEvent({ type: "partial", step: s });
+        await new Promise(r => setTimeout(r, 160));
+      }
+      writeEvent({ type: "done" });
+      end();
+    } catch (err) {
+      console.error("Stream error:", err?.message || err);
+      writeEvent({ type: "error", message: err?.message || "Unexpected error" });
+      end();
+    }
+  })();
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

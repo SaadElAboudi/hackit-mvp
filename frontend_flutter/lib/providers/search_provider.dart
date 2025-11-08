@@ -154,6 +154,131 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
+  // Streaming variant: progressively updates steps, then appends video at the end.
+  Future<void> searchStreaming(String query) async {
+    final analytics = AnalyticsManager();
+    final stopwatch = Stopwatch()..start();
+
+    if (query.trim().isEmpty) {
+      error = 'Veuillez entrer une requête';
+      await analytics.logError(
+        errorType: 'validation_error',
+        message: 'Empty search query',
+      );
+      notifyListeners();
+      return;
+    }
+
+    lastQuery = query.trim();
+    _appendUser(lastQuery!);
+    loading = true;
+    error = null;
+    notifyListeners();
+
+    // If offline, fail fast (we could stream cache, but not implemented yet)
+    if (_isOffline) {
+      error = 'Mode hors ligne - Pas de résultat en cache';
+      _appendError(error!);
+      loading = false;
+      notifyListeners();
+      return;
+    }
+
+    List<String> partialSteps = [];
+    String? currentTitle;
+    String? currentVideo;
+    String? currentSource;
+    int?
+        stepsMsgIndex; // index in messages list for the streaming steps message
+
+    try {
+      final stream = _api.searchVideosStream(lastQuery!);
+      await for (final evt in stream) {
+        switch (evt.type) {
+          case 'meta':
+            currentTitle = evt.title ?? '';
+            currentVideo = evt.videoUrl ?? '';
+            currentSource = evt.source ?? '';
+            // create initial assistant steps message with empty steps
+            final msg = ChatMessage.assistantSteps(
+              _newId(),
+              currentTitle,
+              const [],
+              source: currentSource.isNotEmpty ? currentSource : null,
+            );
+            messages = [...messages, msg];
+            stepsMsgIndex = messages.length - 1;
+            _saveMessages();
+            notifyListeners();
+            break;
+          case 'partial':
+            final step = evt.step;
+            if (step != null && step.trim().isNotEmpty) {
+              partialSteps = [...partialSteps, step.trim()];
+              if (stepsMsgIndex != null &&
+                  stepsMsgIndex >= 0 &&
+                  stepsMsgIndex < messages.length) {
+                final m = messages[stepsMsgIndex];
+                final updated = m.copyWith(
+                  content: {
+                    ...m.content,
+                    'steps': partialSteps,
+                  },
+                );
+                messages = [
+                  ...messages.sublist(0, stepsMsgIndex),
+                  updated,
+                  ...messages.sublist(stepsMsgIndex + 1),
+                ];
+                _saveMessages();
+                notifyListeners();
+              }
+            }
+            break;
+          case 'error':
+            error = evt.message ?? 'Erreur de flux';
+            _appendError(error!);
+            loading = false;
+            notifyListeners();
+            return;
+          case 'done':
+            // append video message now that we have title/video
+            if ((currentTitle ?? '').isNotEmpty &&
+                (currentVideo ?? '').isNotEmpty) {
+              final videoMsg = ChatMessage.assistantVideo(
+                _newId(),
+                currentTitle!,
+                currentVideo!,
+                source: currentSource,
+              );
+              messages = [...messages, videoMsg];
+              _saveMessages();
+            }
+            stopwatch.stop();
+            await analytics.logSearch(
+              query: lastQuery!,
+              isSuccess: true,
+            );
+            loading = false;
+            notifyListeners();
+            return;
+          default:
+            break;
+        }
+      }
+    } catch (e, stack) {
+      error = 'Une erreur inattendue est survenue';
+      await analytics.logError(
+        errorType: 'unexpected_error',
+        message: e.toString(),
+        stackTrace: stack,
+      );
+      _appendError(error!);
+      loading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> retry() async {
     if (!hasError || loading) return;
     error = null;

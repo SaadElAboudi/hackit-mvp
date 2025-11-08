@@ -63,7 +63,7 @@ class _HomeMobileLayout extends StatelessWidget {
               ],
             ),
             child: ChatInput(
-              onSearch: (query) => provider.search(query),
+              onSearch: (query) => provider.searchStreaming(query),
               disabled: provider.loading,
               onRegenerate: provider.regenerateLast,
               onEditLast: () {},
@@ -304,7 +304,7 @@ class _HomeTabletLayout extends StatelessWidget {
             children: [
               Expanded(child: _ChatMessagesList()),
               ChatInput(
-                onSearch: (query) => provider.search(query),
+                onSearch: (query) => provider.searchStreaming(query),
                 disabled: provider.loading,
                 onRegenerate: provider.regenerateLast,
                 onEditLast: () {},
@@ -342,7 +342,7 @@ class _HomeDesktopLayout extends StatelessWidget {
             children: [
               Expanded(child: _ChatMessagesList()),
               ChatInput(
-                onSearch: (query) => provider.search(query),
+                onSearch: (query) => provider.searchStreaming(query),
                 disabled: provider.loading,
                 onRegenerate: provider.regenerateLast,
                 onEditLast: () {},
