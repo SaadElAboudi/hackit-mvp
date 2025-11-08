@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/cache_manager.dart';
 import '../services/analytics_manager.dart';
 import '../models/base_search_result.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import '../models/chat_message.dart';
 
 class SearchProvider extends ChangeNotifier {
   final ApiService _api;
@@ -15,13 +17,18 @@ class SearchProvider extends ChangeNotifier {
   DateTime? lastUpdated;
   bool _isOffline = false;
   String? lastQuery;
+  final SharedPreferences? _prefs;
+  List<ChatMessage> messages = [];
 
   SearchProvider({
     ApiService? api,
     CacheManager? cacheManager,
+    SharedPreferences? prefs,
   })  : _api = api ?? ApiService.create(),
-        _cacheManager = cacheManager {
+        _cacheManager = cacheManager,
+        _prefs = prefs {
     _initConnectivity();
+    _loadMessages();
   }
 
   bool get hasError => error != null;
@@ -64,6 +71,7 @@ class SearchProvider extends ChangeNotifier {
     }
 
     lastQuery = query.trim();
+    _appendUser(lastQuery!);
     loading = true;
     error = null;
     notifyListeners();
@@ -85,6 +93,7 @@ class SearchProvider extends ChangeNotifier {
     // If we're offline and have no cache, show error
     if (_isOffline) {
       error = 'Mode hors ligne - Pas de résultat en cache';
+      _appendError(error!);
       loading = false;
       notifyListeners();
       return;
@@ -110,6 +119,9 @@ class SearchProvider extends ChangeNotifier {
       if (_cacheManager != null) {
         await _cacheManager.cacheSearchResult(query, result!);
       }
+
+      // Append assistant messages (steps + video)
+      _appendAssistantFromResult(result!);
     } on ApiException catch (e) {
       error = e.message;
       await analytics.logSearch(
@@ -123,6 +135,7 @@ class SearchProvider extends ChangeNotifier {
       );
       // Keep cached result if available
       result ??= null;
+      _appendError(error!);
     } catch (e, stackTrace) {
       error = 'Une erreur inattendue est survenue';
       await analytics.logError(
@@ -131,6 +144,7 @@ class SearchProvider extends ChangeNotifier {
         stackTrace: stackTrace,
       );
       result ??= null;
+      _appendError(error!);
     } finally {
       loading = false;
       notifyListeners();
@@ -151,5 +165,52 @@ class SearchProvider extends ChangeNotifier {
     lastUpdated = null;
     // Keep lastQuery so we can display previous prompt in the chat view context
     notifyListeners();
+  }
+
+  // --- Messages helpers & persistence ---
+  static const _messagesKey = 'chat_messages';
+
+  void _appendUser(String text) {
+    final msg = ChatMessage.userText(_newId(), text);
+    _push(msg);
+  }
+
+  void _appendAssistantFromResult(BaseSearchResult r) {
+    final stepsMsg = ChatMessage.assistantSteps(_newId(), r.title, r.steps);
+    _push(stepsMsg);
+    final videoMsg = ChatMessage.assistantVideo(_newId(), r.title, r.videoUrl);
+    _push(videoMsg);
+  }
+
+  void _appendError(String message) {
+    final err = ChatMessage.assistantError(_newId(), message);
+    _push(err);
+  }
+
+  void _push(ChatMessage m) {
+    messages = [...messages, m];
+    if (messages.length > 20) {
+      messages = messages.sublist(messages.length - 20);
+    }
+    _saveMessages();
+  }
+
+  String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
+
+  void _loadMessages() {
+    try {
+      final raw = _prefs?.getString(_messagesKey);
+      if (raw != null && raw.isNotEmpty) {
+        messages = ChatMessage.decodeList(raw);
+      }
+    } catch (_) {
+      messages = [];
+    }
+  }
+
+  Future<void> _saveMessages() async {
+    try {
+      await _prefs?.setString(_messagesKey, ChatMessage.encodeList(messages));
+    } catch (_) {}
   }
 }

@@ -14,15 +14,15 @@ final getIt = GetIt.instance;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize shared preferences
   final prefs = await SharedPreferences.getInstance();
   getIt.registerSingleton<SharedPreferences>(prefs);
-  
+
   // Initialize cache manager
   final cacheManager = CacheManager(prefs);
   getIt.registerSingleton<CacheManager>(cacheManager);
-  
+
   runApp(const MyApp());
 }
 
@@ -37,7 +37,10 @@ class MyApp extends StatelessWidget {
           create: (_) => ThemeProvider(getIt<SharedPreferences>()),
         ),
         ChangeNotifierProvider(
-          create: (_) => SearchProvider(cacheManager: getIt<CacheManager>()),
+          create: (_) => SearchProvider(
+            cacheManager: getIt<CacheManager>(),
+            prefs: getIt<SharedPreferences>(),
+          ),
         ),
       ],
       child: Consumer<ThemeProvider>(

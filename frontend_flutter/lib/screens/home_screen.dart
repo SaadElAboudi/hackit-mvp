@@ -8,6 +8,7 @@ import '../widgets/chat_input.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
 import '../widgets/chat_bubbles.dart';
+import '../models/chat_message.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -48,46 +49,7 @@ class _HomeMobileLayout extends StatelessWidget {
               padding: EdgeInsets.symmetric(
                 horizontal: AdaptiveSpacing.medium,
               ),
-              child: ListView(
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  SizedBox(height: AdaptiveSpacing.small),
-                  if (provider.lastQuery != null)
-                    UserBubble(text: provider.lastQuery!),
-                  if (provider.loading) const LoadingBubbles(),
-                  if (provider.error != null)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        top: AdaptiveSpacing.small,
-                        right: AdaptiveSpacing.small,
-                        left: AdaptiveSpacing.small,
-                      ),
-                      child: Text(
-                        '❌ ${provider.error}',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontSize: SizeConfig.adaptiveFontSize(14),
-                        ),
-                      ),
-                    ),
-                  if (provider.result != null && !provider.loading) ...[
-                    AssistantContainer(
-                      child: SummaryView(
-                        title: provider.result!.title,
-                        steps: provider.result!.steps,
-                      ),
-                    ),
-                    SizedBox(height: AdaptiveSpacing.small),
-                    AssistantContainer(
-                      child: VideoCard(
-                        title: provider.result!.title,
-                        videoUrl: provider.result!.videoUrl,
-                      ),
-                    ),
-                  ],
-                  SizedBox(height: AdaptiveSpacing.large * 2),
-                ],
-              ),
+              child: _ChatMessagesList(),
             ),
           ),
           DecoratedBox(
@@ -108,6 +70,117 @@ class _HomeMobileLayout extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ChatMessagesList extends StatefulWidget {
+  @override
+  State<_ChatMessagesList> createState() => _ChatMessagesListState();
+}
+
+class _ChatMessagesListState extends State<_ChatMessagesList> {
+  final _controller = ScrollController();
+  int _lastCount = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    if (!_controller.hasClients) return;
+    _controller.animateTo(
+      _controller.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<SearchProvider>();
+    final messages = provider.messages;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    // Auto-scroll when messages appended
+    if (messages.length > _lastCount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      _lastCount = messages.length;
+    }
+
+    final children = <Widget>[];
+    for (final m in messages) {
+      if (m.role.name == 'user') {
+        final text = (m.content['text'] ?? '') as String;
+        if (text.isNotEmpty) children.add(UserBubble(text: text));
+      } else {
+        switch (m.kind) {
+          case ChatKind.steps:
+            children.add(
+              AssistantContainer(
+                child: SummaryView(
+                  title: (m.content['title'] ?? '') as String,
+                  steps:
+                      List<String>.from(m.content['steps'] ?? const <String>[]),
+                ),
+              ),
+            );
+            break;
+          case ChatKind.video:
+            children.add(
+              AssistantContainer(
+                child: VideoCard(
+                  title: (m.content['title'] ?? '') as String,
+                  videoUrl: (m.content['videoUrl'] ?? '') as String,
+                ),
+              ),
+            );
+            break;
+          case ChatKind.text:
+            children.add(
+              AssistantContainer(
+                child: Padding(
+                  padding: EdgeInsets.all(AdaptiveSpacing.small),
+                  child: Text((m.content['text'] ?? '') as String),
+                ),
+              ),
+            );
+            break;
+          case ChatKind.error:
+            children.add(
+              AssistantContainer(
+                child: Padding(
+                  padding: EdgeInsets.all(AdaptiveSpacing.small),
+                  child: Text(
+                    (m.content['message'] ?? 'Erreur') as String,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+              ),
+            );
+            break;
+        }
+      }
+      children.add(SizedBox(height: AdaptiveSpacing.small));
+    }
+
+    if (provider.loading) {
+      children.add(const LoadingBubbles());
+      children.add(SizedBox(height: AdaptiveSpacing.small));
+    }
+
+    children.add(SizedBox(height: AdaptiveSpacing.large * 2));
+
+    return ListView(
+      controller: _controller,
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? AdaptiveSpacing.medium : AdaptiveSpacing.large,
+        vertical: AdaptiveSpacing.medium,
+      ),
+      children: children,
     );
   }
 }
@@ -134,48 +207,7 @@ class _HomeTabletLayout extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 860),
           child: Column(
             children: [
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: AdaptiveSpacing.large,
-                    vertical: AdaptiveSpacing.medium,
-                  ),
-                  children: [
-                    if (provider.lastQuery != null)
-                      UserBubble(text: provider.lastQuery!),
-                    if (provider.loading) const LoadingBubbles(),
-                    if (provider.error != null)
-                      Padding(
-                        padding: EdgeInsets.only(
-                          top: AdaptiveSpacing.small,
-                        ),
-                        child: Text(
-                          '❌ ${provider.error}',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontSize: SizeConfig.adaptiveFontSize(14),
-                          ),
-                        ),
-                      ),
-                    if (provider.result != null && !provider.loading) ...[
-                      AssistantContainer(
-                        child: SummaryView(
-                          title: provider.result!.title,
-                          steps: provider.result!.steps,
-                        ),
-                      ),
-                      SizedBox(height: AdaptiveSpacing.small),
-                      AssistantContainer(
-                        child: VideoCard(
-                          title: provider.result!.title,
-                          videoUrl: provider.result!.videoUrl,
-                        ),
-                      ),
-                    ],
-                    SizedBox(height: AdaptiveSpacing.large * 2),
-                  ],
-                ),
-              ),
+              Expanded(child: _ChatMessagesList()),
               ChatInput(
                 onSearch: (query) => provider.search(query),
                 disabled: provider.loading,
@@ -210,48 +242,7 @@ class _HomeDesktopLayout extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 980),
           child: Column(
             children: [
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: AdaptiveSpacing.large,
-                    vertical: AdaptiveSpacing.medium,
-                  ),
-                  children: [
-                    if (provider.lastQuery != null)
-                      UserBubble(text: provider.lastQuery!),
-                    if (provider.loading) const LoadingBubbles(),
-                    if (provider.error != null)
-                      Padding(
-                        padding: EdgeInsets.only(
-                          top: AdaptiveSpacing.small,
-                        ),
-                        child: Text(
-                          '❌ ${provider.error}',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontSize: SizeConfig.adaptiveFontSize(14),
-                          ),
-                        ),
-                      ),
-                    if (provider.result != null && !provider.loading) ...[
-                      AssistantContainer(
-                        child: SummaryView(
-                          title: provider.result!.title,
-                          steps: provider.result!.steps,
-                        ),
-                      ),
-                      SizedBox(height: AdaptiveSpacing.small),
-                      AssistantContainer(
-                        child: VideoCard(
-                          title: provider.result!.title,
-                          videoUrl: provider.result!.videoUrl,
-                        ),
-                      ),
-                    ],
-                    SizedBox(height: AdaptiveSpacing.large * 2),
-                  ],
-                ),
-              ),
+              Expanded(child: _ChatMessagesList()),
               ChatInput(
                 onSearch: (query) => provider.search(query),
                 disabled: provider.loading,
