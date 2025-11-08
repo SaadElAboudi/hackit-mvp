@@ -6,61 +6,50 @@ void main() {
   group('ResponsiveBuilder Tests', () {
     testWidgets('Detects mobile layout correctly', (WidgetTester tester) async {
       DeviceType? detectedType;
-
+      await tester.binding.setSurfaceSize(const Size(400, 800));
       await tester.pumpWidget(
         MaterialApp(
-          home: SizedBox(
-            width: 400, // Mobile width
-            child: ResponsiveBuilder(
-              builder: (context, deviceType) {
-                detectedType = deviceType;
-                return const SizedBox();
-              },
-            ),
+          home: ResponsiveBuilder(
+            builder: (context, deviceType) {
+              detectedType = deviceType;
+              return const SizedBox();
+            },
           ),
         ),
       );
-
       expect(detectedType, DeviceType.mobile);
     });
 
     testWidgets('Detects tablet layout correctly', (WidgetTester tester) async {
       DeviceType? detectedType;
-
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
       await tester.pumpWidget(
         MaterialApp(
-          home: SizedBox(
-            width: 800, // Tablet width
-            child: ResponsiveBuilder(
-              builder: (context, deviceType) {
-                detectedType = deviceType;
-                return const SizedBox();
-              },
-            ),
+          home: ResponsiveBuilder(
+            builder: (context, deviceType) {
+              detectedType = deviceType;
+              return const SizedBox();
+            },
           ),
         ),
       );
-
       expect(detectedType, DeviceType.tablet);
     });
 
-    testWidgets('Detects desktop layout correctly', (WidgetTester tester) async {
+    testWidgets('Detects desktop layout correctly',
+        (WidgetTester tester) async {
       DeviceType? detectedType;
-
+      await tester.binding.setSurfaceSize(const Size(1400, 1000));
       await tester.pumpWidget(
         MaterialApp(
-          home: SizedBox(
-            width: 1400, // Desktop width
-            child: ResponsiveBuilder(
-              builder: (context, deviceType) {
-                detectedType = deviceType;
-                return const SizedBox();
-              },
-            ),
+          home: ResponsiveBuilder(
+            builder: (context, deviceType) {
+              detectedType = deviceType;
+              return const SizedBox();
+            },
           ),
         ),
       );
-
       expect(detectedType, DeviceType.desktop);
     });
 
