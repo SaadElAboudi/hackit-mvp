@@ -1,10 +1,8 @@
 # Hackit MVP
 
+[![Monorepo CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/monorepo-ci.yml/badge.svg)](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/monorepo-ci.yml)
+[![Backend REAL CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-real-ci.yml/badge.svg)](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-real-ci.yml)
 [![Coverage Status](https://codecov.io/gh/SaadElAboudi/hackit-mvp/branch/main/graph/badge.svg)](https://codecov.io/gh/SaadElAboudi/hackit-mvp)
-
-![Frontend Flutter CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/frontend_flutter-ci.yml/badge.svg)
-![Backend CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-ci.yml/badge.svg)
-![Backend REAL CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-real-ci.yml/badge.svg)
 
 ## Description
 Hackit MVP is a project designed to provide users with quick and clear answers to their questions through a chat interface. The application leverages AI to summarize information and find relevant video content from platforms like YouTube and TikTok.
@@ -58,10 +56,21 @@ hackit-mvp
    npm run test:smoke
    ```
 
-Coverage (local):
+### Coverage (local)
+Backend:
 ```bash
-npm run test:coverage
+cd backend && npm run test:coverage
 ```
+Flutter smoke only:
+```bash
+cd frontend_flutter && flutter test --coverage test/smoke_main_test.dart
+```
+Frontend (Jest, if tests added):
+```bash
+npm test -- --coverage
+```
+
+Aggregated coverage is uploaded automatically by the CI coverage job (merges backend + flutter + frontend lcov files).
 
 ### Real-mode CI (YouTube Data API)
 To exercise the production YouTube API path daily, a scheduled workflow `backend-real-ci.yml` runs the backend with `MOCK_MODE=false` and performs the smoke test with `REAL_MODE=true`.

@@ -81,14 +81,6 @@ jobs:
           name: backend-coverage
           path: backend/coverage/**
 
-      - name: Upload coverage to Codecov (non-blocking)
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: backend/coverage/lcov.info
-          flags: backend
-          name: backend-coverage
-          fail_ci_if_error: false
   flutter:
     name: Flutter (smoke)
     runs-on: ubuntu-latest
@@ -103,6 +95,16 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
+      - name: Cache pub & dart server
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ~/.dartServer
+          key: ${{ runner.os }}-pub-${{ hashFiles('frontend_flutter/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
       - name: Flutter doctor
         run: flutter doctor -v
       - name: Install deps
@@ -118,6 +120,21 @@ jobs:
           else
             echo "Smoke test not found, running no tests";
           fi
+      - name: Coverage (smoke)
+        shell: bash
+        run: |
+          if [ -f test/smoke_main_test.dart ]; then
+            flutter test --coverage test/smoke_main_test.dart -r compact || true
+          else
+            echo "Skipping coverage; no smoke test file";
+          fi
+      - name: Upload Flutter coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-coverage
+          path: frontend_flutter/coverage/**
+          if-no-files-found: ignore
 
   frontend:
     name: Expo frontend (Jest)
@@ -142,11 +159,56 @@ jobs:
         run: |
           if npx --yes jest --version >/dev/null 2>&1; then
             if ls __tests__/*.test.* >/dev/null 2>&1 || ls **/*.test.* >/dev/null 2>&1; then
-              npm test --silent || npm test --silent -- --runInBand
+              npm test --silent -- --coverage || npm test --silent -- --runInBand --coverage
             else
               echo "No Jest tests found, skipping";
             fi
           else
             echo "Jest not installed at root, skipping";
           fi
+
+      - name: Upload Frontend coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: coverage/**
+          if-no-files-found: ignore
+
+  coverage:
+    name: Coverage aggregation & upload
+    runs-on: ubuntu-latest
+    needs: [backend, flutter, frontend]
+    steps:
+      - name: Download backend coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-coverage
+          path: coverage/all/backend
+        continue-on-error: true
+      - name: Download flutter coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: flutter-coverage
+          path: coverage/all/flutter
+        continue-on-error: true
+      - name: Download frontend coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-coverage
+          path: coverage/all/frontend
+        continue-on-error: true
+      - name: List coverage files (optional)
+        run: |
+          echo "--- coverage/all contents ---"
+          find coverage/all -type f -name "*.info" -print || true
+      - name: Upload to Codecov (merged)
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: |
+            coverage/all/**/lcov.info
+          flags: monorepo
+          name: monorepo-coverage
+          fail_ci_if_error: false
 
