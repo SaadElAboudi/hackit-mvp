@@ -2,7 +2,7 @@ import 'dart:convert';
 
 enum ChatRole { user, assistant }
 
-enum ChatKind { text, steps, video, error }
+enum ChatKind { text, steps, video, citations, chapters, error }
 
 class ChatMessage {
   final String id;
@@ -22,6 +22,14 @@ class ChatMessage {
   factory ChatMessage.userText(String id, String text) => ChatMessage(
         id: id,
         role: ChatRole.user,
+        kind: ChatKind.text,
+        content: {"text": text},
+        ts: DateTime.now(),
+      );
+
+  factory ChatMessage.assistantText(String id, String text) => ChatMessage(
+        id: id,
+        role: ChatRole.assistant,
         kind: ChatKind.text,
         content: {"text": text},
         ts: DateTime.now(),
@@ -53,6 +61,27 @@ class ChatMessage {
           "videoUrl": videoUrl,
           if (source != null) "source": source,
         },
+        ts: DateTime.now(),
+      );
+
+  factory ChatMessage.assistantCitations(
+          String id, List<Map<String, dynamic>> citations) =>
+      ChatMessage(
+        id: id,
+        role: ChatRole.assistant,
+        kind: ChatKind.citations,
+        content: {"citations": citations},
+        ts: DateTime.now(),
+      );
+
+  factory ChatMessage.assistantChapters(
+          String id, List<Map<String, dynamic>> chapters,
+          {required String videoUrl}) =>
+      ChatMessage(
+        id: id,
+        role: ChatRole.assistant,
+        kind: ChatKind.chapters,
+        content: {"chapters": chapters, "videoUrl": videoUrl},
         ts: DateTime.now(),
       );
 

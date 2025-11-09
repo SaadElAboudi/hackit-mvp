@@ -291,6 +291,18 @@ class SearchProvider extends ChangeNotifier {
             _saveMessages();
             notifyListeners();
             break;
+          case 'final':
+            if (evt.citations.isNotEmpty) {
+              _push(ChatMessage.assistantCitations(
+                  _newId(), evt.citations.map((c) => c.toMap()).toList()));
+            }
+            if (evt.chapters.isNotEmpty && currentVideo != null) {
+              _push(ChatMessage.assistantChapters(
+                  _newId(), evt.chapters.map((c) => c.toMap()).toList(),
+                  videoUrl: currentVideo));
+            }
+            notifyListeners();
+            break;
           case 'partial':
             final step = evt.step;
             if (step != null && step.trim().isNotEmpty) {
@@ -554,6 +566,15 @@ class SearchProvider extends ChangeNotifier {
       source: r.source,
     );
     _push(videoMsg);
+    if (r.citations.isNotEmpty) {
+      _push(ChatMessage.assistantCitations(
+          _newId(), r.citations.map((c) => c.toMap()).toList()));
+    }
+    if (r.chapters.isNotEmpty) {
+      _push(ChatMessage.assistantChapters(
+          _newId(), r.chapters.map((c) => c.toMap()).toList(),
+          videoUrl: r.videoUrl));
+    }
   }
 
   void _appendError(String message) {
@@ -570,6 +591,10 @@ class SearchProvider extends ChangeNotifier {
   }
 
   String _newId() => DateTime.now().microsecondsSinceEpoch.toString();
+
+  // Removed old timestamp formatter (no longer used in text summaries)
+
+  // Legacy helper removed (structured message kinds now used for citations & chapters)
 
   void _loadMessages() {
     try {

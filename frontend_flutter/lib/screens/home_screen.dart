@@ -10,6 +10,9 @@ import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
 import '../widgets/chat_bubbles.dart';
 import '../models/chat_message.dart';
+import '../widgets/citations_view.dart';
+import '../widgets/chapters_view.dart';
+import '../models/base_search_result.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -160,6 +163,38 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
             final sourceV = m.content['source'] as String?;
             if (sourceV != null && sourceV.isNotEmpty) {
               children.add(_SourceChip(source: sourceV));
+            }
+            break;
+          case ChatKind.citations:
+            final raw = List<Map<String, dynamic>>.from(
+                m.content['citations'] ?? const <Map<String, dynamic>>[]);
+            final citations = raw
+                .map((e) => Citation.fromMap(Map<String, dynamic>.from(e)))
+                .toList();
+            if (citations.isNotEmpty) {
+              children.add(
+                AssistantContainer(
+                  child: CitationsView(citations: citations),
+                ),
+              );
+            }
+            break;
+          case ChatKind.chapters:
+            final raw = List<Map<String, dynamic>>.from(
+                m.content['chapters'] ?? const <Map<String, dynamic>>[]);
+            final chapters = raw
+                .map((e) => Chapter.fromMap(Map<String, dynamic>.from(e)))
+                .toList();
+            final videoUrl = (m.content['videoUrl'] ?? '') as String;
+            if (chapters.isNotEmpty) {
+              children.add(
+                AssistantContainer(
+                  child: ChaptersView(
+                    chapters: chapters,
+                    videoUrl: videoUrl,
+                  ),
+                ),
+              );
             }
             break;
           case ChatKind.text:
