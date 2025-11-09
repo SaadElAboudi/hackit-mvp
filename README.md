@@ -88,6 +88,17 @@ The REAL smoke will fail if the response still indicates a mock source, ensuring
 - Open the frontend application and enter your question in the chat interface.
 - The application will return a summarized answer along with a relevant video link.
 
+## Releases
+
+- Latest: v0.2.1 (2025-11-09)
+   - Frontend web: prompt template chips hidden by default for a cleaner input.
+   - Backend health: structured JSON (mode, uptimeSeconds, version, Gemini operational).
+   - HealthBadge integrated on Flutter frontend.
+   - Production web build published to GitHub Pages.
+   - See full notes in [CHANGELOG.md](CHANGELOG.md).
+
+GitHub Pages (if enabled in Settings → Pages): https://saadelaboudi.github.io/hackit-mvp/
+
 ## Contributing
 Contributions are welcome! Please submit a pull request or open an issue for any enhancements or bug fixes.
 
