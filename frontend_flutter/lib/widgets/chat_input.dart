@@ -158,8 +158,8 @@ class _ChatInputState extends State<ChatInput> {
                               _controller.text;
                       setState(() {
                         _controller.text = transformed;
-                        _controller.selection = TextSelection.collapsed(
-                            offset: transformed.length);
+                        _controller.selection =
+                            TextSelection.collapsed(offset: transformed.length);
                       });
                     }
                     _focusNode.requestFocus();
