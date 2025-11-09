@@ -15,6 +15,8 @@ set -euo pipefail
 # to generate issues with labels and body.
 
 PLAN_FILE="docs/issues_plan.md"
+DRY_RUN=${DRY_RUN:-0}
+VERBOSE=${VERBOSE:-0}
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "GitHub CLI (gh) not found. Install from https://cli.github.com and run 'gh auth login'" >&2
@@ -66,31 +68,56 @@ ensure_milestone() {
     3) title="3 (Search Intelligence)" ;;
     *) title="$num" ;;
   esac
-  # Create milestone if missing (ignore if exists)
+  # Attempt create (ignore if exists)
   gh api -X POST "repos/$REPO/milestones" -f title="$title" >/dev/null 2>&1 || true
-  echo "$title"
+  # Resolve milestone number for consistency (optional)
+  local mid
+  mid=$(gh api "repos/$REPO/milestones?state=all" -q ".[] | select(.title == \"$title\") | .number" 2>/dev/null || true)
+  if [ -n "$mid" ]; then
+    echo "$mid" # return number so gh can unambiguously match
+  else
+    echo "$title" # fallback to title
+  fi
 }
 
 create_issue() {
   local title="$1"; shift
   local labels_csv="$1"; shift
-  local milestone_title="$1"; shift
+  local milestone_ref="$1"; shift
   local body_file="$1"; shift
+
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "[DRY_RUN] Would create issue: '$title'";
+    echo "  Labels: $labels_csv";
+    echo "  Milestone: $milestone_ref";
+    [ "$VERBOSE" = "1" ] && echo "  Body Preview:" && sed -n '1,15p' "$body_file" && echo "  (truncated)";
+    return 0
+  fi
 
   local args=(issue create --repo "$REPO" --title "$title" --body-file "$body_file")
   if [ -n "$labels_csv" ]; then
     args+=(--label "$labels_csv")
   fi
-  if [ -n "$milestone_title" ]; then
-    args+=(--milestone "$milestone_title")
+  if [ -n "$milestone_ref" ]; then
+    args+=(--milestone "$milestone_ref")
   fi
-  gh "${args[@]}"
+  if [ "$VERBOSE" = "1" ]; then
+    echo "Executing: gh ${args[*]}"
+  fi
+  if ! gh "${args[@]}"; then
+    echo "ERROR creating issue: $title" >&2
+    return 1
+  fi
 }
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 
 # Parse issues from the Detailed Issue Specs sections
+total=0
+created=0
+failed=0
+
 awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
   line_no=$(echo "$hdr" | cut -d: -f1)
   heading=$(echo "$hdr" | cut -d: -f2-)
@@ -124,15 +151,28 @@ awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
   fi
 
   # Body: include Description, Acceptance Criteria, Dependencies
-  body_file="$tmpdir/issue.md"
+  body_file="$tmpdir/issue_$line_no.md"
   {
     echo "### $title"
     echo
-    echo "$block" | sed -n "$((line_no+1)),${end_line}p" | sed '1,/^Labels:/d'
+    # Remove first heading line and Labels: line; keep rest (Description, Acceptance, Dependencies, Notes...)
+    echo "$block" | sed '1d' | sed '/^Labels:/d'
   } > "$body_file"
 
+  if [ "$VERBOSE" = "1" ]; then
+    echo "Parsed issue title='$title' labels='$labels_no_ms' milestone='$milestone_title' (src line $line_no)"
+  fi
+
   echo "Creating: $title"
-  create_issue "$title" "$labels_no_ms" "$milestone_title" "$body_file"
+  if create_issue "$title" "$labels_no_ms" "$milestone_title" "$body_file"; then
+    created=$((created+1))
+  else
+    failed=$((failed+1))
+  fi
+  total=$((total+1))
 done
 
-echo "All issues processed."
+echo "Processed $total issues: $created created, $failed failed."
+if [ "$DRY_RUN" = "1" ]; then
+  echo "Dry run complete. Re-run without DRY_RUN=1 to create issues."
+fi
