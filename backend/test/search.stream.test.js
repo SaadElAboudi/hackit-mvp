@@ -71,5 +71,17 @@ await test('GET /api/search/stream streams meta, partial steps, then done', asyn
 
     const partials = events.filter(e => e.type === 'partial');
     assert.ok(partials.length >= 1, 'should stream at least one partial step');
+    const finalEvent = events.find(e => e.type === 'final');
+    assert.ok(finalEvent, 'final event with citations present');
+    assert.ok(Array.isArray(finalEvent.citations));
+    if (finalEvent.citations.length) {
+        assert.match(finalEvent.citations[0].url, /[?&]t=\d+/);
+    }
+    assert.ok(Array.isArray(finalEvent.chapters), 'chapters included in final event');
+    if (finalEvent.chapters.length) {
+        for (let i = 1; i < finalEvent.chapters.length; i++) {
+            assert.ok(finalEvent.chapters[i].startSec >= finalEvent.chapters[i - 1].startSec);
+        }
+    }
     assert.equal(events[events.length - 1].type, 'done');
 });

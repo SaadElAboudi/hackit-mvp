@@ -8,6 +8,8 @@ import morgan from "morgan";
 // Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
 
 import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
+import { getTranscript } from "./services/transcript.js";
+import { getChapters } from "./services/chapters.js";
 
 dotenv.config({ quiet: true });
 
@@ -25,6 +27,11 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.0-flash-lite";
 const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || "4000");
 let GEMINI_OPERATIONAL = true; // set to false after first hard failure
+// Circuit breaker state for Gemini
+const FAILURE_WINDOW_MS = Number(process.env.GEMINI_FAILURE_WINDOW_MS || '120000'); // 2 minutes
+const BREAKER_OPEN_MS = Number(process.env.GEMINI_BREAKER_OPEN_MS || '300000'); // 5 minutes
+let GEMINI_FAILURE_TIMESTAMPS = []; // array of ms since epoch
+let GEMINI_BREAKER_UNTIL = 0; // timestamp ms when breaker closes
 const START_TIME = Date.now();
 const APP_VERSION = process.env.APP_VERSION || process.env.npm_package_version || '1.0.0';
 
@@ -54,6 +61,47 @@ function heuristicSummary() {
   ];
   // Ensure 5 steps max, trim
   return base.slice(0, 5).join("\n");
+}
+
+function extractYouTubeVideoId(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('youtu.be')) {
+      return u.pathname.replace('/', '').split('?')[0];
+    }
+    if (u.searchParams.has('v')) return u.searchParams.get('v');
+    // Fallback for embed URLs
+    const parts = u.pathname.split('/');
+    const idx = parts.indexOf('embed');
+    if (idx !== -1 && parts[idx + 1]) return parts[idx + 1];
+  } catch (_) { /* ignore */ }
+  return null;
+}
+
+function withTimestamp(url, startSec) {
+  try {
+    const u = new URL(url);
+    // Add t=STARTS seconds as query parameter; keep existing params
+    u.searchParams.set('t', String(Math.max(0, Math.floor(startSec))));
+    return u.toString();
+  } catch (_) {
+    return url;
+  }
+}
+
+async function buildCitations({ videoId, videoTitle, videoUrl, max = 3 }) {
+  try {
+    const { transcript } = await getTranscript(videoId, videoTitle);
+    const items = (transcript || []).slice(0, max);
+    return items.map((seg) => ({
+      url: withTimestamp(videoUrl, seg.startSec || 0),
+      startSec: Math.max(0, Math.floor(seg.startSec || 0)),
+      endSec: Math.max(0, Math.floor((seg.startSec || 0) + 25)),
+      quote: String(seg.text || '').slice(0, 140)
+    }));
+  } catch (_) {
+    return [];
+  }
 }
 
 // Allow overriding YouTube search implementation in tests without affecting production import binding.
@@ -105,6 +153,10 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       if (!txt) txt = (resp.data?.candidates?.[0]?.text || "").trim();
       if (!txt) txt = (resp.data?.candidates?.[0]?.output || "").trim();
       if (!txt) throw new Error("Empty Gemini response");
+      // success resets failure counters and closes breaker
+      GEMINI_OPERATIONAL = true;
+      GEMINI_FAILURE_TIMESTAMPS = [];
+      GEMINI_BREAKER_UNTIL = 0;
       return txt;
     }
   } catch (error) {
@@ -113,6 +165,13 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
     // On timeout or network abort, throw a concise timeout error
     if (error?.code === 'ECONNABORTED' || /timeout/i.test(message || '')) {
       GEMINI_OPERATIONAL = false;
+      // record failure and possibly open breaker
+      const now = Date.now();
+      GEMINI_FAILURE_TIMESTAMPS = GEMINI_FAILURE_TIMESTAMPS.filter(ts => now - ts <= FAILURE_WINDOW_MS);
+      GEMINI_FAILURE_TIMESTAMPS.push(now);
+      if (GEMINI_FAILURE_TIMESTAMPS.length >= 3) {
+        GEMINI_BREAKER_UNTIL = Math.max(GEMINI_BREAKER_UNTIL, now + BREAKER_OPEN_MS);
+      }
       throw new Error(`Gemini timeout after ${GEMINI_TIMEOUT_MS}ms`);
     }
     // If NOT_FOUND: try a known accessible lite model explicitly
@@ -121,8 +180,14 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       return await generateWithGemini(prompt, maxOutputTokens);
     }
     if (status === 404) {
-      // mark non-operational to avoid chaining timeouts
+      // mark non-operational and record failure
       GEMINI_OPERATIONAL = false;
+      const now = Date.now();
+      GEMINI_FAILURE_TIMESTAMPS = GEMINI_FAILURE_TIMESTAMPS.filter(ts => now - ts <= FAILURE_WINDOW_MS);
+      GEMINI_FAILURE_TIMESTAMPS.push(now);
+      if (GEMINI_FAILURE_TIMESTAMPS.length >= 3) {
+        GEMINI_BREAKER_UNTIL = Math.max(GEMINI_BREAKER_UNTIL, now + BREAKER_OPEN_MS);
+      }
     }
     throw new Error(message || "Gemini generation failed");
   }
@@ -145,6 +210,8 @@ app.get("/health", (_req, res) => {
       hasKey: Boolean(GEMINI_API_KEY),
       timeoutMs: GEMINI_TIMEOUT_MS,
       operational: GEMINI_OPERATIONAL,
+      breakerActive: Date.now() < GEMINI_BREAKER_UNTIL,
+      retryAt: GEMINI_BREAKER_UNTIL || null,
     }
   });
 });
@@ -168,6 +235,8 @@ app.get("/health/extended", (_req, res) => {
       model: GEMINI_MODEL,
       timeoutMs: GEMINI_TIMEOUT_MS,
       operational: GEMINI_OPERATIONAL,
+      breakerActive: Date.now() < GEMINI_BREAKER_UNTIL,
+      retryAt: GEMINI_BREAKER_UNTIL || null,
     }
   });
 });
@@ -179,12 +248,17 @@ app.post("/api/search", async (req, res) => {
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
   if ((process.env.MOCK_MODE || mockDefault) === "true") {
-    return res.json(makeMockResponse());
+    const mock = makeMockResponse();
+    const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
+    const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
+    return res.json({ ...mock, citations });
   }
 
   try {
     let searchTerm = query;
-    const useGemini = USE_GEMINI_ENV && GEMINI_OPERATIONAL && (req.body?.useGemini !== false);
+    const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
+    // Allow attempts even if GEMINI_OPERATIONAL became false so failures can accumulate and open breaker.
+    const useGemini = USE_GEMINI_ENV && !breakerActive && (req.body?.useGemini !== false);
     let reformulationTimedOut = false;
     if (useGemini && USE_GEMINI_REFORMULATION) {
       const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
@@ -212,11 +286,12 @@ app.post("/api/search", async (req, res) => {
     }
 
     // Unified YouTube search with internal API->fallback handling
-    let videoTitle, videoUrl, source;
+    let videoTitle, videoUrl, source, videoId;
     try {
       const video = await searchYouTube(searchTerm);
       videoTitle = video.title;
       videoUrl = video.url;
+      videoId = video.videoId || extractYouTubeVideoId(video.url);
       source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
     } catch (videoErr) {
       console.warn("Video search failed:", videoErr.message);
@@ -227,6 +302,7 @@ app.post("/api/search", async (req, res) => {
           const retryVideo = await searchYouTube(query);
           videoTitle = retryVideo.title;
           videoUrl = retryVideo.url;
+          videoId = retryVideo.videoId || extractYouTubeVideoId(retryVideo.url);
           source = retryVideo.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
           console.log("Recovered video via original query.");
         } catch (retryErr) {
@@ -261,7 +337,10 @@ app.post("/api/search", async (req, res) => {
     }
 
     const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
-    return res.json({ title: videoTitle, steps, videoUrl, source });
+    const vid = videoId || extractYouTubeVideoId(videoUrl);
+    const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
+    const chapters = vid ? (await getChapters(vid, videoTitle)).chapters : [];
+    return res.json({ title: videoTitle, steps, videoUrl, source, citations, chapters });
   } catch (err) {
     console.error("Search error:", err?.response?.data || err.message || err);
     const statusCode = err?.status || err?.response?.status || 500;
@@ -308,8 +387,15 @@ app.get("/api/search/stream", async (req, res) => {
         idx++;
       } else {
         clearInterval(interval);
-        writeEvent({ type: "done" });
-        end();
+        // final event with citations and chapters
+        (async () => {
+          const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
+          const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
+          const chapters = (await getChapters(vid, mock.title)).chapters;
+          writeEvent({ type: "final", citations, chapters });
+          writeEvent({ type: "done" });
+          end();
+        })();
       }
     }, 220);
     req.on("close", () => clearInterval(interval));
@@ -319,7 +405,8 @@ app.get("/api/search/stream", async (req, res) => {
   (async () => {
     try {
       let searchTerm = query;
-      const useGemini = USE_GEMINI_ENV && GEMINI_OPERATIONAL && (req.query?.useGemini !== "false");
+      const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
+      const useGemini = USE_GEMINI_ENV && !breakerActive && (req.query?.useGemini !== "false");
       let reformulationTimedOut = false;
       if (useGemini && USE_GEMINI_REFORMULATION) {
         const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
@@ -338,11 +425,12 @@ app.get("/api/search/stream", async (req, res) => {
       }
 
       // Search video first and emit meta
-      let videoTitle, videoUrl, source;
+      let videoTitle, videoUrl, source, videoId;
       try {
         const video = await searchYouTube(searchTerm);
         videoTitle = video.title;
         videoUrl = video.url;
+        videoId = video.videoId || extractYouTubeVideoId(video.url);
         source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
       } catch (videoErr) {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
@@ -380,6 +468,10 @@ app.get("/api/search/stream", async (req, res) => {
         writeEvent({ type: "partial", step: s });
         await new Promise(r => setTimeout(r, 160));
       }
+      const vid = videoId || extractYouTubeVideoId(videoUrl);
+      const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
+      const chapters = vid ? (await getChapters(vid, videoTitle)).chapters : [];
+      writeEvent({ type: "final", citations, chapters });
       writeEvent({ type: "done" });
       end();
     } catch (err) {
@@ -389,6 +481,34 @@ app.get("/api/search/stream", async (req, res) => {
       end();
     }
   })();
+});
+
+// Transcript endpoint: /api/transcript?videoId=...&title=...
+app.get("/api/transcript", async (req, res) => {
+  const videoId = String(req.query.videoId || '').trim();
+  const title = String(req.query.title || '').trim();
+  if (!videoId) return res.status(400).json({ error: 'videoId is required' });
+  try {
+    const { transcript, cache } = await getTranscript(videoId, title);
+    res.setHeader('X-Cache', cache);
+    return res.json({ videoId, transcript, cached: cache === 'HIT' });
+  } catch (e) {
+    return res.status(500).json({ error: 'Transcript fetch failed', detail: e?.message || 'Unknown error' });
+  }
+});
+
+// Chapters endpoint: /api/chapters?videoId=...&title=...
+app.get("/api/chapters", async (req, res) => {
+  const videoId = String(req.query.videoId || '').trim();
+  const title = String(req.query.title || '').trim();
+  if (!videoId) return res.status(400).json({ error: 'videoId is required' });
+  try {
+    const { chapters, cache } = await getChapters(videoId, title);
+    res.setHeader('X-Cache', cache);
+    return res.json({ videoId, chapters, cached: cache === 'HIT' });
+  } catch (e) {
+    return res.status(500).json({ error: 'Chapterization failed', detail: e?.message || 'Unknown error' });
+  }
 });
 
 export function createApp() {

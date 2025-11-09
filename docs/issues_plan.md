@@ -140,6 +140,26 @@ Labels: milestone:3
 Description: Secondary scoring (LLM or heuristic) factoring recency, channel trust, and semantic relevance.
 Acceptance: Test dataset shows improved precision@3 vs baseline scorer.
 
+#### 18. Gemini Circuit Breaker & Degraded Mode
+Labels: area:backend, type:feature, priority:high, milestone:1
+Description: Introduce an in-memory circuit breaker around Gemini calls. After 3 consecutive timeouts/errors within a 2-minute window, open the breaker for 5 minutes. While open, skip LLM reformulation/summary and use heuristic local fallbacks; expose state via `/health` and `/health/extended` as `{ gemini: { operational, breakerActive, retryAt } }`. Log metrics for activations and duration.
+Acceptance Criteria:
+1. Simulating 3 consecutive Gemini failures activates breaker; requests use degraded path with faster responses.  
+2. After 5 minutes (or shorter in test), breaker auto-closes and Gemini path resumes.  
+3. `/health/extended` reflects `operational=false` while breaker is open and `retryAt` in the future.  
+4. Unit/integration tests cover activation, open-window behavior, and recovery timing.
+Notes: Spec in docs/issues_sprint1/feat_circuit_breaker.md
+
+#### 19. Local History & Favorites (v1)
+Labels: area:frontend, type:feature, priority:medium, milestone:1
+Description: Local-first persistence for last 50 searches and 50 favorites. Store in localStorage (web) and SharedPreferences (mobile) with LRU pruning. Add History screen to re-run past queries and a ⭐ toggle on results; add a simple Favorites screen.
+Acceptance Criteria:
+1. History items append on successful searches and persist after app restart; tapping re-runs the query.  
+2. Toggling ⭐ updates the item and persists; appears in Favorites screen after restart.  
+3. When counts exceed quotas (50), oldest entries are pruned (LRU).  
+4. Basic tests validate persistence and pruning.
+Notes: Spec in docs/issues_sprint1/feat_history_favorites.md
+
 ### Issue Creation Guidance
 For each spec above, create a GitHub Issue with:
 1. Title: Use the exact heading.  

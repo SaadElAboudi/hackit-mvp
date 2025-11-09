@@ -67,6 +67,12 @@ class ApiService {
             videoUrl: body['videoUrl'] ?? '',
             source: body['source'] ?? '',
             summary: body['summary'],
+            citations: (body['citations'] as List<dynamic>? ?? [])
+                .map((e) => Citation.fromMap(e as Map<String, dynamic>))
+                .toList(),
+            chapters: (body['chapters'] as List<dynamic>? ?? [])
+                .map((e) => Chapter.fromMap(e as Map<String, dynamic>))
+                .toList(),
             metadata: {
               'timestamp': DateTime.now().toIso8601String(),
               'query': query,

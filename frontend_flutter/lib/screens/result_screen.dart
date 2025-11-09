@@ -6,6 +6,8 @@ import '../core/responsive/adaptive_spacing.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
 import '../models/base_search_result.dart';
+import '../widgets/citations_view.dart';
+import '../widgets/chapters_view.dart';
 import '../providers/search_provider.dart';
 
 class ResultScreen extends StatelessWidget {
@@ -37,6 +39,15 @@ class _ResultMobileLayout extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SummaryView(title: result.title, steps: result.steps),
+            if (result.citations.isNotEmpty) ...[
+              SizedBox(height: AdaptiveSpacing.medium),
+              CitationsView(citations: result.citations),
+            ],
+            if (result.chapters.isNotEmpty) ...[
+              SizedBox(height: AdaptiveSpacing.medium),
+              ChaptersView(
+                  chapters: result.chapters, videoUrl: result.videoUrl),
+            ],
             SizedBox(height: AdaptiveSpacing.small),
             VideoCard(title: result.title, videoUrl: result.videoUrl),
             SizedBox(height: AdaptiveSpacing.medium),
@@ -70,7 +81,8 @@ class _ResultTabletLayout extends StatelessWidget {
       appBar: AppBar(title: const Text('Résultats')),
       body: Center(
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: AdaptiveSpacing.maxContentWidth),
+          constraints:
+              BoxConstraints(maxWidth: AdaptiveSpacing.maxContentWidth),
           child: Padding(
             padding: AdaptiveSpacing.screenPadding,
             child: Column(
@@ -84,9 +96,26 @@ class _ResultTabletLayout extends StatelessWidget {
                     children: [
                       Expanded(
                         flex: 3,
-                        child: SummaryView(
-                          title: result.title,
-                          steps: result.steps,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SummaryView(
+                                title: result.title,
+                                steps: result.steps,
+                              ),
+                              if (result.citations.isNotEmpty) ...[
+                                SizedBox(height: AdaptiveSpacing.medium),
+                                CitationsView(citations: result.citations),
+                              ],
+                              if (result.chapters.isNotEmpty) ...[
+                                SizedBox(height: AdaptiveSpacing.medium),
+                                ChaptersView(
+                                    chapters: result.chapters,
+                                    videoUrl: result.videoUrl),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                       SizedBox(width: AdaptiveSpacing.medium),
@@ -134,7 +163,8 @@ class _ResultDesktopLayout extends StatelessWidget {
       appBar: AppBar(title: const Text('Résultats')),
       body: Center(
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: AdaptiveSpacing.maxContentWidth),
+          constraints:
+              BoxConstraints(maxWidth: AdaptiveSpacing.maxContentWidth),
           child: Padding(
             padding: AdaptiveSpacing.screenPadding,
             child: Column(
@@ -148,9 +178,26 @@ class _ResultDesktopLayout extends StatelessWidget {
                     children: [
                       Expanded(
                         flex: 2,
-                        child: SummaryView(
-                          title: result.title,
-                          steps: result.steps,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SummaryView(
+                                title: result.title,
+                                steps: result.steps,
+                              ),
+                              if (result.citations.isNotEmpty) ...[
+                                SizedBox(height: AdaptiveSpacing.medium),
+                                CitationsView(citations: result.citations),
+                              ],
+                              if (result.chapters.isNotEmpty) ...[
+                                SizedBox(height: AdaptiveSpacing.medium),
+                                ChaptersView(
+                                    chapters: result.chapters,
+                                    videoUrl: result.videoUrl),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                       SizedBox(width: AdaptiveSpacing.large),
@@ -206,7 +253,7 @@ class _BackButton extends StatelessWidget {
 BaseSearchResult _getResult(BuildContext context) {
   final arg = ModalRoute.of(context)!.settings.arguments;
   BaseSearchResult? res;
-  
+
   if (arg is BaseSearchResult) {
     res = arg;
   } else if (arg is Map<String, dynamic>) {
@@ -220,5 +267,7 @@ BaseSearchResult _getResult(BuildContext context) {
     steps: res?.steps ?? <String>[],
     videoUrl: res?.videoUrl ?? '',
     source: res?.source ?? '',
+    citations: res?.citations ?? const [],
+    chapters: res?.chapters ?? const [],
   );
 }
