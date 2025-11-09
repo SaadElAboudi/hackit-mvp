@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/base_search_result.dart';
+import '../services/video_seek_service.dart';
 
 class CitationsView extends StatelessWidget {
   final List<Citation> citations;
@@ -13,10 +14,14 @@ class CitationsView extends StatelessWidget {
       runSpacing: 8,
       children: citations.take(6).map((c) {
         final label = _formatTs(c.startSec);
-        return OutlinedButton.icon(
-          onPressed: () => _openExternal(context, c.url),
-          icon: const Icon(Icons.link, size: 16),
-          label: Text(label),
+        return Tooltip(
+          message: 'Aller à $label',
+          child: OutlinedButton.icon(
+            onPressed: () => VideoSeekService.instance
+                .seekOrQueue(c.startSec, sourceUrl: c.url),
+            icon: const Icon(Icons.access_time, size: 16),
+            label: Text(label),
+          ),
         );
       }).toList(),
     );
@@ -28,11 +33,5 @@ class CitationsView extends StatelessWidget {
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  void _openExternal(BuildContext context, String url) {
-    // For web, Window.open; on mobile, use url_launcher if available.
-    // To avoid adding dependencies, rely on Navigator to open via external app when possible.
-    // If url_launcher is present in project, swap to launchUrl.
-    // ignore: avoid_print
-    print('Open URL: $url');
-  }
+  // External opening removed; now we prioritize in-app seeking via VideoSeekService.
 }

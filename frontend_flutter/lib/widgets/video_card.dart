@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/video_seek_service.dart';
 import '../core/responsive/size_config.dart';
 import '../core/responsive/adaptive_spacing.dart';
 
@@ -26,13 +27,12 @@ class _VideoCardState extends State<VideoCard>
         duration: const Duration(milliseconds: 150), vsync: this);
   }
 
-  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _openUrl(BuildContext context) async {
+  Future<void> _openUrl(BuildContext context, {int? startSeconds}) async {
     final uri = Uri.tryParse(widget.videoUrl);
     final isValid = uri != null && uri.hasScheme && (uri.host.isNotEmpty);
     if (!isValid) {
@@ -42,7 +42,13 @@ class _VideoCardState extends State<VideoCard>
 
     final messenger = ScaffoldMessenger.of(context); // capture before async
     try {
-      final success = await launchUrl(uri);
+      Uri toLaunch = uri;
+      if (startSeconds != null && startSeconds >= 0) {
+        final params = Map<String, String>.from(toLaunch.queryParameters);
+        params['t'] = startSeconds.toString();
+        toLaunch = toLaunch.replace(queryParameters: params);
+      }
+      final success = await launchUrl(toLaunch);
       if (!success) {
         if (!mounted) return; // widget may have unmounted during await
         messenger.showSnackBar(
@@ -190,6 +196,17 @@ class _VideoCardState extends State<VideoCard>
                             label: const Text('Voir la vidéo →'),
                           ),
                           SizedBox(width: AdaptiveSpacing.small),
+                          if (!VideoSeekService.instance.isRegistered)
+                            TextButton.icon(
+                              onPressed: () =>
+                                  VideoSeekService.instance.register(
+                                (d) => _openUrl(context,
+                                    startSeconds: d.inSeconds),
+                                baseUrl: widget.videoUrl,
+                              ),
+                              icon: const Icon(Icons.linked_camera, size: 18),
+                              label: const Text('Activer le seek'),
+                            ),
                           Icon(
                             Icons.launch,
                             size: 16,

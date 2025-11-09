@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/base_search_result.dart';
+import '../services/video_seek_service.dart';
 
 class ChaptersView extends StatelessWidget {
   final List<Chapter> chapters;
@@ -19,8 +20,14 @@ class ChaptersView extends StatelessWidget {
             title: Text(ch.title),
             leading: const Icon(Icons.play_arrow, size: 20),
             subtitle: Text(_formatTs(ch.startSec)),
-            onTap: () =>
-                _openExternal(context, _withTimestamp(videoUrl, ch.startSec)),
+            onTap: () => VideoSeekService.instance
+                .seekOrQueue(ch.startSec, sourceUrl: videoUrl),
+            trailing: IconButton(
+              tooltip: 'Ouvrir dans une nouvelle fenêtre',
+              icon: const Icon(Icons.open_in_new, size: 18),
+              onPressed: () =>
+                  _openExternal(context, _withTimestamp(videoUrl, ch.startSec)),
+            ),
           )
       ],
     );
@@ -41,8 +48,8 @@ class ChaptersView extends StatelessWidget {
   }
 
   void _openExternal(BuildContext context, String url) {
-    // Print for now; integrate url_launcher later if desired.
+    // For now keep simple: print; future: use url_launcher to open in new tab/window.
     // ignore: avoid_print
-    print('Open URL: $url');
+    print('External chapter URL: $url');
   }
 }
