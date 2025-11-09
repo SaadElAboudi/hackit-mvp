@@ -15,7 +15,8 @@ module.exports = {
     rules: {
         'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
         'import/order': ['error', { 'newlines-between': 'always' }],
-        'no-console': ['warn', { allow: ['warn', 'error'] }]
+        // Allow console usage in this MVP; logs are suppressed in tests via preloader
+        'no-console': 'off'
     },
     settings: {
         'import/resolver': {

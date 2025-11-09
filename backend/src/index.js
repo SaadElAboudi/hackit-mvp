@@ -1,9 +1,10 @@
-import express from "express";
-import axios from "axios";
-import dotenv from "dotenv";
-import cors from "cors";
-import morgan from "morgan";
 import { pathToFileURL } from "url";
+
+import axios from "axios";
+import cors from "cors";
+import dotenv from "dotenv";
+import express from "express";
+import morgan from "morgan";
 // Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
 
 import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";

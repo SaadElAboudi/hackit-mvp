@@ -41,7 +41,7 @@ await test('POST /api/search no-results on original term falls back to mock-fall
     // Current server logic only retries if a reformulated term differs from original.
     // Since we have no reformulation active, a YOUTUBE_NO_RESULTS triggers immediate mock fallback.
     let callCount = 0;
-    setSearchYouTube(async (term) => {
+    setSearchYouTube(async (_term) => {
         callCount++;
         if (callCount === 1) {
             const err = new Error('No results for reformulated');
