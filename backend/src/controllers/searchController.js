@@ -1,42 +1,42 @@
 import express from "express";
-import { reformulateQuestion } from "../services/openai.js";
+
+import { reformulateQuestion, generateSummary } from "../services/openai.js";
 import { searchYouTube } from "../services/youtube.js";
-import { rankVideos } from "../utils/ranker.js";
 
 const router = express.Router();
 
 router.post("/search", async (req, res) => {
-  const { query } = req.body;
+  const { query } = req.body || {};
 
   try {
+    if (!query || typeof query !== "string" || !query.trim()) {
+      return res.status(400).json({ message: "Missing or invalid 'query' in request body." });
+    }
+
     // Reformulate the question for search
-    const reformulatedQuery = await reformulateQuestion(query);
+    const reformulatedQuery = await reformulateQuestion(query.trim());
 
-    // Search for videos on YouTube
-    const videos = await searchYouTube(reformulatedQuery);
+    // Search for a video on YouTube (service returns best match object)
+    const video = await searchYouTube(reformulatedQuery);
 
-    // Rank the videos based on views and relevance
-    const rankedVideos = rankVideos(videos);
-
-    if (rankedVideos.length === 0) {
+    if (!video || !video.videoId) {
       return res.status(404).json({ message: "No videos found." });
     }
 
-    // Get the best video
-    const bestVideo = rankedVideos[0];
-
-    // Generate a summary for the best video
-    const summary = await generateSummary(bestVideo.id);
+    // Generate a summary for the video using its title
+    const summary = await generateSummary(video.title);
 
     res.json({
-      title: bestVideo.title,
-      summary: summary,
-      videoUrl: `https://www.youtube.com/watch?v=${bestVideo.id}`,
-      source: "YouTube"
+      title: video.title,
+      summary,
+      videoUrl: video.url || `https://www.youtube.com/watch?v=${video.videoId}`,
+      source: video.source || "youtube",
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "An error occurred while processing your request." });
+    const status = error?.status || 500;
+    const message = error?.message || "An error occurred while processing your request.";
+    console.error("/api/search error:", error?.response?.data || message);
+    res.status(status).json({ message });
   }
 });
 

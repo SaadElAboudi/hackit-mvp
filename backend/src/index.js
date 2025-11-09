@@ -4,14 +4,18 @@ import dotenv from "dotenv";
 import cors from "cors";
 import morgan from "morgan";
 // Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
+
 import { searchYouTube } from "./services/youtube.js";
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const app = express();
 app.use(express.json());
 app.use(cors());
-app.use(morgan("dev"));
+// Silence noisy request logs during tests to avoid breaking node:test TAP output
+if (process.env.NODE_ENV !== "test") {
+  app.use(morgan("dev"));
+}
 
 const USE_GEMINI_ENV = (process.env.USE_GEMINI || "false") === "true";
 const USE_GEMINI_REFORMULATION = (process.env.USE_GEMINI_REFORMULATION || "false") === "true";
@@ -35,7 +39,7 @@ function makeMockResponse() {
   };
 }
 
-function heuristicSummary(title) {
+function heuristicSummary() {
   // Very simple local summary when Gemini is disabled/unavailable
   const base = [
     "Ouvre la vidéo et lis la description.",
@@ -169,8 +173,8 @@ app.post("/api/search", async (req, res) => {
         // Sanitize: take first line, strip bullets/quotes/markdown, limit length
         reform = String(reform)
           .split(/\r?\n/)[0]
-          .replace(/^[-*•\s>\"]+/, "")
-          .replace(/[\"`]+/g, "")
+          .replace(/^[-*•\s>"]+/, "")
+          .replace(/["`]+/g, "")
           .trim();
         if (!reform || reform.length > 80) {
           searchTerm = query;
@@ -204,19 +208,14 @@ app.post("/api/search", async (req, res) => {
           videoTitle = retryVideo.title;
           videoUrl = retryVideo.url;
           source = retryVideo.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+          console.log("Recovered video via original query.");
         } catch (retryErr) {
           console.warn("Retry with original query also failed:", retryErr.message);
-          // Overwrite videoErr with retryErr for accurate error propagation
-          videoErr = retryErr;
+          if ((process.env.ALLOW_FALLBACK || "true") === "true") {
+            return res.json({ ...makeMockResponse(), source: "mock-fallback" });
+          }
+          throw retryErr;
         }
-        if (videoTitle && videoUrl) {
-          console.log("Recovered video via original query.");
-        } else if ((process.env.ALLOW_FALLBACK || "true") === "true") {
-          return res.json({ ...makeMockResponse(), source: "mock-fallback" });
-        } else {
-          throw videoErr;
-        }
-        // Proceed if recovered
       } else {
         // Graceful degrade: provide mock fallback if allowed instead of hard error
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
@@ -268,11 +267,12 @@ app.get("/api/search/stream", async (req, res) => {
       res.write(`data: ${JSON.stringify(obj)}\n\n`);
     } catch (e) {
       // client likely disconnected
+      return; // avoid empty catch block per lint rules
     }
   };
 
   const end = () => {
-    try { res.end(); } catch (_) { }
+    try { res.end(); } catch (_) { return; }
   };
 
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
@@ -308,7 +308,7 @@ app.get("/api/search/stream", async (req, res) => {
           reform = String(reform)
             .split(/\r?\n/)[0]
             .replace(/^[-*•\s>"]+/, "")
-            .replace(/[\"`]+/g, "")
+            .replace(/["`]+/g, "")
             .trim();
           if (reform && reform.length <= 80) searchTerm = reform;
         } catch (e) {
@@ -370,11 +370,18 @@ app.get("/api/search/stream", async (req, res) => {
   })();
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
-  console.log(`Mock mode: ${(process.env.MOCK_MODE || 'true') === 'true' ? 'enabled' : 'disabled'}`);
-  console.log(`Gemini: ${USE_GEMINI_ENV ? `enabled (${GEMINI_MODEL}, timeout=${GEMINI_TIMEOUT_MS}ms)` : 'disabled'}`);
-  console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
-});
+export function createApp() {
+  return app;
+}
+
+// Only start server if run directly (not when imported for tests)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
+    console.log(`Mock mode: ${(process.env.MOCK_MODE || 'true') === 'true' ? 'enabled' : 'disabled'}`);
+    console.log(`Gemini: ${USE_GEMINI_ENV ? `enabled (${GEMINI_MODEL}, timeout=${GEMINI_TIMEOUT_MS}ms)` : 'disabled'}`);
+    console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
+  });
+}

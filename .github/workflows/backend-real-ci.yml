@@ -8,6 +8,8 @@ on:
 
 jobs:
   real-smoke:
+    # Skip this job entirely if no YT_API_KEY is configured to avoid red CI noise
+    if: ${{ secrets.YT_API_KEY != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -63,3 +65,13 @@ jobs:
           fi
           pkill -f "node src/index.js" || true
           echo "--- server.log (last 200 lines) ---"; (test -f server.log && tail -n 200 server.log) || true
+
+  notice-no-secret:
+    # Provide a neutral pass with clear notice when secret is missing
+    if: ${{ secrets.YT_API_KEY == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notice
+        run: |
+          echo "REAL CI skipped: YT_API_KEY secret is not configured."
+          echo "Add repository secret YT_API_KEY to enable exercising the production YouTube API path."

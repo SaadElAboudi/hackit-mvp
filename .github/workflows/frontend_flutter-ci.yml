@@ -18,6 +18,10 @@ jobs:
     defaults:
       run:
         working-directory: frontend_flutter
+    env:
+      # Ensure consistent locale and no analytics noise
+      CI: 'true'
+      PUB_ENVIRONMENT: 'github-ci'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,6 +50,17 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      - name: Ensure formatting (fail on diff)
+        run: |
+          flutter format --set-exit-if-changed .
+
       - name: Run widget tests (stable subset)
         run: |
+          # Fail fast if directory missing (future-proof) then run subset
+          test -d test/widgets || { echo "Expected test/widgets directory missing"; exit 1; }
           flutter test -r compact test/widgets
+      - name: Report minimal coverage (optional, non-blocking)
+        continue-on-error: true
+        run: |
+          flutter test --coverage test/widgets || true
+          if [ -f coverage/lcov.info ]; then echo "Generated coverage"; fi

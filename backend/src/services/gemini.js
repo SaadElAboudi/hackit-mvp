@@ -75,8 +75,8 @@ export const generateWithGemini = async (prompt, maxOutputTokens = 256) => {
   // 1) configured model
   tryModels.push(CONFIG_MODEL);
   // 2) if ends with -latest, try base name
-  if (/\-latest$/i.test(CONFIG_MODEL)) {
-    tryModels.push(CONFIG_MODEL.replace(/\-latest$/i, ""));
+  if (/-latest$/i.test(CONFIG_MODEL)) {
+    tryModels.push(CONFIG_MODEL.replace(/-latest$/i, ""));
   }
   // 3) modern defaults
   for (const candidate of [
