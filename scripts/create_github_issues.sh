@@ -15,6 +15,7 @@ set -euo pipefail
 # to generate issues with labels and body.
 
 PLAN_FILE="docs/issues_plan.md"
+shopt -s extglob || true
 DRY_RUN=${DRY_RUN:-0}
 VERBOSE=${VERBOSE:-0}
 
@@ -47,12 +48,16 @@ ensure_label() {
 }
 
 ensure_labels() {
+trim() {
+  echo "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+ensure_labels() {
   local labels_csv="$1"
   IFS=',' read -r -a arr <<<"$labels_csv"
   for raw in "${arr[@]}"; do
     # trim whitespace
-    local lbl="${raw##*( )}"
-    lbl="${lbl%%*( )}"
+    local lbl; lbl=$(trim "$raw")
     if [ -n "$lbl" ]; then
       ensure_label "$lbl"
     fi
@@ -66,7 +71,7 @@ normalize_labels_and_milestone() {
   local milestone=""
   IFS=',' read -r -a arr <<<"$labels_csv"
   for raw in "${arr[@]}"; do
-    local lbl="${raw##*( )}"; lbl="${lbl%%*( )}"
+      local lbl; lbl=$(trim "$raw")
     [ -z "$lbl" ] && continue
     if [[ "$lbl" =~ ^milestone: ]]; then
       milestone="${lbl#milestone:}"
@@ -152,6 +157,8 @@ awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
 
   # Title: strip leading hashes and numeric id
   title=$(echo "$heading" | sed -E 's/^#### [0-9]+\.\s*//' | sed -E 's/^\s+|\s+$//g')
+  title=$(echo "$heading" | sed -E 's/^#### [0-9]+\.\s*//' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+while IFS= read -r hdr; do
 
   # Labels: extract after 'Labels:' line and normalize commas; trim outer spaces
   labels=$(echo "$block" | awk '/^Labels:/{sub(/^Labels:\s*/,""); print}' | tr -d '\r' | tr -d '"')
@@ -192,6 +199,7 @@ awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
   fi
   total=$((total+1))
 done
+done < <(awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE")
 
 echo "Processed $total issues: $created created, $failed failed."
 if [ "$DRY_RUN" = "1" ]; then
