@@ -47,16 +47,14 @@ ensure_label() {
   gh label create "$name" --color F2F2F2 --description "auto-created" --repo "$REPO" >/dev/null 2>&1 || true
 }
 
-ensure_labels() {
 trim() {
-  echo "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+  echo "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' 
 }
 
 ensure_labels() {
   local labels_csv="$1"
   IFS=',' read -r -a arr <<<"$labels_csv"
   for raw in "${arr[@]}"; do
-    # trim whitespace
     local lbl; lbl=$(trim "$raw")
     if [ -n "$lbl" ]; then
       ensure_label "$lbl"
@@ -142,7 +140,7 @@ total=0
 created=0
 failed=0
 
-awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
+while IFS= read -r hdr; do
   line_no=$(echo "$hdr" | cut -d: -f1)
   heading=$(echo "$hdr" | cut -d: -f2-)
 
@@ -156,9 +154,7 @@ awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
   block=$(sed -n "$line_no,${last_line}p" "$PLAN_FILE")
 
   # Title: strip leading hashes and numeric id
-  title=$(echo "$heading" | sed -E 's/^#### [0-9]+\.\s*//' | sed -E 's/^\s+|\s+$//g')
   title=$(echo "$heading" | sed -E 's/^#### [0-9]+\.\s*//' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-while IFS= read -r hdr; do
 
   # Labels: extract after 'Labels:' line and normalize commas; trim outer spaces
   labels=$(echo "$block" | awk '/^Labels:/{sub(/^Labels:\s*/,""); print}' | tr -d '\r' | tr -d '"')
@@ -198,7 +194,6 @@ while IFS= read -r hdr; do
     failed=$((failed+1))
   fi
   total=$((total+1))
-done
 done < <(awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE")
 
 echo "Processed $total issues: $created created, $failed failed."
