@@ -1,73 +1,65 @@
 # Hackit MVP Backend
 
-## Description
-This backend service is designed to handle user queries, reformulate them for video searches, and return relevant video summaries along with links to the videos. It integrates with the OpenAI API for natural language processing and the YouTube API for video retrieval.
+Backend HTTP API that searches YouTube for a how-to video and returns a concise 5-step summary. It supports mock mode, official YouTube API, a yt-search fallback, and optional Gemini reformulation/summary.
 
-## Technologies Used
-- **Node.js**: JavaScript runtime for building the backend server.
-- **Express**: Web framework for Node.js to handle routing and middleware.
-- **OpenAI API**: For question reformulation and summary generation.
-- **YouTube Data API**: For searching and retrieving video information.
-- **Axios**: For making HTTP requests to external APIs.
+## Requirements
 
-## Setup Instructions
+- Node.js 20.x (project pins to `.nvmrc` 20.19.0). Older Node versions are not supported.
+- npm 10.x recommended (Volta config is provided via `.volta.json`).
 
-### Prerequisites
-- Node.js installed on your machine.
-- Access to OpenAI and YouTube API keys.
+## Quick start
 
-### Installation
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   cd hackit-mvp/backend
-   ```
-
-2. Install dependencies:
-   ```
-   npm install
-   ```
-
-3. Create a `.env` file in the root of the backend directory and add your API keys:
-   ```
-   OPENAI_API_KEY=your_openai_api_key
-   YT_API_KEY=your_youtube_api_key
-   ```
-
-### Running the Server
-To start the backend server, run:
 ```
+# At repo root (uses .nvmrc)
+nvm use
+cd backend
+npm ci
+
+# Mock mode (no API keys required)
+MOCK_MODE=true npm start
+# -> http://localhost:3000/health
+```
+
+## Environment
+
+- YT_API_KEY: optional. When set, uses the YouTube Data API first.
+- USE_GEMINI: optional flag ("true"/"false").
+- USE_GEMINI_REFORMULATION: optional flag to enable reformulation before search.
+- GEMINI_API_KEY: required only if USE_GEMINI is true.
+- GEMINI_MODEL: defaults to models/gemini-2.0-flash-lite.
+- GEMINI_TIMEOUT_MS: defaults to 4000.
+- MOCK_MODE: when true, always returns a deterministic mock response.
+- ALLOW_FALLBACK: when true (default), degrades to mock if all providers fail.
+
+## Run & dev
+
+```
+# Start (Node version check enforced)
 npm start
+
+# Dev with hot reload (Node >= 20 enforced)
+npm run dev
 ```
-The server will be running on `http://localhost:3000`.
 
-### API Endpoints
-- **POST /api/search**: Accepts a user query and returns a video summary and link.
-  - Request Body:
-    ```json
-    {
-      "query": "your question here"
-    }
-    ```
-  - Response:
-    ```json
-    {
-      "title": "Video Title",
-      "summary": "Video summary in clear steps.",
-      "videoUrl": "https://www.youtube.com/watch?v=video_id"
-    }
-    ```
+## Endpoints
 
-## Directory Structure
-- **src/**: Contains the main application code.
-  - **controllers/**: Logic for handling requests.
-  - **routes/**: Defines the API routes.
-  - **services/**: Functions for interacting with external APIs.
-  - **utils/**: Utility functions for various tasks.
-  - **types/**: TypeScript type definitions.
+- POST /api/search
+  - Body: `{ "query": "changer un pneu" }`
+  - Response: `{ title, steps: string[], videoUrl, source }`
 
-## Contributing
-Contributions are welcome! Please submit a pull request or open an issue for any suggestions or improvements.
+- GET /api/search/stream?query=...
+  - Server-Sent Events stream of `{type: 'meta'|'partial'|'done'|'error', ...}`
 
-## License
-This project is licensed under the MIT License.
+- GET /health and /health/extended
+
+## Tests
+
+```
+npm test
+npm run test:coverage
+```
+
+## Notes
+
+- On Node >= 20 without YT_API_KEY, the service uses `yt-search` as a fallback.
+- SSE endpoint simulates token streaming by splitting summary lines.

@@ -2,11 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
-// Ensure we disable request logging in tests before loading the app
+// Silence request logs in tests
 process.env.NODE_ENV = 'test';
 const { createApp } = await import('../src/index.js');
 
-// Helper to start/stop server for tests
 function startServer(app, port = 0) {
     return new Promise((resolve) => {
         const server = app.listen(port, () => {
@@ -16,7 +15,7 @@ function startServer(app, port = 0) {
     });
 }
 
-async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 8000 }) {
+async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 5000 }) {
     const payload = JSON.stringify(body || {});
     return await new Promise((resolve, reject) => {
         const req = http.request(
@@ -35,19 +34,13 @@ async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 8000
     });
 }
 
-// Use mock mode by default unless explicitly disabled for real-mode tests
-process.env.MOCK_MODE = process.env.MOCK_MODE ?? 'true';
-
-await test('POST /api/search returns expected shape in mock mode', async (t) => {
+await test('POST /api/search without query returns 400', async (t) => {
     const app = createApp();
     const { server, port } = await startServer(app);
     t.after(() => server.close());
 
-    const res = await postJson({ port, path: '/api/search', body: { query: 'changer un pneu' } });
-    assert.equal(res.status, 200, 'status should be 200');
+    const res = await postJson({ port, path: '/api/search', body: {} });
+    assert.equal(res.status, 400);
     const json = JSON.parse(res.data);
-    assert.ok(json.title && typeof json.title === 'string');
-    assert.ok(Array.isArray(json.steps) && json.steps.length > 0);
-    assert.ok(json.videoUrl && typeof json.videoUrl === 'string');
-    assert.ok(json.source && typeof json.source === 'string');
+    assert.equal(json.error, 'query is required');
 });

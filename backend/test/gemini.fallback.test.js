@@ -2,11 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
-// Ensure we disable request logging in tests before loading the app
+// Ensure logs quiet and disable actual Gemini usage
 process.env.NODE_ENV = 'test';
-const { createApp } = await import('../src/index.js');
+process.env.MOCK_MODE = 'false';
+process.env.USE_GEMINI = 'true'; // simulate configured
+process.env.USE_GEMINI_REFORMULATION = 'true';
+process.env.GEMINI_API_KEY = ''; // missing key triggers immediate throw in generateWithGemini
+process.env.ALLOW_FALLBACK = 'true';
 
-// Helper to start/stop server for tests
+const { createApp, setSearchYouTube } = await import('../src/index.js');
+
 function startServer(app, port = 0) {
     return new Promise((resolve) => {
         const server = app.listen(port, () => {
@@ -16,7 +21,7 @@ function startServer(app, port = 0) {
     });
 }
 
-async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 8000 }) {
+async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 5000 }) {
     const payload = JSON.stringify(body || {});
     return await new Promise((resolve, reject) => {
         const req = http.request(
@@ -35,19 +40,16 @@ async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 8000
     });
 }
 
-// Use mock mode by default unless explicitly disabled for real-mode tests
-process.env.MOCK_MODE = process.env.MOCK_MODE ?? 'true';
-
-await test('POST /api/search returns expected shape in mock mode', async (t) => {
+await test('Gemini disabled path falls back to heuristic summary when key missing', async (t) => {
+    // Provide a deterministic video result
+    setSearchYouTube(async () => ({ title: 'Simple Test Video', url: 'https://youtu.be/test', source: 'test-double' }));
     const app = createApp();
     const { server, port } = await startServer(app);
     t.after(() => server.close());
 
-    const res = await postJson({ port, path: '/api/search', body: { query: 'changer un pneu' } });
-    assert.equal(res.status, 200, 'status should be 200');
+    const res = await postJson({ port, path: '/api/search', body: { query: 'make coffee' } });
+    assert.equal(res.status, 200);
     const json = JSON.parse(res.data);
-    assert.ok(json.title && typeof json.title === 'string');
-    assert.ok(Array.isArray(json.steps) && json.steps.length > 0);
-    assert.ok(json.videoUrl && typeof json.videoUrl === 'string');
-    assert.ok(json.source && typeof json.source === 'string');
+    assert.equal(json.title, 'Simple Test Video');
+    assert.ok(Array.isArray(json.steps) && json.steps.length === 5, 'heuristic summary yields 5 steps');
 });

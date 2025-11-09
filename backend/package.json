@@ -6,10 +6,11 @@
   "scripts": {
     "prestart": "node scripts/checkNodeVersion.js",
     "start": "node src/index.js",
+    "predev": "node scripts/checkNodeVersion.js",
     "dev": "nodemon src/index.js",
     "test:smoke": "node scripts/ciSmoke.js",
-    "test": "node --test",
-    "test:coverage": "c8 --reporter=text --reporter=lcov node --test",
+    "test": "node --test --import ./test/_setup.mjs",
+    "test:coverage": "c8 --reporter=text --reporter=lcov node --test --import ./test/_setup.mjs",
     "lint": "eslint . --ext .js,.mjs --max-warnings=0"
   },
   "engines": {
@@ -21,9 +22,6 @@
     "dotenv": "^17.2.3",
     "express": "^4.18.2",
     "morgan": "^1.10.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-native-web": "^0.21.0",
     "yt-search": "^2.10.8"
   },
   "devDependencies": {

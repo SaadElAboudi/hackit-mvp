@@ -1,0 +1,100 @@
+name: Monorepo CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend:
+    name: Backend (Node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - name: Install
+        run: npm ci || npm install --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Coverage
+        run: npm run test:coverage
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage/**
+
+  flutter:
+    name: Flutter frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_flutter
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Flutter doctor
+        run: flutter doctor -v
+      - name: Install deps
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test (smoke only)
+        shell: bash
+        run: |
+          if [ -f test/smoke_main_test.dart ]; then
+            flutter test test/smoke_main_test.dart -r expanded
+          else
+            echo "Smoke test not found, running no tests";
+          fi
+
+  frontend:
+    name: Expo frontend (Jest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - name: Install root deps
+        run: npm ci || npm install --no-audit --no-fund
+      - name: Run Jest if present
+        shell: bash
+        run: |
+          if npx --yes jest --version >/dev/null 2>&1; then
+            if ls __tests__/*.test.* >/dev/null 2>&1 || ls **/*.test.* >/dev/null 2>&1; then
+              npm test --silent || npm test --silent -- --runInBand
+            else
+              echo "No Jest tests found, skipping";
+            fi
+          else
+            echo "Jest not installed at root, skipping";
+          fi
+
+  all-green:
+    name: All checks
+    needs: [backend, flutter, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Monorepo CI all jobs succeeded."

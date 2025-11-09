@@ -3,9 +3,10 @@ import axios from "axios";
 import dotenv from "dotenv";
 import cors from "cors";
 import morgan from "morgan";
+import { pathToFileURL } from "url";
 // Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
 
-import { searchYouTube } from "./services/youtube.js";
+import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
 
 dotenv.config({ quiet: true });
 
@@ -50,6 +51,16 @@ function heuristicSummary() {
   ];
   // Ensure 5 steps max, trim
   return base.slice(0, 5).join("\n");
+}
+
+// Allow overriding YouTube search implementation in tests without affecting production import binding.
+let searchYouTube = originalSearchYouTube;
+export function setSearchYouTube(fn) {
+  if (typeof fn === 'function') {
+    searchYouTube = fn;
+  } else {
+    throw new Error('setSearchYouTube expects a function');
+  }
 }
 
 async function generateWithGemini(prompt, maxOutputTokens = 256) {
@@ -364,7 +375,8 @@ app.get("/api/search/stream", async (req, res) => {
       end();
     } catch (err) {
       console.error("Stream error:", err?.message || err);
-      writeEvent({ type: "error", message: err?.message || "Unexpected error" });
+      // Standardize error shape with /api/search endpoint: error + detail
+      writeEvent({ type: "error", error: "Internal server error", detail: err?.message || "Unexpected error" });
       end();
     }
   })();
@@ -375,7 +387,8 @@ export function createApp() {
 }
 
 // Only start server if run directly (not when imported for tests)
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Use URL-safe comparison to handle paths with spaces (e.g., "app howto")
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

@@ -1,4 +1,4 @@
-@Skip('Moved to test_legacy/; not part of CI smoke suite')
+@Skip('Legacy counter template – removed')
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {}
