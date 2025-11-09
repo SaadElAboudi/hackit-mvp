@@ -105,6 +105,14 @@ create_issue() {
   local milestone_ref="$1"; shift
   local body_file="$1"; shift
 
+  # Skip if an open or closed issue with the same title already exists
+  local existing
+  existing=$(gh issue list --repo "$REPO" --search "\"$title\" in:title" --state all --json title -q '.[].title' | grep -Fx "$title" || true)
+  if [ -n "$existing" ]; then
+    echo "[SKIP] Issue already exists: $title"
+    return 0
+  fi
+
   if [ "$DRY_RUN" = "1" ]; then
     echo "[DRY_RUN] Would create issue: '$title'";
     echo "  Labels: $labels_csv";
