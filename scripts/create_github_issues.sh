@@ -93,16 +93,10 @@ ensure_milestone() {
     3) title="3 (Search Intelligence)" ;;
     *) title="$num" ;;
   esac
-  # Attempt create (ignore if exists)
+  # Create milestone if missing (ignore error if it already exists)
   gh api -X POST "repos/$REPO/milestones" -f title="$title" >/dev/null 2>&1 || true
-  # Resolve milestone number for consistency (optional)
-  local mid
-  mid=$(gh api "repos/$REPO/milestones?state=all" -q ".[] | select(.title == \"$title\") | .number" 2>/dev/null || true)
-  if [ -n "$mid" ]; then
-    echo "$mid" # return number so gh can unambiguously match
-  else
-    echo "$title" # fallback to title
-  fi
+  # Return the title for gh to match by name
+  echo "$title"
 }
 
 create_issue() {
