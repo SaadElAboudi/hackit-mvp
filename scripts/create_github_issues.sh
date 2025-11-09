@@ -34,18 +34,55 @@ if [ -z "$REPO" ]; then
 fi
 echo "Target repo: $REPO"
 
+ensure_label() {
+  local name="$1"
+  # Skip pseudo-labels like milestone:1
+  if [[ "$name" =~ ^milestone: ]]; then
+    return 0
+  fi
+  # Try to create the label; ignore error if it already exists
+  gh label create "$name" --color F2F2F2 --description "auto-created" --repo "$REPO" >/dev/null 2>&1 || true
+}
+
+ensure_labels() {
+  local labels_csv="$1"
+  IFS=',' read -r -a arr <<<"$labels_csv"
+  for raw in "${arr[@]}"; do
+    # trim whitespace
+    local lbl="${raw##*( )}"
+    lbl="${lbl%%*( )}"
+    if [ -n "$lbl" ]; then
+      ensure_label "$lbl"
+    fi
+  done
+}
+
+ensure_milestone() {
+  local num="$1"
+  local title=""
+  case "$num" in
+    1) title="1 (Foundation)" ;;
+    2) title="2 (Interaction)" ;;
+    3) title="3 (Search Intelligence)" ;;
+    *) title="$num" ;;
+  esac
+  # Create milestone if missing (ignore if exists)
+  gh api -X POST "repos/$REPO/milestones" -f title="$title" >/dev/null 2>&1 || true
+  echo "$title"
+}
+
 create_issue() {
   local title="$1"; shift
   local labels_csv="$1"; shift
-  local milestone="$1"; shift
+  local milestone_title="$1"; shift
   local body_file="$1"; shift
 
   local args=(issue create --repo "$REPO" --title "$title" --body-file "$body_file")
   if [ -n "$labels_csv" ]; then
     args+=(--label "$labels_csv")
   fi
-  if [ -n "$milestone" ]; then
-    args+=(--milestone "$milestone")
+  if [ -n "$milestone_title" ]; then
+    args+=(--milestone "$milestone_title")
   fi
   gh "${args[@]}"
 }
@@ -67,12 +104,24 @@ awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
   # Title: strip leading hashes and numeric id
   title=$(echo "$heading" | sed -E 's/^#### [0-9]+\.\s*//')
 
-  # Labels: extract after 'Labels:' line and normalize commas
+  # Labels: extract after 'Labels:' line and normalize commas; trim outer spaces
   labels=$(echo "$block" | awk '/^Labels:/{sub(/^Labels:\s*/,""); print}' | tr -d '\r' | tr -d '"')
-  labels=$(echo "$labels" | sed -E 's/,\s*/,/g')
+  labels=$(echo "$labels" | sed -E 's/,\s*/,/g; s/^\s+|\s+$//g')
 
   # Milestone: from labels like milestone:1 if present
   milestone=$(echo "$labels" | tr ',' '\n' | awk -F: '/^milestone:/{print $2; exit}')
+  # Remove milestone:* pseudo-labels from labels before creation
+  labels_no_ms=$(echo "$labels" | tr ',' '\n' | grep -v '^milestone:' || true)
+  labels_no_ms=$(echo "$labels_no_ms" | paste -sd, -)
+
+  # Ensure labels and milestone exist
+  if [ -n "$labels_no_ms" ]; then
+    ensure_labels "$labels_no_ms"
+  fi
+  milestone_title=""
+  if [ -n "$milestone" ]; then
+    milestone_title=$(ensure_milestone "$milestone")
+  fi
 
   # Body: include Description, Acceptance Criteria, Dependencies
   body_file="$tmpdir/issue.md"
@@ -83,7 +132,7 @@ awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
   } > "$body_file"
 
   echo "Creating: $title"
-  create_issue "$title" "$labels" "$milestone" "$body_file"
+  create_issue "$title" "$labels_no_ms" "$milestone_title" "$body_file"
 done
 
 echo "All issues processed."
