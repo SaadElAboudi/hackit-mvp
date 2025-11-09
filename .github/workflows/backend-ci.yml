@@ -1,11 +1,5 @@
-name: Backend CI (DISABLED - use monorepo-ci)
+name: Backend CI (removed)
 
-on:
-  # Disabled from auto triggers; kept only for manual dispatch if ever needed
-  workflow_dispatch:
+on: {}
 
-jobs:
-  disabled-notice:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "This workflow is disabled. Use .github/workflows/monorepo-ci.yml for backend tests."
+jobs: {}

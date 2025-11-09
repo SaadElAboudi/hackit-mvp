@@ -1,12 +1,5 @@
-name: Frontend Flutter CI (DISABLED - use monorepo-ci)
+name: Frontend Flutter CI (removed)
 
-on:
-  # Disabled from auto triggers to avoid duplicate CI; kept for manual runs only
-  workflow_dispatch:
+on: {}
 
-jobs:
-  disabled-notice:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "This workflow is disabled. Use .github/workflows/monorepo-ci.yml instead."
+jobs: {}
