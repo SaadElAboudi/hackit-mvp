@@ -64,6 +64,11 @@ jobs:
           name: backend-coverage
           path: backend/coverage
 
+      - name: Install jq (for audit parsing)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Audit (fail on high severity)
         run: |
           npm audit --omit=dev --json > audit.json || true

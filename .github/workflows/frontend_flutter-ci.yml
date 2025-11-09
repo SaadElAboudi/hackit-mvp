@@ -30,6 +30,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
 
       - name: Flutter version
         run: flutter --version
@@ -48,19 +49,31 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze || (echo "Analyzer reported issues" && exit 1)
 
       - name: Ensure formatting (fail on diff)
         run: |
           flutter format --set-exit-if-changed .
+      - name: Pub outdated (non-blocking)
+        continue-on-error: true
+        run: |
+          flutter pub outdated || true
 
       - name: Run widget tests (stable subset)
         run: |
           # Fail fast if directory missing (future-proof) then run subset
-          test -d test/widgets || { echo "Expected test/widgets directory missing"; exit 1; }
-          flutter test -r compact test/widgets
+          if [ -d test/widgets ]; then
+            flutter test -r compact test/widgets
+          else
+            echo "No test/widgets subset present; running all tests"
+            flutter test -r compact
+          fi
       - name: Report minimal coverage (optional, non-blocking)
         continue-on-error: true
         run: |
-          flutter test --coverage test/widgets || true
+          if [ -d test/widgets ]; then
+            flutter test --coverage test/widgets || true
+          else
+            flutter test --coverage || true
+          fi
           if [ -f coverage/lcov.info ]; then echo "Generated coverage"; fi
