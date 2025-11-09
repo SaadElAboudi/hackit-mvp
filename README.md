@@ -4,6 +4,8 @@
 [![Backend REAL CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-real-ci.yml/badge.svg)](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-real-ci.yml)
 [![Coverage Status](https://codecov.io/gh/SaadElAboudi/hackit-mvp/branch/main/graph/badge.svg)](https://codecov.io/gh/SaadElAboudi/hackit-mvp)
 
+> Secrets & environment setup: see [docs/secrets.md](docs/secrets.md) for configuring `YT_API_KEY`, `GEMINI_API_KEY`, and local `.env` modes.
+
 ## Description
 Hackit MVP is a project designed to provide users with quick and clear answers to their questions through a chat interface. The application leverages AI to summarize information and find relevant video content from platforms like YouTube and TikTok.
 
