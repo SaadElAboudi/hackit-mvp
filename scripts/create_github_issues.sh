@@ -59,6 +59,25 @@ ensure_labels() {
   done
 }
 
+# Clean labels: trim, drop milestone:*, and echo normalized CSV
+normalize_labels_and_milestone() {
+  local labels_csv="$1"
+  local -a out=()
+  local milestone=""
+  IFS=',' read -r -a arr <<<"$labels_csv"
+  for raw in "${arr[@]}"; do
+    local lbl="${raw##*( )}"; lbl="${lbl%%*( )}"
+    [ -z "$lbl" ] && continue
+    if [[ "$lbl" =~ ^milestone: ]]; then
+      milestone="${lbl#milestone:}"
+      continue
+    fi
+    out+=("$lbl")
+  done
+  local joined="$(printf ",%s" "${out[@]}")"; joined="${joined:1}"
+  echo "$joined|$milestone"
+}
+
 ensure_milestone() {
   local num="$1"
   local title=""
@@ -126,20 +145,22 @@ awk '/^#### [0-9]+\./{print NR":"$0}' "$PLAN_FILE" | while IFS= read -r hdr; do
   end_line=$(awk -v start=$((line_no+1)) 'NR>start && /^#### [0-9]+\./{print NR; exit}' "$PLAN_FILE")
   if [ -z "$end_line" ]; then end_line=$(wc -l < "$PLAN_FILE"); fi
 
-  block=$(sed -n "$line_no,${end_line}p" "$PLAN_FILE")
+  # Use end_line - 1 to exclude the next heading line from the block
+  last_line=$((end_line-1))
+  if [ "$last_line" -lt "$line_no" ]; then last_line="$line_no"; fi
+  block=$(sed -n "$line_no,${last_line}p" "$PLAN_FILE")
 
   # Title: strip leading hashes and numeric id
-  title=$(echo "$heading" | sed -E 's/^#### [0-9]+\.\s*//')
+  title=$(echo "$heading" | sed -E 's/^#### [0-9]+\.\s*//' | sed -E 's/^\s+|\s+$//g')
 
   # Labels: extract after 'Labels:' line and normalize commas; trim outer spaces
   labels=$(echo "$block" | awk '/^Labels:/{sub(/^Labels:\s*/,""); print}' | tr -d '\r' | tr -d '"')
   labels=$(echo "$labels" | sed -E 's/,\s*/,/g; s/^\s+|\s+$//g')
 
   # Milestone: from labels like milestone:1 if present
-  milestone=$(echo "$labels" | tr ',' '\n' | awk -F: '/^milestone:/{print $2; exit}')
-  # Remove milestone:* pseudo-labels from labels before creation
-  labels_no_ms=$(echo "$labels" | tr ',' '\n' | grep -v '^milestone:' || true)
-  labels_no_ms=$(echo "$labels_no_ms" | paste -sd, -)
+  parsed=$(normalize_labels_and_milestone "$labels")
+  labels_no_ms="${parsed%%|*}"
+  milestone="${parsed##*|}"
 
   # Ensure labels and milestone exist
   if [ -n "$labels_no_ms" ]; then
