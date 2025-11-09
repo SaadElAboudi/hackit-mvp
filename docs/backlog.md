@@ -71,3 +71,61 @@ Status legend: [ ] not-started · [~] in-progress · [x] completed
 ### Acceptance Criteria Example
 - (3) Rate Limiting: Requests to `/api/search` exceeding 60/min from same IP receive 429 with `Retry-After`; included unit test and configuration via env.
 - (13) Flutter Search: Given a query and reachable backend, results list shows ≥1 item with title, summary snippet, and playable link; error state and loading skeleton covered by tests.
+
+---
+
+## New Feature Backlog Proposals — 2025-11-09
+
+The items below are grouped for planning and complement the existing backlog. Use them to create milestones; each has a clear outcome for quick adoption.
+
+### Core search and answers
+- Summaries with citations and timestamp deep links (API returns citations[] with url, startSec, endSec, quote; UI shows tap-to-open deep links).
+- Multi-length outputs (TL;DR, medium, deep) via `summaryLength` param and UI toggle persisted in preferences.
+- Streaming answers with progress steps (SSE emits meta, partials, done; UI renders incremental text with step indicator).
+- Conversational follow-ups (conversationId + context; reformulate follow-ups to improve results).
+
+### Video intelligence
+- Auto transcript fetch + caching (captions first; policy-gated fallback provider; TTL cache).
+- Automatic chapterization (titles + timestamps) based on transcript; versioned storage.
+- Entity/keyword extraction and topic tags for filtering and navigation.
+- Related content suggestions with diversity and dedupe across channels.
+
+### Discovery and ranking
+- Hybrid search (keyword + embeddings) with vector store and LLM reranking for relevance/recency.
+- Diversity and deduplication; creator/topic mix constraints.
+- Freshness and safe-search filters; creator allow/deny lists.
+
+### Personalization
+- Tone and expertise level controls affecting prompt style/structure.
+- Language preferences and optional bilingual summaries (original + translated).
+- Topic/creator subscriptions and notifications (server-stubbed initially).
+
+### Interaction & sharing
+- Inline transcript quotes with preview; “jump to moment” on tap.
+- Export summaries to Markdown/Notion; shareable public links.
+- Bookmarks and history with quick re-run.
+
+### Reliability & performance
+- Caching and fallback badges (REAL/FALLBACK/CACHED) exposed in API/UI.
+- Retries with backoff and circuit breaker around providers.
+
+### Safety & trust
+- Moderation pipeline (NSFW/category filters); source trust scores.
+- “Why this result” rationale in UI.
+
+### Analytics & feedback
+- Thumbs up/down + “what’s missing?” prompt; basic telemetry dashboard.
+
+### Mobile (Flutter) UX polish
+- Offline cache for saved summaries/transcripts; deep links to timestamps; skeleton loaders; pull-to-refresh.
+
+### E2E & data platform
+- E2E smoke: search → stream → timestamp click → verify (screenshots on failure).
+- RAG ingestion + vector store (channels/playlists to embeddings; semantic recall API).
+
+### Suggested Milestone 1 (shipping set)
+1. Summaries with citations + timestamp links
+2. Automatic chapterization
+3. Caching layer + fallback badges
+4. Bookmarks and history (Flutter)
+5. E2E smoke test flow
