@@ -1,79 +1,12 @@
-name: Frontend Flutter CI (widgets)
+name: Frontend Flutter CI (DISABLED - use monorepo-ci)
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'frontend_flutter/**'
-      - '.github/workflows/frontend_flutter-ci.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'frontend_flutter/**'
-      - '.github/workflows/frontend_flutter-ci.yml'
+  # Disabled from auto triggers to avoid duplicate CI; kept for manual runs only
+  workflow_dispatch:
 
 jobs:
-  flutter:
+  disabled-notice:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend_flutter
-    env:
-      # Ensure consistent locale and no analytics noise
-      CI: 'true'
-      PUB_ENVIRONMENT: 'github-ci'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: true
-
-      - name: Flutter version
-        run: flutter --version
-
-      - name: Cache pub
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.pub-cache
-            ~/.dartServer
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze || (echo "Analyzer reported issues" && exit 1)
-
-      - name: Ensure formatting (fail on diff)
-        run: |
-          flutter format --set-exit-if-changed .
-      - name: Pub outdated (non-blocking)
-        continue-on-error: true
-        run: |
-          flutter pub outdated || true
-
-      - name: Run widget tests (stable subset)
-        run: |
-          # Fail fast if directory missing (future-proof) then run subset
-          if [ -d test/widgets ]; then
-            flutter test -r compact test/widgets
-          else
-            echo "No test/widgets subset present; running all tests"
-            flutter test -r compact
-          fi
-      - name: Report minimal coverage (optional, non-blocking)
-        continue-on-error: true
-        run: |
-          if [ -d test/widgets ]; then
-            flutter test --coverage test/widgets || true
-          else
-            flutter test --coverage || true
-          fi
-          if [ -f coverage/lcov.info ]; then echo "Generated coverage"; fi
+      - run: |
+          echo "This workflow is disabled. Use .github/workflows/monorepo-ci.yml instead."
