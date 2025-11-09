@@ -77,7 +77,10 @@ normalize_labels_and_milestone() {
     fi
     out+=("$lbl")
   done
-  local joined="$(printf ",%s" "${out[@]}")"; joined="${joined:1}"
+  local joined=""
+  if [ ${#out[@]} -gt 0 ]; then
+    joined="$(printf ",%s" "${out[@]}")"; joined="${joined:1}"
+  fi
   echo "$joined|$milestone"
 }
 
