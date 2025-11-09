@@ -29,6 +29,9 @@ class ChatInput extends StatefulWidget {
 }
 
 class _ChatInputState extends State<ChatInput> {
+  // Feature flag: show/hide prompt template chips above the input.
+  // Per user feedback, default is false to keep the prompt clean.
+  static const bool kShowPromptTemplates = false;
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   String? _selectedTemplate; // local UI state
@@ -143,25 +146,27 @@ class _ChatInputState extends State<ChatInput> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _TemplateChips(
-                selected: _selectedTemplate ?? provider?.lastTemplate,
-                onSelected: (id) {
-                  setState(() => _selectedTemplate = id);
-                  provider?.setLastTemplate(id);
-                  if (id != null) {
-                    final transformed =
-                        provider?.applyTemplateText(id, _controller.text) ??
-                            _controller.text;
-                    setState(() {
-                      _controller.text = transformed;
-                      _controller.selection =
-                          TextSelection.collapsed(offset: transformed.length);
-                    });
-                  }
-                  _focusNode.requestFocus();
-                },
-              ),
-              SizedBox(height: AdaptiveSpacing.small),
+              if (kShowPromptTemplates) ...[
+                _TemplateChips(
+                  selected: _selectedTemplate ?? provider?.lastTemplate,
+                  onSelected: (id) {
+                    setState(() => _selectedTemplate = id);
+                    provider?.setLastTemplate(id);
+                    if (id != null) {
+                      final transformed =
+                          provider?.applyTemplateText(id, _controller.text) ??
+                              _controller.text;
+                      setState(() {
+                        _controller.text = transformed;
+                        _controller.selection = TextSelection.collapsed(
+                            offset: transformed.length);
+                      });
+                    }
+                    _focusNode.requestFocus();
+                  },
+                ),
+                SizedBox(height: AdaptiveSpacing.small),
+              ],
               Row(
                 children: [
                   Expanded(
