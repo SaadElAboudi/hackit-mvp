@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'dart:io'
-    show Platform; // best-effort; on web, Platform.environment is empty
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform; // guarded below for non-web only
 import 'package:injectable/injectable.dart';
 import '../models/base_search_result.dart';
 import '../models/stream_event.dart';
@@ -21,12 +21,20 @@ class ApiException implements Exception {
 class ApiService {
   // Resolve base URL with priority: dart-define > environment fallback > default.
   // Use --dart-define=API_BASE_URL=https://prod.example.com when building.
-  static final String baseUrl =
-      const String.fromEnvironment('API_BASE_URL', defaultValue: '')
-              .trim()
-              .isNotEmpty
-          ? const String.fromEnvironment('API_BASE_URL')
-          : (Platform.environment['API_BASE_URL'] ?? 'http://localhost:3000');
+  static final String baseUrl = (() {
+    // 1) Prefer compile-time define
+    final fromDefine =
+        const String.fromEnvironment('API_BASE_URL', defaultValue: '').trim();
+    if (fromDefine.isNotEmpty) return fromDefine;
+    // 2) On web, avoid Platform.environment (unsupported) and default to localhost:3000
+    if (kIsWeb) return 'http://localhost:3000';
+    // 3) On native, try env var, fallback to localhost
+    try {
+      return Platform.environment['API_BASE_URL'] ?? 'http://localhost:3000';
+    } catch (_) {
+      return 'http://localhost:3000';
+    }
+  })();
 
   static const int maxRetries = 3;
   static const int timeoutSeconds = 10;
@@ -161,7 +169,7 @@ class ApiService {
 
   // Simple health ping to detect backend availability and meta info.
   Future<Map<String, dynamic>> pingHealth(
-      {Duration timeout = const Duration(seconds: 3)}) async {
+      {Duration timeout = const Duration(seconds: 5)}) async {
     final uri = Uri.parse('$baseUrl/health');
     try {
       final resp = await _client.get(uri).timeout(timeout);

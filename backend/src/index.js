@@ -25,6 +25,8 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.0-flash-lite";
 const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || "4000");
 let GEMINI_OPERATIONAL = true; // set to false after first hard failure
+const START_TIME = Date.now();
+const APP_VERSION = process.env.APP_VERSION || process.env.npm_package_version || '1.0.0';
 
 function makeMockResponse() {
   return {
@@ -126,21 +128,24 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
   }
 }
 
-app.get("/health", (req, res) => {
-  // If a YouTube API key is present, default mock mode to false, otherwise true.
+app.get("/health", (_req, res) => {
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
   const mock = (process.env.MOCK_MODE || mockDefault) === "true";
   res.json({
     ok: true,
+    mode: mock ? 'MOCK' : 'REAL',
     mock,
+    uptimeSeconds: Math.round((Date.now() - START_TIME) / 1000),
+    version: APP_VERSION,
     projectId: process.env.PROJECT_ID || null,
+    youtubeApi: Boolean(process.env.YT_API_KEY),
     gemini: {
-      useGemini: USE_GEMINI_ENV,
+      enabled: USE_GEMINI_ENV,
       model: GEMINI_MODEL,
       hasKey: Boolean(GEMINI_API_KEY),
-      timeoutMs: GEMINI_TIMEOUT_MS
-    },
-    youtubeApi: Boolean(process.env.YT_API_KEY)
+      timeoutMs: GEMINI_TIMEOUT_MS,
+      operational: GEMINI_OPERATIONAL,
+    }
   });
 });
 
@@ -150,8 +155,12 @@ app.get("/health/extended", (_req, res) => {
   const mock = (process.env.MOCK_MODE || mockDefault) === "true";
   res.json({
     ok: true,
-    projectId: process.env.PROJECT_ID || null,
+    mode: mock ? 'MOCK' : 'REAL',
     mock,
+    uptimeSeconds: Math.round((Date.now() - START_TIME) / 1000),
+    version: APP_VERSION,
+    timestamp: new Date().toISOString(),
+    projectId: process.env.PROJECT_ID || null,
     youtube: { hasKey: Boolean(process.env.YT_API_KEY) },
     gemini: {
       configured: (process.env.USE_GEMINI || "false") === "true",
@@ -159,8 +168,7 @@ app.get("/health/extended", (_req, res) => {
       model: GEMINI_MODEL,
       timeoutMs: GEMINI_TIMEOUT_MS,
       operational: GEMINI_OPERATIONAL,
-    },
-    timestamp: new Date().toISOString(),
+    }
   });
 });
 

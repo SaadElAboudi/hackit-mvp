@@ -5,6 +5,7 @@ import '../core/responsive/size_config.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../providers/search_provider.dart';
 import '../widgets/chat_input.dart';
+import '../widgets/health_badge.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
 import '../widgets/chat_bubbles.dart';
@@ -40,6 +41,9 @@ class _HomeMobileLayout extends StatelessWidget {
         backgroundColor: bg,
         elevation: 0,
         title: const Text('Hackit'),
+        actions: const [
+          Padding(padding: EdgeInsets.only(right: 12), child: HealthBadge())
+        ],
       ),
       body: Column(
         children: [
@@ -296,6 +300,9 @@ class _HomeTabletLayout extends StatelessWidget {
         backgroundColor: bg,
         elevation: 0,
         title: const Text('Hackit'),
+        actions: const [
+          Padding(padding: EdgeInsets.only(right: 16), child: HealthBadge())
+        ],
       ),
       body: Center(
         child: ConstrainedBox(
@@ -334,6 +341,9 @@ class _HomeDesktopLayout extends StatelessWidget {
         title: const Text('Hackit'),
         backgroundColor: bg,
         elevation: 0,
+        actions: const [
+          Padding(padding: EdgeInsets.only(right: 20), child: HealthBadge())
+        ],
       ),
       body: Center(
         child: ConstrainedBox(
