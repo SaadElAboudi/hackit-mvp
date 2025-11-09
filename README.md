@@ -1,5 +1,7 @@
 # Hackit MVP
 
+[![Coverage Status](https://codecov.io/gh/SaadElAboudi/hackit-mvp/branch/main/graph/badge.svg)](https://codecov.io/gh/SaadElAboudi/hackit-mvp)
+
 ![Frontend Flutter CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/frontend_flutter-ci.yml/badge.svg)
 ![Backend CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-ci.yml/badge.svg)
 ![Backend REAL CI](https://github.com/SaadElAboudi/hackit-mvp/actions/workflows/backend-real-ci.yml/badge.svg)
@@ -44,7 +46,7 @@ hackit-mvp
 1. Navigate to the `backend` directory.
 2. Install dependencies:
    ```
-   npm install
+   npm ci
    ```
 3. Create a `.env` file based on `.env.example` and add your API keys.
 4. Start the server:
@@ -55,6 +57,11 @@ hackit-mvp
    ```bash
    npm run test:smoke
    ```
+
+Coverage (local):
+```bash
+npm run test:coverage
+```
 
 ### Real-mode CI (YouTube Data API)
 To exercise the production YouTube API path daily, a scheduled workflow `backend-real-ci.yml` runs the backend with `MOCK_MODE=false` and performs the smoke test with `REAL_MODE=true`.
