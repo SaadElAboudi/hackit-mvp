@@ -1,6 +1,6 @@
 // ignore_for_file: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
-import 'dart:ui' as ui;
+import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -32,7 +32,7 @@ Widget buildYouTubeEmbed(String url) {
   final embedUrl = _toEmbedUrl(url);
   final viewType = 'yt-iframe-${embedUrl.hashCode}';
   if (!_registeredViews.contains(viewType)) {
-    ui.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
+    ui_web.platformViewRegistry.registerViewFactory(viewType, (int viewId) {
       final element = html.IFrameElement()
         ..src = embedUrl
         ..style.border = '0'
