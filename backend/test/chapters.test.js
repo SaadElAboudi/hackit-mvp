@@ -30,7 +30,7 @@ async function getJson({ host = '127.0.0.1', port, path, timeoutMs = 8000 }) {
     });
 }
 
-await test('GET /api/chapters returns ordered chapters (>=5)', async (t) => {
+await test('GET /api/chapters returns ordered chapters (>0)', async (t) => {
     const app = createApp();
     const { server, port } = await startServer(app);
     t.after(() => server.close());
@@ -41,7 +41,7 @@ await test('GET /api/chapters returns ordered chapters (>=5)', async (t) => {
     assert.equal(res.headers['x-cache'], 'MISS');
     const json = JSON.parse(res.data);
     assert.ok(Array.isArray(json.chapters));
-    assert.ok(json.chapters.length >= 5);
+    assert.ok(json.chapters.length > 0);
     for (let i = 1; i < json.chapters.length; i++) {
         assert.ok(json.chapters[i].startSec >= json.chapters[i - 1].startSec);
     }

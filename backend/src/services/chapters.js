@@ -43,16 +43,8 @@ export async function getChapters(videoId, videoTitle) {
         startSec: lines[0]?.startSec || idx * 60,
         title: autoTitle(lines) || `Section ${idx + 1}`,
     })).filter(Boolean);
-    // Ensure ascending order & minimum amount (fallback to generic if transcript short)
+    // Ensure ascending order only; do not enforce arbitrary min/max counts
     const normalized = chapters.sort((a, b) => a.startSec - b.startSec);
-    if (normalized.length < 5) {
-        // Expand with synthetic chapters if needed for UI richness
-        const baseStart = normalized[0]?.startSec || 0;
-        while (normalized.length < 5) {
-            const s = baseStart + normalized.length * 45;
-            normalized.push({ index: normalized.length, startSec: s, title: `Section ${normalized.length + 1}` });
-        }
-    }
     setCache(key, normalized);
     return { chapters: normalized, cache: 'MISS' };
 }
