@@ -9,7 +9,7 @@ import morgan from "morgan";
 
 import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
 import { getTranscript } from "./services/transcript.js";
-import { getChapters } from "./services/chapters.js";
+import { getChapters, extractDesiredChapters } from "./services/chapters.js";
 
 dotenv.config({ quiet: true });
 
@@ -373,7 +373,8 @@ app.post("/api/search", async (req, res) => {
     const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
     const vid = videoId || extractYouTubeVideoId(videoUrl);
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
-    const chapters = vid ? (await getChapters(vid, videoTitle)).chapters : [];
+    const desiredChapters = extractDesiredChapters(query);
+    const chapters = vid ? (await getChapters(vid, videoTitle, { desired: desiredChapters })).chapters : [];
     return res.json({ title: videoTitle, steps, videoUrl, source, citations, chapters });
   } catch (err) {
     console.error("Search error:", err?.response?.data || err.message || err);
@@ -425,7 +426,8 @@ app.get("/api/search/stream", async (req, res) => {
         (async () => {
           const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
           const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
-          const chapters = (await getChapters(vid, mock.title)).chapters;
+          const desiredChapters = extractDesiredChapters(query);
+          const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
           writeEvent({ type: "final", citations, chapters });
           writeEvent({ type: "done" });
           end();
@@ -507,7 +509,8 @@ app.get("/api/search/stream", async (req, res) => {
       }
       const vid = videoId || extractYouTubeVideoId(videoUrl);
       const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
-      const chapters = vid ? (await getChapters(vid, videoTitle)).chapters : [];
+      const desiredChapters = extractDesiredChapters(query);
+      const chapters = vid ? (await getChapters(vid, videoTitle, { desired: desiredChapters })).chapters : [];
       writeEvent({ type: "final", citations, chapters });
       writeEvent({ type: "done" });
       end();
@@ -538,11 +541,12 @@ app.get("/api/transcript", async (req, res) => {
 app.get("/api/chapters", async (req, res) => {
   const videoId = String(req.query.videoId || '').trim();
   const title = String(req.query.title || '').trim();
+  const desired = req.query.desired ? parseInt(String(req.query.desired), 10) : undefined;
   if (!videoId) return res.status(400).json({ error: 'videoId is required' });
   try {
-    const { chapters, cache } = await getChapters(videoId, title);
+    const { chapters, cache } = await getChapters(videoId, title, { desired });
     res.setHeader('X-Cache', cache);
-    return res.json({ videoId, chapters, cached: cache === 'HIT' });
+    return res.json({ videoId, chapters, cached: cache === 'HIT', desired: Number.isFinite(desired) ? desired : null });
   } catch (e) {
     return res.status(500).json({ error: 'Chapterization failed', detail: e?.message || 'Unknown error' });
   }

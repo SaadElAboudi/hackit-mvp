@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 - Backend: Dynamic prompt generation for Gemini/OpenAI ("étapes claires" instead of fixed "5 étapes").
 - Backend: Heuristic summary now pads/trims to requested step count when specified.
 - Tests: Updated fallback test to assert at least 5 steps instead of exactly 5.
+- Chapters: Removed artificial minimum of 5. Added optional desired=N support via /api/chapters and adaptive bucketing from user query for search/stream endpoints.
 
 ## v0.2.1 — 2025-11-09
 

@@ -26,17 +26,39 @@ function autoTitle(lines) {
     return (first.split(/[,.;]/)[0] || 'Section').slice(0, 60);
 }
 
-export async function getChapters(videoId, videoTitle) {
+function extractDesiredChapters(hint) {
+    try {
+        const s = String(hint || '').toLowerCase();
+        const m = s.match(/(?:en\s+)?(\d{1,3})\s*(?:chapitres?|chapters?)/i);
+        if (m) {
+            const n = parseInt(m[1], 10);
+            if (Number.isFinite(n) && n > 0) return n;
+        }
+    } catch (_) { /* ignore */ }
+    return null;
+}
+
+export async function getChapters(videoId, videoTitle, { desired } = {}) {
     const key = videoId;
     const cached = getCache(key);
     if (cached) {
         return { chapters: cached, cache: 'HIT' };
     }
     const { transcript } = await getTranscript(videoId, videoTitle);
-    // Heuristic bucket size: 2 transcript lines per chapter
+    // Determine desired chapter count from explicit param or inferrable title text
+    let desiredCount = null;
+    if (Number.isInteger(desired) && desired > 0) desiredCount = desired;
+    else desiredCount = extractDesiredChapters(videoTitle);
+
+    // Heuristic: choose bucket size based on desired count (fallback to size=2)
+    // bucketSize approx = ceil(transcriptLines / desiredCount)
+    let bucketSize = 2;
+    if (desiredCount && transcript.length > 0) {
+        bucketSize = Math.max(1, Math.ceil(transcript.length / desiredCount));
+    }
     const buckets = [];
-    for (let i = 0; i < transcript.length; i += 2) {
-        buckets.push(transcript.slice(i, i + 2));
+    for (let i = 0; i < transcript.length; i += bucketSize) {
+        buckets.push(transcript.slice(i, i + bucketSize));
     }
     const chapters = buckets.map((lines, idx) => ({
         index: idx,
@@ -50,3 +72,4 @@ export async function getChapters(videoId, videoTitle) {
 }
 
 export function clearChapterCache() { chapterCache.clear(); }
+export { extractDesiredChapters };
