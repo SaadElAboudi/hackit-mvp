@@ -4,14 +4,22 @@ import '../models/base_search_result.dart';
 import '../services/video_seek_service.dart';
 import 'youtube_embed.dart';
 
-class ChaptersView extends StatelessWidget {
+class ChaptersView extends StatefulWidget {
   final List<Chapter> chapters;
   final String videoUrl;
   const ChaptersView(
       {super.key, required this.chapters, required this.videoUrl});
 
   @override
+  State<ChaptersView> createState() => _ChaptersViewState();
+}
+
+class _ChaptersViewState extends State<ChaptersView> {
+  DateTime _lastTap = DateTime.fromMillisecondsSinceEpoch(0);
+
+  @override
   Widget build(BuildContext context) {
+    final chapters = widget.chapters;
     if (chapters.isEmpty) return const SizedBox.shrink();
     return ExpansionTile(
       title: Text('Chapitres (${chapters.length})'),
@@ -23,19 +31,25 @@ class ChaptersView extends StatelessWidget {
             leading: const Icon(Icons.play_arrow, size: 20),
             subtitle: Text(_formatTs(ch.startSec)),
             onTap: () {
+              final now = DateTime.now();
+              if (now.difference(_lastTap) <
+                  const Duration(milliseconds: 400)) {
+                return; // debounce rapid taps
+              }
+              _lastTap = now;
               if (kIsWeb) {
                 // Attempt inline seek; fallback to service queue if not available.
                 seekYouTube(ch.startSec);
               } else {
                 VideoSeekService.instance
-                    .seekOrQueue(ch.startSec, sourceUrl: videoUrl);
+                    .seekOrQueue(ch.startSec, sourceUrl: widget.videoUrl);
               }
             },
             trailing: IconButton(
               tooltip: 'Ouvrir dans une nouvelle fenêtre',
               icon: const Icon(Icons.open_in_new, size: 18),
-              onPressed: () =>
-                  _openExternal(context, _withTimestamp(videoUrl, ch.startSec)),
+              onPressed: () => _openExternal(
+                  context, _withTimestamp(widget.videoUrl, ch.startSec)),
             ),
           )
       ],

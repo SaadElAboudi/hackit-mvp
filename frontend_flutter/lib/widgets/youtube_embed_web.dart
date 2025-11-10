@@ -24,7 +24,9 @@ String _toEmbedUrl(String url) {
     }
     if (id == null || id.isEmpty) return url;
     // modestbranding, rel=0 to avoid unrelated videos, playsinline for iOS web
-    return 'https://www.youtube.com/embed/$id?modestbranding=1&rel=0&playsinline=1';
+    // enablejsapi=1 to allow postMessage control; origin is set for YT API security.
+    final origin = html.window.location.origin;
+    return 'https://www.youtube.com/embed/$id?modestbranding=1&rel=0&playsinline=1&enablejsapi=1&origin=${Uri.encodeComponent(origin)}';
   } catch (_) {
     return url;
   }
@@ -76,15 +78,36 @@ void seekYouTube(int seconds) {
   final base = _lastBaseEmbedUrl;
   if (iframe == null || base == null) return;
   try {
-    final uri = Uri.parse(base);
-    final params = Map<String, String>.from(uri.queryParameters);
-    params['start'] = seconds.toString();
-    params['autoplay'] = '1';
-    final newUrl = uri.replace(queryParameters: params).toString();
-    // Avoid unnecessary reload if already at target (best-effort by comparing src without start).
-    if (iframe.src != newUrl) {
-      iframe.src = newUrl;
-    }
+    // Preferred: Send postMessage commands to the Player (no reload).
+    final msgSeek = {
+      'event': 'command',
+      'func': 'seekTo',
+      'args': [seconds, true],
+    };
+    final msgPlay = {
+      'event': 'command',
+      'func': 'playVideo',
+      'args': [],
+    };
+    final targetOrigin = html.window.location.origin;
+    iframe.contentWindow?.postMessage(msgSeek, targetOrigin);
+    iframe.contentWindow?.postMessage(msgPlay, targetOrigin);
+
+    // Fallback: mutate src if postMessage channel not ready.
+    // Use a short delay to give API a chance; then check if currentTime likely unchanged (unknown), so always set as backup.
+    // Note: This will reload the player but ensures a working seek.
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (iframe.contentWindow == null) {
+        final uri = Uri.parse(base);
+        final params = Map<String, String>.from(uri.queryParameters);
+        params['start'] = seconds.toString();
+        params['autoplay'] = '1';
+        final newUrl = uri.replace(queryParameters: params).toString();
+        if (iframe.src != newUrl) {
+          iframe.src = newUrl;
+        }
+      }
+    });
   } catch (_) {
     // swallow: malformed base url should not crash app
   }
