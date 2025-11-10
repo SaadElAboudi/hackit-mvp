@@ -10,6 +10,7 @@ import morgan from "morgan";
 import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
 import { getTranscript } from "./services/transcript.js";
 import { getChapters, extractDesiredChapters } from "./services/chapters.js";
+import { initPersistence, saveLesson, setFavorite, recordView, listLessons } from "./utils/persistence.js";
 
 dotenv.config({ quiet: true });
 
@@ -560,11 +561,134 @@ export function createApp() {
 // Use URL-safe comparison to handle paths with spaces (e.g., "app howto")
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
-    console.log(`Mock mode: ${(process.env.MOCK_MODE || 'true') === 'true' ? 'enabled' : 'disabled'}`);
-    console.log(`Gemini: ${USE_GEMINI_ENV ? `enabled (${GEMINI_MODEL}, timeout=${GEMINI_TIMEOUT_MS}ms)` : 'disabled'}`);
-    console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
+  initPersistence().then((info) => {
+    console.log(`Persistence: ${info.mode}`);
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
+      console.log(`Mock mode: ${(process.env.MOCK_MODE || 'true') === 'true' ? 'enabled' : 'disabled'}`);
+      console.log(`Gemini: ${USE_GEMINI_ENV ? `enabled (${GEMINI_MODEL}, timeout=${GEMINI_TIMEOUT_MS}ms)` : 'disabled'}`);
+      console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
+    });
   });
 }
+
+// ============ LESSON GENERATION & PERSISTENCE ============
+// POST /api/generateLesson { query, userId }
+app.post("/api/generateLesson", async (req, res) => {
+  const { query, userId } = req.body || {};
+  if (!query || !userId) return res.status(400).json({ error: "query and userId are required" });
+
+  try {
+    // 1) Find a video for the query (reuse same logic as /api/search)
+    let searchTerm = query;
+    const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
+    const useGemini = USE_GEMINI_ENV && !breakerActive && (req.body?.useGemini !== false);
+    let reformulationTimedOut = false;
+    if (useGemini && USE_GEMINI_REFORMULATION) {
+      const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
+      try {
+        let reform = await generateWithGemini(reformPrompt, 32);
+        reform = String(reform)
+          .split(/\r?\n/)[0]
+          .replace(/^[-*•\s>"]+/, "")
+          .replace(/["`]+/g, "")
+          .trim();
+        if (reform && reform.length <= 80) searchTerm = reform;
+      } catch (e) {
+        if (/timeout/i.test(e.message || "")) reformulationTimedOut = true;
+        console.warn("Gemini reformulation (generateLesson) failed:", e.message);
+      }
+    }
+
+    let videoTitle, videoUrl, videoId;
+    try {
+      const video = await searchYouTube(searchTerm);
+      videoTitle = video.title;
+      videoUrl = video.url;
+      videoId = video.videoId || extractYouTubeVideoId(video.url);
+    } catch (e) {
+      console.warn("Video search (generateLesson) failed:", e.message);
+      if ((process.env.ALLOW_FALLBACK || "true") === "true") {
+        const mock = makeMockResponse();
+        videoTitle = mock.title; videoUrl = mock.videoUrl; videoId = extractYouTubeVideoId(videoUrl);
+      } else {
+        throw e;
+      }
+    }
+
+    // 2) Summarize into steps and summary text
+    let summaryText = "";
+    const desiredSteps = extractDesiredSteps(query);
+    const attemptGeminiSummary = useGemini && !reformulationTimedOut;
+    if (attemptGeminiSummary) {
+      const summaryPrompt = desiredSteps
+        ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
+        : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`;
+      try {
+        summaryText = await generateWithGemini(summaryPrompt, 300);
+      } catch (e) {
+        console.warn("Gemini summary (generateLesson) failed:", e.message);
+        summaryText = heuristicSummary({ desiredSteps });
+      }
+    } else {
+      summaryText = heuristicSummary({ desiredSteps });
+    }
+    const steps = String(summaryText).split("\n").map(s => s.trim()).filter(Boolean);
+
+    // 3) Persist lesson
+    const saved = await saveLesson({ userId, title: videoTitle, summary: summaryText, steps, videoUrl });
+
+    // 4) Shape response
+    return res.json({ id: saved.id, title: saved.title, summary: saved.summary, steps: saved.steps, videoUrl: saved.videoUrl, createdAt: saved.createdAt });
+  } catch (err) {
+    console.error("generateLesson error:", err?.response?.data || err.message || err);
+    const statusCode = err?.status || err?.response?.status || 500;
+    const detail = err?.message || "Unexpected error";
+    return res.status(statusCode).json({ error: statusCode === 404 ? "Not found" : "Internal server error", detail });
+  }
+});
+
+// PATCH /api/lessons/:id/favorite { favorite: true|false }
+app.patch("/api/lessons/:id/favorite", async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  const favorite = !!req.body?.favorite;
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  try {
+    const updated = await setFavorite(id, favorite);
+    if (!updated) return res.status(404).json({ error: 'Not found' });
+    return res.json(updated);
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to update favorite', detail: e?.message || 'Unknown error' });
+  }
+});
+
+// POST /api/lessons/:id/view -> record history entry (views++, lastViewedAt=now)
+app.post("/api/lessons/:id/view", async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  try {
+    const updated = await recordView(id);
+    if (!updated) return res.status(404).json({ error: 'Not found' });
+    return res.json(updated);
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to record view', detail: e?.message || 'Unknown error' });
+  }
+});
+
+// GET /api/lessons?userId=...&favorite=true|false&sort=createdAt|lastViewedAt&order=desc|asc
+app.get("/api/lessons", async (req, res) => {
+  const userId = String(req.query.userId || '').trim();
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+  const favorite = req.query.favorite === undefined ? undefined : String(req.query.favorite).toLowerCase() === 'true';
+  const sortBy = ['createdAt', 'lastViewedAt', 'views'].includes(String(req.query.sort || '')) ? String(req.query.sort) : 'createdAt';
+  const order = String(req.query.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10)));
+  const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10));
+  try {
+    const items = await listLessons({ userId, favorite, sortBy, order, limit, offset });
+    return res.json({ items, total: items.length });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to list lessons', detail: e?.message || 'Unknown error' });
+  }
+});
