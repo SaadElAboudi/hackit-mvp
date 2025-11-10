@@ -14,6 +14,7 @@ import '../widgets/citations_view.dart';
 import '../widgets/chapters_view.dart';
 import '../models/base_search_result.dart';
 import '../providers/history_favorites_provider.dart';
+import '../theme/app_extensions.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -59,25 +60,43 @@ class _HomeMobileLayout extends StatelessWidget {
             } catch (_) {
               favCount = 0;
             }
+            final palette = Theme.of(context).extension<AppPalette>();
             final badge = favCount > 0
                 ? Positioned(
-                    right: 0,
-                    top: 2,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      constraints:
-                          const BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Text(
-                        favCount > 99 ? '99+' : '$favCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    right: -2,
+                    top: -2,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 250),
+                      opacity: favCount > 0 ? 1 : 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (palette?.badgeBg ?? Colors.redAccent),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            width: 0.6,
+                          ),
+                        ),
+                        constraints:
+                            const BoxConstraints(minWidth: 18, minHeight: 18),
+                        child: Text(
+                          favCount > 99 ? '99+' : '$favCount',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: palette?.badgeText ?? Colors.white,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
                         ),
                       ),
                     ),
@@ -400,25 +419,43 @@ class _HomeTabletLayout extends StatelessWidget {
             } catch (_) {
               favCount = 0;
             }
+            final palette = Theme.of(context).extension<AppPalette>();
             final badge = favCount > 0
                 ? Positioned(
-                    right: 0,
-                    top: 2,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      constraints:
-                          const BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Text(
-                        favCount > 99 ? '99+' : '$favCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    right: -2,
+                    top: -2,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 250),
+                      opacity: favCount > 0 ? 1 : 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (palette?.badgeBg ?? Colors.redAccent),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            width: 0.6,
+                          ),
+                        ),
+                        constraints:
+                            const BoxConstraints(minWidth: 18, minHeight: 18),
+                        child: Text(
+                          favCount > 99 ? '99+' : '$favCount',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: palette?.badgeText ?? Colors.white,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
                         ),
                       ),
                     ),
@@ -491,25 +528,43 @@ class _HomeDesktopLayout extends StatelessWidget {
             } catch (_) {
               favCount = 0;
             }
+            final palette = Theme.of(context).extension<AppPalette>();
             final badge = favCount > 0
                 ? Positioned(
-                    right: 0,
-                    top: 2,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      constraints:
-                          const BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Text(
-                        favCount > 99 ? '99+' : '$favCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    right: -2,
+                    top: -2,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 250),
+                      opacity: favCount > 0 ? 1 : 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (palette?.badgeBg ?? Colors.redAccent),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            width: 0.6,
+                          ),
+                        ),
+                        constraints:
+                            const BoxConstraints(minWidth: 18, minHeight: 18),
+                        child: Text(
+                          favCount > 99 ? '99+' : '$favCount',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: palette?.badgeText ?? Colors.white,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
                         ),
                       ),
                     ),

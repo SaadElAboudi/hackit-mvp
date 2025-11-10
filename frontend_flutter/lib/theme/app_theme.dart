@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_extensions.dart';
 
 class AppTheme {
   static ThemeData _buildTheme(Brightness brightness) {
@@ -157,6 +158,7 @@ class AppTheme {
         margin: const EdgeInsets.all(8),
         clipBehavior: Clip.antiAlias,
       ),
+      extensions: [AppPalette.fromScheme(scheme)],
     );
   }
 
