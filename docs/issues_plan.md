@@ -101,42 +101,42 @@ Description: Hover/long-press shows transcript snippet around citation (±5s win
 Acceptance: Preview appears and scroll relation accurate; test uses mock transcript.
 
 #### 10. Tone & Expertise Settings
-Labels: milestone:2
+Labels: milestone:2, area:frontend, type:feature
 Description: Preference store for tone (formal/friendly) and expertise (beginner/expert) affecting prompts.
 Acceptance: Changing preference alters lexical complexity (Flesch score difference).
 
 #### 11. Feedback & Analytics
-Labels: milestone:2
+Labels: milestone:2, area:frontend, type:feature
 Description: Up/down vote + missing-pieces prompt; events logged to analytics sink.
 Acceptance: Vote persists locally; event appears in telemetry dashboard query.
 
 #### 12. Hybrid Search Embeddings
-Labels: milestone:3
+Labels: milestone:3, area:backend, type:feature
 Description: Introduce vector store; embed titles/descriptions; combine BM25 + cosine similarity.
 Acceptance: Relevance evaluation (small gold set) shows ≥10% improvement in nDCG@5 vs baseline.
 
 #### 13. Entity Extraction Tags
-Labels: milestone:3
+Labels: milestone:3, area:backend, type:feature
 Description: Extract named entities and keywords; UI tag chips filter.
 Acceptance: Entities returned with type; filtering narrows results.
 
 #### 14. Related Content Suggestions
-Labels: milestone:3
+Labels: milestone:3, area:backend, type:feature
 Description: Recommend diversified related items; incorporate channel diversity.
 Acceptance: At least 3 distinct creators; no duplicates; relevance threshold achieved.
 
 #### 15. Diversity & Deduping
-Labels: milestone:3
+Labels: milestone:3, area:backend, type:feature
 Description: Post-processing to enforce diversity rules and remove near duplicates by URL/videoId & fuzzy title match.
 Acceptance: Integration test ensures max one video per channel in top 5 (unless override flag).
 
 #### 16. Freshness & Safe-Search Filters
-Labels: milestone:3
+Labels: milestone:3, area:backend, type:feature
 Description: Query params dateRange & safeSearch; backend filters & returns counts.
 Acceptance: Applying dateRange reduces dataset; safeSearch toggling hides flagged items.
 
 #### 17. Rerank Relevance & Recency
-Labels: milestone:3
+Labels: milestone:3, area:backend, type:feature
 Description: Secondary scoring (LLM or heuristic) factoring recency, channel trust, and semantic relevance.
 Acceptance: Test dataset shows improved precision@3 vs baseline scorer.
 
