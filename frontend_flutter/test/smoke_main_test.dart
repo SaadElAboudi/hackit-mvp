@@ -22,7 +22,7 @@ void main() {
   });
 
   testWidgets('Smoke: MyApp builds root MaterialApp', (tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(const MyApp(skipLessonsInit: true));
     expect(find.byType(MyApp), findsOneWidget);
     // Ensure a MaterialApp exists
     expect(find.byType(MaterialApp), findsOneWidget);

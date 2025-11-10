@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../screens/home_screen.dart';
+import '../screens/lessons_screen.dart';
 import '../screens/favorites_screen.dart';
 import '../screens/history_screen.dart';
 
@@ -12,9 +13,15 @@ class RootTabs extends StatefulWidget {
 
 class _RootTabsState extends State<RootTabs> {
   int _index = 0;
-  final _pages = const [HomeScreen(), FavoritesScreen(), HistoryScreen()];
+  final _pages = const [
+    HomeScreen(),
+    LessonsScreen(),
+    FavoritesScreen(),
+    HistoryScreen()
+  ];
   final _pageKeys = [
     const PageStorageKey('tab_chat'),
+    const PageStorageKey('tab_lessons'),
     const PageStorageKey('tab_favorites'),
     const PageStorageKey('tab_history'),
   ];
@@ -39,6 +46,11 @@ class _RootTabsState extends State<RootTabs> {
             icon: Icon(Icons.chat_bubble_outline_rounded),
             selectedIcon: Icon(Icons.chat_bubble_rounded),
             label: 'Chat',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.school_outlined),
+            selectedIcon: Icon(Icons.school_rounded),
+            label: 'Leçons',
           ),
           NavigationDestination(
             icon: Icon(Icons.star_border_rounded),

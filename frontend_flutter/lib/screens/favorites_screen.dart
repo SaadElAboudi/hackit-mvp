@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/history_favorites_provider.dart';
+import '../providers/lessons_provider.dart';
+import '../screens/lesson_detail_screen.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../widgets/empty_state.dart';
 
@@ -20,8 +22,57 @@ class FavoritesScreen extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Favoris')),
-      body: Consumer<HistoryFavoritesProvider>(
-        builder: (context, favs, _) {
+      body: Consumer2<LessonsProvider, HistoryFavoritesProvider>(
+        builder: (context, lp, favs, _) {
+          final lessonFavs = lp.lessons.where((l) => l.favorite).toList();
+          if (lessonFavs.isNotEmpty) {
+            // Show backend-persisted favorites (lessons)
+            return ListView.separated(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.all(AdaptiveSpacing.medium),
+              itemBuilder: (context, index) {
+                final l = lessonFavs[index];
+                return Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: scheme.outlineVariant.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: AdaptiveSpacing.small,
+                      vertical: AdaptiveSpacing.tiny,
+                    ),
+                    leading: const Icon(Icons.star, color: Colors.amber),
+                    title: Text(l.title,
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                      l.videoUrl,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Retirer',
+                      icon: const Icon(Icons.close_rounded),
+                      color: scheme.error,
+                      onPressed: () => lp.toggleFavorite(l.id),
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => LessonDetailScreen(lesson: l),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemCount: lessonFavs.length,
+            );
+          }
+
+          // Fallback to legacy local favorites
           final items = favs.favorites;
           if (items.isEmpty) {
             return EmptyState(

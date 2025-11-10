@@ -47,7 +47,7 @@ class ApiService {
     }
   }
 
-  Future<dynamic> get(String path,
+  Future<Response> get(String path,
       {Map<String, dynamic>? queryParameters}) async {
     return _trackApiCall(
       endpoint: path,
@@ -55,7 +55,7 @@ class ApiService {
     );
   }
 
-  Future<dynamic> post(
+  Future<Response> post(
     String path, {
     dynamic data,
     Map<String, dynamic>? queryParameters,
@@ -65,5 +65,48 @@ class ApiService {
       apiCall: () =>
           _dio.post(path, data: data, queryParameters: queryParameters),
     );
+  }
+
+  // ---- Lesson persistence endpoints ----
+  Future<Response> generateLesson(
+      {required String query,
+      required String userId,
+      bool useGemini = true}) async {
+    return post('/api/generateLesson', data: {
+      'query': query,
+      'userId': userId,
+      'useGemini': useGemini,
+    });
+  }
+
+  Future<Response> listLessons(
+      {required String userId,
+      bool? favorite,
+      String sort = 'createdAt',
+      String order = 'desc',
+      int limit = 50,
+      int offset = 0}) async {
+    return get('/api/lessons', queryParameters: {
+      'userId': userId,
+      if (favorite != null) 'favorite': favorite.toString(),
+      'sort': sort,
+      'order': order,
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+    });
+  }
+
+  Future<Response> setFavorite(
+      {required String lessonId, required bool favorite}) async {
+    return _trackApiCall(
+        endpoint: '/api/lessons/:id/favorite',
+        apiCall: () => _dio.patch('/api/lessons/$lessonId/favorite',
+            data: {'favorite': favorite}));
+  }
+
+  Future<Response> recordView({required String lessonId}) async {
+    return _trackApiCall(
+        endpoint: '/api/lessons/:id/view',
+        apiCall: () => _dio.post('/api/lessons/$lessonId/view'));
   }
 }

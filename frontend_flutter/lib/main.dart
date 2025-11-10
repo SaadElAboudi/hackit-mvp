@@ -6,6 +6,7 @@ import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/history_favorites_provider.dart';
+import 'providers/lessons_provider.dart';
 import 'services/cache_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/root_tabs.dart';
@@ -31,7 +32,8 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool skipLessonsInit;
+  const MyApp({super.key, this.skipLessonsInit = false});
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +46,11 @@ class MyApp extends StatelessWidget {
           create: (_) => HistoryFavoritesProvider(getIt<SharedPreferences>()),
         ),
         ChangeNotifierProvider(
+          create: (_) => LessonsProvider(prefs: getIt<SharedPreferences>())
+          // Deferred initialization to avoid timers/network during widget build in tests
+          ,
+        ),
+        ChangeNotifierProvider(
           create: (ctx) => SearchProvider(
             cacheManager: getIt<CacheManager>(),
             prefs: getIt<SharedPreferences>(),
@@ -53,6 +60,18 @@ class MyApp extends StatelessWidget {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
+          // Link legacy history/favorites with lessons after providers are ready.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            try {
+              final hist = context.read<HistoryFavoritesProvider>();
+              final lessons = context.read<LessonsProvider>();
+              hist.linkLessons(lessons);
+              // Initialize lessons after first frame unless explicitly skipped (tests)
+              if (!skipLessonsInit) {
+                lessons.initIfNeeded();
+              }
+            } catch (_) {}
+          });
           return MaterialApp(
             title: 'Hackit MVP',
             theme: AppTheme.lightTheme,

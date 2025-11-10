@@ -1,5 +1,7 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
 
+// NOTE: FirebaseAnalytics does not expose a public session start time; we manage it externally.
+// This extension avoids referencing private state and expects callers to provide timing data.
 extension SessionAnalytics on FirebaseAnalytics {
   Future<void> logSessionStart() async {
     await logEvent(
@@ -23,11 +25,11 @@ extension SessionAnalytics on FirebaseAnalytics {
     );
   }
 
-  Future<void> logSessionDuration() async {
+  Future<void> logSessionDuration({required int durationSeconds}) async {
     await logEvent(
       name: 'session_duration',
       parameters: {
-        'duration_seconds': DateTime.now().difference(_sessionStartTime).inSeconds,
+        'duration_seconds': durationSeconds,
       },
     );
   }

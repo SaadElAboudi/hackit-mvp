@@ -1,6 +1,7 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
 
 extension SearchAnalytics on FirebaseAnalytics {
+  // Slimmed down to avoid named parameters unsupported by some test stubs.
   Future<void> logSearch({
     required String query,
     required bool isSuccess,
@@ -16,7 +17,6 @@ extension SearchAnalytics on FirebaseAnalytics {
         'error_message': errorMessage ?? '',
         'result_count': resultCount ?? 0,
         'latency_ms': latency ?? 0.0,
-        'timestamp': DateTime.now().toIso8601String(),
       },
     );
   }

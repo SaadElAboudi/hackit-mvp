@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/history_favorites_provider.dart';
 import '../providers/search_provider.dart';
+import '../providers/lessons_provider.dart';
+import '../screens/lesson_detail_screen.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../widgets/empty_state.dart';
 
@@ -15,10 +17,14 @@ class HistoryScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Historique'),
       ),
-      body: Consumer2<HistoryFavoritesProvider, SearchProvider>(
-        builder: (context, hist, search, _) {
+      body:
+          Consumer3<HistoryFavoritesProvider, SearchProvider, LessonsProvider>(
+        builder: (context, hist, search, lessons, _) {
           final items = hist.history;
-          if (items.isEmpty) {
+          final recentLessons = [...lessons.lessons]
+            ..removeWhere((l) => l.lastViewedAt == null)
+            ..sort((a, b) => b.lastViewedAt!.compareTo(a.lastViewedAt!));
+          if (items.isEmpty && recentLessons.isEmpty) {
             return EmptyState(
               icon: Icons.history_rounded,
               title: 'Aucun historique',
@@ -28,57 +34,114 @@ class HistoryScreen extends StatelessWidget {
               onAction: () => Navigator.of(context).pop(),
             );
           }
-          return ListView.separated(
+          return ListView(
             physics: const BouncingScrollPhysics(),
             padding: EdgeInsets.all(AdaptiveSpacing.medium),
-            itemBuilder: (context, index) {
-              final e = items[index];
-              final title =
-                  (e.title == null || e.title!.isEmpty) ? e.query : e.title!;
-              final subtitle = e.query;
-              return Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color: scheme.outlineVariant.withValues(alpha: 0.35),
+            children: [
+              // Legacy local search history
+              if (items.isNotEmpty) ...[
+                ...List.generate(items.length, (index) {
+                  final e = items[index];
+                  final title = (e.title == null || e.title!.isEmpty)
+                      ? e.query
+                      : e.title!;
+                  final subtitle = e.query;
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: AdaptiveSpacing.tiny),
+                    child: Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: scheme.outlineVariant.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: AdaptiveSpacing.small,
+                          vertical: AdaptiveSpacing.tiny,
+                        ),
+                        title: Text(title,
+                            maxLines: 2, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(subtitle,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        leading: const Icon(Icons.history),
+                        trailing: IconButton(
+                          tooltip: 'Relancer',
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          color: scheme.primary,
+                          onPressed: search.loading
+                              ? null
+                              : () {
+                                  Navigator.of(context).pop();
+                                  Future.microtask(
+                                      () => search.searchStreaming(e.query));
+                                },
+                        ),
+                        onTap: search.loading
+                            ? null
+                            : () {
+                                Navigator.of(context).pop();
+                                Future.microtask(
+                                    () => search.searchStreaming(e.query));
+                              },
+                      ),
+                    ),
+                  );
+                }),
+                SizedBox(height: AdaptiveSpacing.medium),
+              ],
+
+              // Recent viewed lessons
+              if (recentLessons.isNotEmpty) ...[
+                Padding(
+                  padding: EdgeInsets.only(
+                      left: AdaptiveSpacing.small,
+                      bottom: AdaptiveSpacing.small),
+                  child: const Text(
+                    'Vos leçons vues récemment',
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
-                child: ListTile(
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: AdaptiveSpacing.small,
-                    vertical: AdaptiveSpacing.tiny,
-                  ),
-                  title:
-                      Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(subtitle,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  leading: const Icon(Icons.history),
-                  trailing: IconButton(
-                    tooltip: 'Relancer',
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    color: scheme.primary,
-                    onPressed: search.loading
-                        ? null
-                        : () {
-                            Navigator.of(context).pop();
-                            // Delay the call to ensure pop completes before starting search
-                            Future.microtask(
-                                () => search.searchStreaming(e.query));
+                ...recentLessons.map((l) => Padding(
+                      padding: EdgeInsets.only(bottom: AdaptiveSpacing.tiny),
+                      child: Card(
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color:
+                                scheme.outlineVariant.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: ListTile(
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: AdaptiveSpacing.small,
+                            vertical: AdaptiveSpacing.tiny,
+                          ),
+                          leading: const Icon(Icons.school_rounded,
+                              color: Colors.blueGrey),
+                          title: Text(l.title,
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(
+                            l.videoUrl,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Text('${l.views} vues'),
+                          onTap: () async {
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => LessonDetailScreen(lesson: l),
+                              ),
+                            );
+                            await lessons.recordView(l.id);
                           },
-                  ),
-                  onTap: search.loading
-                      ? null
-                      : () {
-                          Navigator.of(context).pop();
-                          Future.microtask(
-                              () => search.searchStreaming(e.query));
-                        },
-                ),
-              );
-            },
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemCount: items.length,
+                        ),
+                      ),
+                    )),
+              ],
+            ],
           );
         },
       ),

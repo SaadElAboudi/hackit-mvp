@@ -7,6 +7,7 @@ import 'package:hackit_mvp_flutter/screens/history_screen.dart';
 import 'package:hackit_mvp_flutter/screens/favorites_screen.dart';
 import 'package:hackit_mvp_flutter/providers/history_favorites_provider.dart';
 import 'package:hackit_mvp_flutter/providers/search_provider.dart';
+import 'package:hackit_mvp_flutter/providers/lessons_provider.dart';
 import 'package:hackit_mvp_flutter/core/responsive/size_config.dart';
 
 void main() {
@@ -61,12 +62,16 @@ void main() {
             ChangeNotifierProvider<HistoryFavoritesProvider>.value(
                 value: provider),
             ChangeNotifierProvider<SearchProvider>.value(value: searchProvider),
+            // Provide LessonsProvider (no init) to satisfy HistoryScreen Consumer3
+            ChangeNotifierProvider(
+              create: (_) => LessonsProvider(prefs: prefs),
+            ),
           ],
           child: wrapWithInit(const HistoryScreen()),
         ),
       );
 
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('Les chats marrants'), findsOneWidget);
       expect(find.text('Les chiens cool'), findsOneWidget);
@@ -92,12 +97,18 @@ void main() {
       expect(provider.favorites.length, 2);
 
       await tester.pumpWidget(
-        ChangeNotifierProvider<HistoryFavoritesProvider>.value(
-          value: provider,
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<HistoryFavoritesProvider>.value(
+                value: provider),
+            ChangeNotifierProvider(
+              create: (_) => LessonsProvider(prefs: prefs),
+            ),
+          ],
           child: wrapWithInit(const FavoritesScreen()),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('Vidéo 1'), findsOneWidget);
       expect(find.text('Vidéo 2'), findsOneWidget);
