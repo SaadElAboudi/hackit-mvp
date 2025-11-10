@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
 final Set<String> _registeredViews = <String>{};
+html.IFrameElement? _lastIframeElement;
+String? _lastBaseEmbedUrl;
 
 String _toEmbedUrl(String url) {
   try {
@@ -41,9 +43,21 @@ Widget buildYouTubeEmbed(String url) {
         ..allow =
             'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
         ..allowFullscreen = true;
+      // Keep global reference for simple seek operations.
+      _lastIframeElement = element;
+      _lastBaseEmbedUrl = embedUrl; // without start param
       return element;
     });
     _registeredViews.add(viewType);
+  }
+  // If already registered, attempt to recover existing element via querySelector.
+  if (_lastIframeElement == null) {
+    // Attempt naive lookup (not critical if fails).
+    final elements = html.document.getElementsByTagName('iframe');
+    if (elements.isNotEmpty) {
+      _lastIframeElement = elements.last as html.IFrameElement?;
+      _lastBaseEmbedUrl ??= embedUrl;
+    }
   }
   return AspectRatio(
     aspectRatio: 16 / 9,
@@ -52,4 +66,26 @@ Widget buildYouTubeEmbed(String url) {
       child: HtmlElementView(viewType: viewType),
     ),
   );
+}
+
+/// Seek inside the last embedded YouTube iframe by updating start param.
+/// This uses a simple src URL mutation; it restarts playback at the timestamp.
+void seekYouTube(int seconds) {
+  if (seconds < 0) return;
+  final iframe = _lastIframeElement;
+  final base = _lastBaseEmbedUrl;
+  if (iframe == null || base == null) return;
+  try {
+    final uri = Uri.parse(base);
+    final params = Map<String, String>.from(uri.queryParameters);
+    params['start'] = seconds.toString();
+    params['autoplay'] = '1';
+    final newUrl = uri.replace(queryParameters: params).toString();
+    // Avoid unnecessary reload if already at target (best-effort by comparing src without start).
+    if (iframe.src != newUrl) {
+      iframe.src = newUrl;
+    }
+  } catch (_) {
+    // swallow: malformed base url should not crash app
+  }
 }

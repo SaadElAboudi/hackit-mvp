@@ -11,3 +11,6 @@ class YouTubeEmbed extends StatelessWidget {
     return impl.buildYouTubeEmbed(videoUrl);
   }
 }
+
+/// Public API to seek inside the current embedded YouTube video on web.
+void seekYouTube(int seconds) => impl.seekYouTube(seconds);

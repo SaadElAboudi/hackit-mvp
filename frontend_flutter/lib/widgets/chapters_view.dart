@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/base_search_result.dart';
 import '../services/video_seek_service.dart';
+import 'youtube_embed.dart';
 
 class ChaptersView extends StatelessWidget {
   final List<Chapter> chapters;
@@ -20,8 +22,15 @@ class ChaptersView extends StatelessWidget {
             title: Text(ch.title),
             leading: const Icon(Icons.play_arrow, size: 20),
             subtitle: Text(_formatTs(ch.startSec)),
-            onTap: () => VideoSeekService.instance
-                .seekOrQueue(ch.startSec, sourceUrl: videoUrl),
+            onTap: () {
+              if (kIsWeb) {
+                // Attempt inline seek; fallback to service queue if not available.
+                seekYouTube(ch.startSec);
+              } else {
+                VideoSeekService.instance
+                    .seekOrQueue(ch.startSec, sourceUrl: videoUrl);
+              }
+            },
             trailing: IconButton(
               tooltip: 'Ouvrir dans une nouvelle fenêtre',
               icon: const Icon(Icons.open_in_new, size: 18),
