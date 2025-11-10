@@ -22,6 +22,9 @@ class AppTheme {
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.white.withValues(alpha: 0.4);
 
+    // Base component radius scale for a softer, consistent aesthetic
+    const baseRadius = 16.0;
+
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
@@ -54,8 +57,7 @@ class AppTheme {
             bodyLarge: const TextStyle(height: 1.3),
             bodyMedium: const TextStyle(height: 1.35),
           ),
-      // CardThemeData is required by Flutter 3.35+ (CardTheme is an InheritedTheme)
-      cardTheme: const CardThemeData(), // use CardThemeData placeholder
+      // Remove initial placeholder cardTheme; a configured cardTheme is provided later.
       // Custom card styling extension through theme extensions (kept simple to avoid type mismatch)
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant,
@@ -66,17 +68,17 @@ class AppTheme {
         filled: true,
         fillColor: glassOverlay,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(baseRadius + 2),
           borderSide:
               BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(baseRadius + 2),
           borderSide:
               BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.25)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(baseRadius + 2),
           borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
         contentPadding:
@@ -89,7 +91,7 @@ class AppTheme {
           foregroundColor: scheme.onPrimary,
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(baseRadius),
           ),
           elevation: 2,
           shadowColor: scheme.primary.withValues(alpha: 0.3),
@@ -111,8 +113,8 @@ class AppTheme {
           side: BorderSide(
               color: scheme.primary.withValues(alpha: 0.7), width: 1.2),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(baseRadius)),
         ).copyWith(
           overlayColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.hovered)) {
@@ -130,7 +132,7 @@ class AppTheme {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(baseRadius),
         ),
         tileColor: scheme.surfaceContainerHighest
             .withValues(alpha: isDark ? 0.25 : 0.6),
@@ -140,6 +142,21 @@ class AppTheme {
       hoverColor: scheme.primary.withValues(alpha: 0.10),
       splashColor: scheme.primary.withValues(alpha: 0.18),
       highlightColor: scheme.primary.withValues(alpha: 0.12),
+      // Unified Card styling
+      cardTheme: CardThemeData(
+        elevation: 2,
+        shadowColor: scheme.primary.withValues(alpha: 0.18),
+        surfaceTintColor: scheme.primary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(baseRadius + 4),
+          side: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: 0.22),
+            width: 1,
+          ),
+        ),
+        margin: const EdgeInsets.all(8),
+        clipBehavior: Clip.antiAlias,
+      ),
     );
   }
 

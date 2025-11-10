@@ -130,24 +130,27 @@ class _ChatInputState extends State<ChatInput> {
       });
     }
     return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: AdaptiveSpacing.large,
-        vertical: AdaptiveSpacing.small,
+      padding: EdgeInsets.fromLTRB(
+        AdaptiveSpacing.large,
+        AdaptiveSpacing.small,
+        AdaptiveSpacing.large,
+        AdaptiveSpacing.medium,
       ),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              scheme.primary.withValues(alpha: 0.05),
-              scheme.primaryContainer.withValues(alpha: 0.06),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+          color: scheme.surfaceContainerHighest.withValues(
+              alpha: scheme.brightness == Brightness.dark ? 0.22 : 0.65),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.35),
+            width: 1.2,
           ),
-          borderRadius: BorderRadius.circular(16),
         ),
         child: Padding(
-          padding: EdgeInsets.all(AdaptiveSpacing.small),
+          padding: EdgeInsets.symmetric(
+            horizontal: AdaptiveSpacing.medium,
+            vertical: AdaptiveSpacing.small,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,8 +192,9 @@ class _ChatInputState extends State<ChatInput> {
                         decoration: InputDecoration(
                           hintText: 'Posez votre question…',
                           prefixIcon: const Icon(Icons.search_rounded),
-                          // Plus de croix: le champ se vide automatiquement après envoi.
                           suffixIcon: null,
+                          filled: true,
+                          fillColor: scheme.surface.withValues(alpha: 0.35),
                         ),
                       ),
                     ),
