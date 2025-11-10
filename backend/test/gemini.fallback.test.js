@@ -51,5 +51,5 @@ await test('Gemini disabled path falls back to heuristic summary when key missin
     assert.equal(res.status, 200);
     const json = JSON.parse(res.data);
     assert.equal(json.title, 'Simple Test Video');
-    assert.ok(Array.isArray(json.steps) && json.steps.length === 5, 'heuristic summary yields 5 steps');
+    assert.ok(Array.isArray(json.steps) && json.steps.length >= 5, 'heuristic summary yields at least 5 steps');
 });

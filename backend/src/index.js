@@ -50,7 +50,7 @@ function makeMockResponse() {
   };
 }
 
-function heuristicSummary() {
+function heuristicSummary({ desiredSteps } = {}) {
   // Very simple local summary when Gemini is disabled/unavailable
   const base = [
     "Ouvre la vidéo et lis la description.",
@@ -59,8 +59,39 @@ function heuristicSummary() {
     "Mets en pause et reviens en arrière si besoin.",
     "Vérifie le résultat et nettoie/range le matériel.",
   ];
-  // Ensure 5 steps max, trim
-  return base.slice(0, 5).join("\n");
+  // If the user asked for a specific number of steps, try to match it by trimming or padding
+  if (Number.isInteger(desiredSteps) && desiredSteps > 0) {
+    if (desiredSteps <= base.length) {
+      return base.slice(0, desiredSteps).join("\n");
+    }
+    const extras = [
+      "Révise le processus et prends des notes.",
+      "Adapte les étapes à ton contexte.",
+      "Teste le résultat et corrige si nécessaire.",
+      "Partage l’astuce ou sauvegarde-la pour plus tard.",
+    ];
+    const out = base.slice();
+    let i = 0;
+    while (out.length < desiredSteps) {
+      out.push(extras[i % extras.length]);
+      i++;
+    }
+    return out.join("\n");
+  }
+  return base.join("\n");
+}
+
+function extractDesiredSteps(text) {
+  try {
+    const s = String(text || '').toLowerCase();
+    // Patterns like: "en 7 étapes", "7 étapes", "7 etapes", "7 steps", "en 3 points"
+    const m = s.match(/(?:en\s+)?(\d{1,3})\s*(?:étapes?|etapes?|steps?|points?)/i);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  } catch (_) { /* ignore */ }
+  return null;
 }
 
 function extractYouTubeVideoId(url) {
@@ -324,16 +355,19 @@ app.post("/api/search", async (req, res) => {
     let summaryText = "";
     // Skip summary Gemini call if the reformulation already timed out to keep total latency low.
     const attemptGeminiSummary = useGemini && !reformulationTimedOut;
+    const desiredSteps = extractDesiredSteps(query);
     if (attemptGeminiSummary) {
-      const summaryPrompt = `Résume cette vidéo YouTube en 5 étapes claires: ${videoTitle}`;
+      const summaryPrompt = desiredSteps
+        ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
+        : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`;
       try {
         summaryText = await generateWithGemini(summaryPrompt, 300);
       } catch (e) {
         console.warn("Gemini summary failed:", e.message);
-        summaryText = heuristicSummary(videoTitle);
+        summaryText = heuristicSummary({ desiredSteps });
       }
     } else {
-      summaryText = heuristicSummary(videoTitle);
+      summaryText = heuristicSummary({ desiredSteps });
     }
 
     const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
@@ -451,16 +485,19 @@ app.get("/api/search/stream", async (req, res) => {
       // Summarize and stream steps one by one (Gemini returns full text; we simulate token streaming)
       let summaryText = "";
       const attemptGeminiSummary = useGemini && !reformulationTimedOut;
+      const desiredSteps = extractDesiredSteps(query);
       if (attemptGeminiSummary) {
-        const summaryPrompt = `Résume cette vidéo YouTube en 5 étapes claires: ${videoTitle}`;
+        const summaryPrompt = desiredSteps
+          ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
+          : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`;
         try {
           summaryText = await generateWithGemini(summaryPrompt, 300);
         } catch (e) {
           console.warn("Gemini summary (stream) failed:", e.message);
-          summaryText = heuristicSummary(videoTitle);
+          summaryText = heuristicSummary({ desiredSteps });
         }
       } else {
-        summaryText = heuristicSummary(videoTitle);
+        summaryText = heuristicSummary({ desiredSteps });
       }
 
       const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);

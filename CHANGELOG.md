@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- Backend: Removed hard-coded 5-step cap in summaries. Summaries now adapt to user query (e.g. "en 8 étapes"), or default to a flexible set of steps.
+- Backend: Dynamic prompt generation for Gemini/OpenAI ("étapes claires" instead of fixed "5 étapes").
+- Backend: Heuristic summary now pads/trims to requested step count when specified.
+- Tests: Updated fallback test to assert at least 5 steps instead of exactly 5.
+
 ## v0.2.1 — 2025-11-09
 
 - Frontend Flutter (web): hide prompt template chips by default for a cleaner prompt.

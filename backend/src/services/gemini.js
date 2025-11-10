@@ -151,6 +151,6 @@ export const generateSummary = async (videoTitle) => {
     return "Résumé non disponible: activez USE_GEMINI=true dans votre fichier .env";
   }
 
-  const summaryPrompt = `Résume cette vidéo YouTube en 5 étapes claires: ${videoTitle}`;
+  const summaryPrompt = `Résume cette vidéo YouTube en étapes claires et structurées: ${videoTitle}`;
   return await generateWithGemini(summaryPrompt, 300);
 };

@@ -12,7 +12,7 @@ export const reformulateQuestion = async (query) => {
 };
 
 export const generateSummary = async (videoTitle) => {
-  const summaryPrompt = `Résume cette vidéo YouTube en 5 étapes claires: ${videoTitle}`;
+  const summaryPrompt = `Résume cette vidéo YouTube en étapes claires et structurées: ${videoTitle}`;
   const response = await client.chat.completions.create({
     model: "gpt-4.1-mini",
     messages: [{ role: "user", content: summaryPrompt }],
