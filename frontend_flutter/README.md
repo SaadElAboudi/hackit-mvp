@@ -39,6 +39,39 @@ L'ordre arrive par append dans `SearchProvider.messages`. Les widgets sont rendu
 3. Événement `final` inclut `citations`, `chapters`, `videoUrl`.
 4. Événement `done` termine le flux; loader retiré.
 
+## Historique & Favoris (local-first)
+Cette MVP implémente un stockage local-first (SharedPreferences) pour:
+
+- Historique des recherches: chaque recherche réussie est enregistrée (requête, titre, source, compteur de résultats, durée). Un LRU prune automatiquement la liste à 50 éléments.
+- Favoris: un élément favori correspond à une vidéo (id/url + titre). L'ajout/suppression se fait via une étoile sur la `VideoCard`.
+
+Détails d'implémentation:
+
+- Modèles: `lib/models/history_favorites.dart`
+- Repo de persistance: `lib/services/history_favorites_repository.dart` (clés JSON dans SharedPreferences, préfixées `hackit:v1:*`)
+- Provider: `lib/providers/history_favorites_provider.dart`
+- Intégration recherche: `SearchProvider` alimente l'historique lors d'un succès (search standard, streaming done, regenerate)
+- Écrans: `lib/screens/history_screen.dart` et `lib/screens/favorites_screen.dart`
+- Navigation: Routes `/history` et `/favorites` ajoutées dans `main.dart`
+
+UX:
+
+- AppBar: bouton Historique + bouton Favoris avec badge numérique (si > 0)
+- `VideoCard`: bouton étoile (ajout/suppression favori) avec SnackBar de confirmation
+
+Tests (note):
+
+- En tests widget isolés, le provider `HistoryFavoritesProvider` peut ne pas être présent. Les widgets gèrent ce cas (le bouton étoile/badge disparaît). Pour tester explicitement les favoris, enveloppez le widget avec un provider:
+
+```dart
+await tester.pumpWidget(
+	ChangeNotifierProvider(
+		create: (_) => HistoryFavoritesProvider(FakeRepo()),
+		child: MaterialApp(home: VideoCard(title: 't', videoUrl: 'https://x/y')),
+	),
+);
+```
+
 ## Citations & Chapitres
 Les structures sont parsées via `BaseSearchResult.fromMap` :
 ```dart
@@ -77,7 +110,7 @@ flutter build web --release
 Endpoint par défaut configuré dans `lib/services/api_service.dart`. Mettre à jour l'URL si vous déployez le backend ailleurs.
 
 ## Prochaines extensions (roadmap courte)
-* Historique & favoris (persistences + endpoints `/api/history`, `/api/favorites`).
+* Synchronisation serveur: endpoints `/api/history`, `/api/favorites` (optionnel).
 * Feedback par étape (UI + POST `/api/search/feedback`).
 * Optimisation du seek pour players natifs web/mobile (intégration controller).
 

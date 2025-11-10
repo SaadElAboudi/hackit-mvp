@@ -22,6 +22,7 @@ void main() {
             child: Scaffold(
               body: ChatInput(
                 onSearch: (q) => submitted = q,
+                showTemplates: true,
               ),
             ),
           ),

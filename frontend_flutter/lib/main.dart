@@ -5,9 +5,12 @@ import 'package:get_it/get_it.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/search_provider.dart';
+import 'providers/history_favorites_provider.dart';
 import 'services/cache_manager.dart';
 import 'screens/home_screen.dart';
 import 'screens/result_screen.dart';
+import 'screens/history_screen.dart';
+import 'screens/favorites_screen.dart';
 import 'utils/page_transitions.dart';
 
 final getIt = GetIt.instance;
@@ -37,9 +40,13 @@ class MyApp extends StatelessWidget {
           create: (_) => ThemeProvider(getIt<SharedPreferences>()),
         ),
         ChangeNotifierProvider(
-          create: (_) => SearchProvider(
+          create: (_) => HistoryFavoritesProvider(getIt<SharedPreferences>()),
+        ),
+        ChangeNotifierProvider(
+          create: (ctx) => SearchProvider(
             cacheManager: getIt<CacheManager>(),
             prefs: getIt<SharedPreferences>(),
+            historyFavorites: ctx.read<HistoryFavoritesProvider>(),
           ),
         ),
       ],
@@ -55,6 +62,16 @@ class MyApp extends StatelessWidget {
                 case '/':
                   return PageTransitions.fadeTransition(
                     page: const HomeScreen(),
+                    settings: settings,
+                  );
+                case '/history':
+                  return PageTransitions.slideTransition(
+                    page: const HistoryScreen(),
+                    settings: settings,
+                  );
+                case '/favorites':
+                  return PageTransitions.slideTransition(
+                    page: const FavoritesScreen(),
                     settings: settings,
                   );
                 case '/result':

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import 'history_favorites_provider.dart';
 import '../services/cache_manager.dart';
 import '../services/analytics_manager.dart';
 import '../models/base_search_result.dart';
@@ -57,14 +58,18 @@ class SearchProvider extends ChangeNotifier {
 
   final bool _testMode;
 
+  final HistoryFavoritesProvider? _historyFavs;
+
   SearchProvider({
     ApiService? api,
     CacheManager? cacheManager,
     SharedPreferences? prefs,
+    HistoryFavoritesProvider? historyFavorites,
     bool testMode = false,
   })  : _api = api ?? ApiService.create(),
         _cacheManager = cacheManager,
         _prefs = prefs,
+        _historyFavs = historyFavorites,
         _testMode = testMode {
     if (!_testMode) {
       _initConnectivity();
@@ -165,7 +170,7 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
 
-    final maxRetries = 2; // 1–2 automatic retries requirement
+    const maxRetries = 2; // 1–2 automatic retries requirement
     int attempt = 0;
     Object? lastErr;
     ErrorType? lastType;
@@ -185,6 +190,14 @@ class SearchProvider extends ChangeNotifier {
           await _cacheManager.cacheSearchResult(query, r);
         }
         _appendAssistantFromResult(r);
+        // record history entry
+        _historyFavs?.addHistory(
+          query: query,
+          title: r.title,
+          videoUrl: r.videoUrl,
+          source: r.source,
+          resultCount: r.steps.length,
+        );
         loading = false;
         notifyListeners();
         return; // success -> exit
@@ -352,6 +365,17 @@ class SearchProvider extends ChangeNotifier {
               isSuccess: true,
             );
             loading = false;
+            // record history entry after stream completes
+            if ((currentTitle ?? '').isNotEmpty &&
+                (currentVideo ?? '').isNotEmpty) {
+              _historyFavs?.addHistory(
+                query: lastQuery!,
+                title: currentTitle!,
+                videoUrl: currentVideo!,
+                source: currentSource,
+                resultCount: partialSteps.length,
+              );
+            }
             notifyListeners();
             return;
           default:
@@ -422,6 +446,13 @@ class SearchProvider extends ChangeNotifier {
 
       // Append assistant response only (pas de bulle user en plus)
       _appendAssistantFromResult(newResult);
+      _historyFavs?.addHistory(
+        query: q,
+        title: newResult.title,
+        videoUrl: newResult.videoUrl,
+        source: newResult.source,
+        resultCount: newResult.steps.length,
+      );
     } on ApiException catch (e) {
       error = e.message;
       await analytics.logSearch(
@@ -517,6 +548,13 @@ class SearchProvider extends ChangeNotifier {
         await _cacheManager.cacheSearchResult(q, newResult);
       }
       _appendAssistantFromResult(newResult);
+      _historyFavs?.addHistory(
+        query: q,
+        title: newResult.title,
+        videoUrl: newResult.videoUrl,
+        source: newResult.source,
+        resultCount: newResult.steps.length,
+      );
     } on ApiException catch (e) {
       error = e.message;
       await analytics.logSearch(

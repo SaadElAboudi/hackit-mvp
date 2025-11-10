@@ -32,7 +32,8 @@ void main() {
         ),
       ));
 
-      await tester.tap(find.byType(InkWell));
+      // Tap the explicit action button to open the URL
+      await tester.tap(find.text('Voir la vidéo →'));
       await tester.pumpAndSettle();
 
       expect(find.byType(SnackBar), findsOneWidget);

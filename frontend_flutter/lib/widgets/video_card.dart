@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../services/video_seek_service.dart';
 import '../core/responsive/size_config.dart';
 import '../core/responsive/adaptive_spacing.dart';
+import '../providers/history_favorites_provider.dart';
 
 class VideoCard extends StatefulWidget {
   final String title;
@@ -27,6 +29,7 @@ class _VideoCardState extends State<VideoCard>
         duration: const Duration(milliseconds: 150), vsync: this);
   }
 
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -207,6 +210,59 @@ class _VideoCardState extends State<VideoCard>
                               icon: const Icon(Icons.linked_camera, size: 18),
                               label: const Text('Activer le seek'),
                             ),
+                          SizedBox(width: AdaptiveSpacing.small),
+                          Builder(builder: (context) {
+                            // Make the favorites toggle optional: if no provider is found, hide the control.
+                            HistoryFavoritesProvider? favs;
+                            try {
+                              favs = context.watch<HistoryFavoritesProvider>();
+                            } catch (_) {
+                              favs = null;
+                            }
+                            if (favs == null) return const SizedBox.shrink();
+                            final isFav = favs.isFavorite(widget.videoUrl);
+                            return IconButton(
+                              key: const Key('video_favorite_toggle'),
+                              tooltip: isFav
+                                  ? 'Retirer des favoris'
+                                  : 'Ajouter aux favoris',
+                              icon: Icon(
+                                isFav
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                                color: isFav ? Colors.amber : scheme.primary,
+                                size: 20,
+                              ),
+                              onPressed: () async {
+                                final messenger = ScaffoldMessenger.of(context);
+                                if (isFav) {
+                                  await favs!.toggleFavorite(
+                                    videoId: widget.videoUrl,
+                                    title: widget.title,
+                                    videoUrl: widget.videoUrl,
+                                  );
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Retiré des favoris'),
+                                      duration: Duration(milliseconds: 1200),
+                                    ),
+                                  );
+                                } else {
+                                  await favs!.toggleFavorite(
+                                    videoId: widget.videoUrl,
+                                    title: widget.title,
+                                    videoUrl: widget.videoUrl,
+                                  );
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Ajouté aux favoris'),
+                                      duration: Duration(milliseconds: 1200),
+                                    ),
+                                  );
+                                }
+                              },
+                            );
+                          }),
                           Icon(
                             Icons.launch,
                             size: 16,

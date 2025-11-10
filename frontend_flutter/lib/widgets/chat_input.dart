@@ -1,3 +1,4 @@
+// ignore_for_file: prefer_const_constructors
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/responsive/adaptive_spacing.dart';
@@ -14,6 +15,8 @@ class ChatInput extends StatefulWidget {
   // Whether the input field should be cleared after sending a query.
   // Default: false to preserve the last prompt for visibility & easy editing.
   final bool clearOnSend;
+  // Show prompt template chips (used in tests or power-user mode)
+  final bool showTemplates;
   const ChatInput({
     super.key,
     required this.onSearch,
@@ -21,7 +24,8 @@ class ChatInput extends StatefulWidget {
     this.onRegenerate,
     this.onEditLast,
     this.getLastQuery,
-    this.clearOnSend = false,
+    this.clearOnSend = true,
+    this.showTemplates = false,
   });
 
   @override
@@ -30,8 +34,7 @@ class ChatInput extends StatefulWidget {
 
 class _ChatInputState extends State<ChatInput> {
   // Feature flag: show/hide prompt template chips above the input.
-  // Per user feedback, default is false to keep the prompt clean.
-  static const bool kShowPromptTemplates = false;
+  // Read from widget.showTemplates.
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   String? _selectedTemplate; // local UI state
@@ -60,13 +63,16 @@ class _ChatInputState extends State<ChatInput> {
       } catch (_) {}
 
       widget.onSearch(q);
-      if (widget.clearOnSend) {
-        _controller.clear();
-      } else {
-        // Keep the text; optionally move cursor to end for convenience.
-        _controller.selection =
-            TextSelection.collapsed(offset: _controller.text.length);
-      }
+      // Toujours vider le champ après envoi pour UX plus propre.
+      _controller.clear();
+      try {
+        // Si SearchProvider est disponible, vider aussi le draft global
+        final p = Provider.of<SearchProvider>(context, listen: false);
+        p.setDraft('');
+      } catch (_) {}
+      _selectedTemplate = null; // reset template selection after send
+      // Optionnel: retirer le focus pour signaler la soumission
+      _focusNode.unfocus();
     }
   }
 
@@ -146,7 +152,7 @@ class _ChatInputState extends State<ChatInput> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (kShowPromptTemplates) ...[
+              if (widget.showTemplates) ...[
                 _TemplateChips(
                   selected: _selectedTemplate ?? provider?.lastTemplate,
                   onSelected: (id) {
@@ -183,18 +189,13 @@ class _ChatInputState extends State<ChatInput> {
                         decoration: InputDecoration(
                           hintText: 'Posez votre question…',
                           prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _controller.text.isEmpty
-                              ? null
-                              : IconButton(
-                                  tooltip: 'Effacer',
-                                  onPressed: () => setState(_controller.clear),
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
+                          // Plus de croix: le champ se vide automatiquement après envoi.
+                          suffixIcon: null,
                         ),
                       ),
                     ),
                   ),
-                  SizedBox(width: AdaptiveSpacing.small),
+                  const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: widget.disabled ? null : _submit,
                     child: const Row(
@@ -223,7 +224,7 @@ class _TemplateChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final templates = const [
+    const templates = [
       ('resume', 'Résumé'),
       ('tutoriel', 'Tutoriel'),
       ('eli5', 'ELI5'),

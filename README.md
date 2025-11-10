@@ -10,6 +10,11 @@
 Hackit MVP is a project designed to provide users with quick and clear answers to their questions through a chat interface. The application leverages AI to summarize information and find relevant video content from platforms like YouTube and TikTok.
 
 ## Features
+- Streaming chat UI (SSE) with structured kinds: steps, video, citations, chapters, text, error
+- Citations & chapters with timestamp seek support via a lightweight `VideoSeekService`
+- Local-first History & Favorites in Flutter (SharedPreferences, LRU 50)
+   - History & Favorites screens, routes `/history` and `/favorites`
+   - AppBar badge with favorite count; star toggle on VideoCard with SnackBar
 
 ## Tech Stack
 
