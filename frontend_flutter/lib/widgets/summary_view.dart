@@ -52,9 +52,10 @@ class SummaryView extends StatelessWidget {
                   child: Text(
                     title,
                     style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 21,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: -0.2,
+                      height: 1.15,
                     ),
                   ),
                 ),
@@ -102,9 +103,11 @@ class SummaryView extends StatelessWidget {
                               width: 1,
                             ),
                           ),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: AdaptiveSpacing.small,
-                            vertical: AdaptiveSpacing.small + 2,
+                          padding: EdgeInsets.fromLTRB(
+                            AdaptiveSpacing.small,
+                            AdaptiveSpacing.small + 2,
+                            AdaptiveSpacing.small,
+                            AdaptiveSpacing.small + 4,
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,7 +143,7 @@ class SummaryView extends StatelessWidget {
                                   '${entry.key + 1}. ${entry.value}',
                                   style: TextStyle(
                                     fontSize: SizeConfig.adaptiveFontSize(14),
-                                    height: 1.38,
+                                    height: 1.32,
                                   ),
                                 ),
                               ),

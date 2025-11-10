@@ -39,7 +39,7 @@ class UserBubble extends StatelessWidget {
           text,
           style: TextStyle(
             fontSize: SizeConfig.adaptiveFontSize(14),
-            height: 1.35,
+            height: 1.32,
           ),
         ),
       ),
@@ -122,7 +122,12 @@ class AssistantContainer extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: EdgeInsets.all(AdaptiveSpacing.small),
+            padding: EdgeInsets.fromLTRB(
+              AdaptiveSpacing.small,
+              AdaptiveSpacing.small + 2,
+              AdaptiveSpacing.small,
+              AdaptiveSpacing.small + 3,
+            ),
             child: child,
           ),
         ),

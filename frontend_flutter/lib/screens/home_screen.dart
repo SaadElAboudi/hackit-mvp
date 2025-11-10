@@ -342,10 +342,11 @@ class _SourceChip extends StatelessWidget {
 
   Color _color(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final palette = Theme.of(context).extension<AppPalette>();
     final s = source.toLowerCase();
-    if (s.contains('youtube')) return scheme.primary;
-    if (s.contains('yt-search')) return scheme.secondary;
-    return scheme.tertiary;
+    if (s.contains('youtube')) return palette?.accentSuccess ?? scheme.primary;
+    if (s.contains('yt-search')) return palette?.accentInfo ?? scheme.secondary;
+    return palette?.accentWarning ?? scheme.tertiary;
   }
 
   @override

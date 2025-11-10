@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../theme/app_extensions.dart';
 
 /// A small status badge that pings the backend /health endpoint and shows:
 /// - Healthy (green) when HTTP 200
@@ -34,14 +35,15 @@ class _HealthBadgeState extends State<HealthBadge> {
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) {
+        final palette = Theme.of(context).extension<AppPalette>();
         String label = 'Checking';
-        Color color = Colors.grey;
+        Color color = (palette?.accentInfo ?? Colors.grey);
         Map<String, dynamic>? data = snap.data;
         if (snap.connectionState == ConnectionState.waiting) {
           label = '…';
         } else if (snap.hasError) {
           label = 'Down';
-          color = Colors.red;
+          color = palette?.accentDanger ?? Colors.red;
         } else if (data != null) {
           // Basic success
           final ok = data['ok'] == true ||
@@ -54,10 +56,10 @@ class _HealthBadgeState extends State<HealthBadge> {
             // degrade if any flag suggests non-real or fallback
             if (fallback || mock) {
               label = 'Degraded';
-              color = Colors.amber;
+              color = palette?.accentWarning ?? Colors.amber;
             } else {
               label = 'Healthy';
-              color = Colors.green;
+              color = palette?.accentSuccess ?? Colors.green;
             }
             if (cached && label == 'Healthy') {
               // subtle variant
@@ -66,7 +68,7 @@ class _HealthBadgeState extends State<HealthBadge> {
             _lastUpdated = DateTime.now();
           } else {
             label = 'Down';
-            color = Colors.red;
+            color = palette?.accentDanger ?? Colors.red;
           }
         }
 
@@ -80,9 +82,9 @@ class _HealthBadgeState extends State<HealthBadge> {
               duration: const Duration(milliseconds: 250),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
+                color: color.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(32),
-                border: Border.all(color: color.withValues(alpha: 0.5)),
+                border: Border.all(color: color.withValues(alpha: 0.45)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
