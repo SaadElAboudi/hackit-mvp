@@ -3,10 +3,15 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'dart:async';
 
 final Set<String> _registeredViews = <String>{};
 html.IFrameElement? _lastIframeElement;
 String? _lastBaseEmbedUrl;
+String? _playerTargetOrigin; // e.g., https://www.youtube.com
+bool _playerReady = false;
+int? _pendingSeekSeconds;
+StreamSubscription<html.MessageEvent>? _msgSub;
 
 String _toEmbedUrl(String url) {
   try {
@@ -48,6 +53,12 @@ Widget buildYouTubeEmbed(String url) {
       // Keep global reference for simple seek operations.
       _lastIframeElement = element;
       _lastBaseEmbedUrl = embedUrl; // without start param
+      final srcUri = Uri.tryParse(embedUrl);
+      _playerTargetOrigin = srcUri?.scheme != null && srcUri?.host != null
+          ? '${srcUri!.scheme}://${srcUri.host}'
+          : 'https://www.youtube.com';
+      _ensurePlayerMessageChannel();
+      _announceListening();
       return element;
     });
     _registeredViews.add(viewType);
@@ -59,6 +70,12 @@ Widget buildYouTubeEmbed(String url) {
     if (elements.isNotEmpty) {
       _lastIframeElement = elements.last as html.IFrameElement?;
       _lastBaseEmbedUrl ??= embedUrl;
+      final srcUri = Uri.tryParse(_lastIframeElement!.src);
+      _playerTargetOrigin = srcUri?.scheme != null && srcUri?.host != null
+          ? '${srcUri!.scheme}://${srcUri.host}'
+          : 'https://www.youtube.com';
+      _ensurePlayerMessageChannel();
+      _announceListening();
     }
   }
   return AspectRatio(
@@ -78,25 +95,24 @@ void seekYouTube(int seconds) {
   final base = _lastBaseEmbedUrl;
   if (iframe == null || base == null) return;
   try {
+    if (!_playerReady) {
+      _pendingSeekSeconds = seconds;
+      _announceListening();
+    }
     // Preferred: Send postMessage commands to the Player (no reload).
-    final msgSeek = {
+    _postToPlayer({
       'event': 'command',
       'func': 'seekTo',
       'args': [seconds, true],
-    };
-    final msgPlay = {
+    });
+    _postToPlayer({
       'event': 'command',
       'func': 'playVideo',
       'args': [],
-    };
-    final targetOrigin = html.window.location.origin;
-    iframe.contentWindow?.postMessage(msgSeek, targetOrigin);
-    iframe.contentWindow?.postMessage(msgPlay, targetOrigin);
+    });
 
-    // Fallback: mutate src if postMessage channel not ready.
-    // Use a short delay to give API a chance; then check if currentTime likely unchanged (unknown), so always set as backup.
-    // Note: This will reload the player but ensures a working seek.
-    Future.delayed(const Duration(milliseconds: 150), () {
+    // Fallback: mutate src if postMessage channel not ready (e.g., no contentWindow).
+    Future.delayed(const Duration(milliseconds: 250), () {
       if (iframe.contentWindow == null) {
         final uri = Uri.parse(base);
         final params = Map<String, String>.from(uri.queryParameters);
@@ -111,4 +127,57 @@ void seekYouTube(int seconds) {
   } catch (_) {
     // swallow: malformed base url should not crash app
   }
+}
+
+void _ensurePlayerMessageChannel() {
+  _msgSub ??= html.window.onMessage.listen((event) {
+    // YouTube sometimes sends stringified JSON; handle both.
+    dynamic data = event.data;
+    try {
+      if (data is String) {
+        data = data.trim();
+        if (data.startsWith('{') && data.endsWith('}')) {
+          data = html.window.jsonDecode(data);
+        }
+      }
+    } catch (_) {
+      // ignore malformed payloads
+    }
+    if (data is Map) {
+      final e = data['event'];
+      if (e == 'onReady') {
+        _playerReady = true;
+        final pending = _pendingSeekSeconds;
+        _pendingSeekSeconds = null;
+        if (pending != null) {
+          // Immediately perform the pending seek
+          _postToPlayer({
+            'event': 'command',
+            'func': 'seekTo',
+            'args': [pending, true],
+          });
+          _postToPlayer({
+            'event': 'command',
+            'func': 'playVideo',
+            'args': [],
+          });
+        }
+      }
+    }
+  });
+}
+
+void _announceListening() {
+  final iframe = _lastIframeElement;
+  if (iframe?.contentWindow == null) return;
+  _postToPlayer({
+    'event': 'listening',
+    'id': 'yt-player',
+  });
+}
+
+void _postToPlayer(Object message) {
+  final iframe = _lastIframeElement;
+  final origin = _playerTargetOrigin ?? 'https://www.youtube.com';
+  iframe?.contentWindow?.postMessage(message, origin);
 }

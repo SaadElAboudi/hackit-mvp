@@ -15,7 +15,7 @@ class ChaptersView extends StatefulWidget {
 }
 
 class _ChaptersViewState extends State<ChaptersView> {
-  DateTime _lastTap = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _debouncing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -31,12 +31,11 @@ class _ChaptersViewState extends State<ChaptersView> {
             leading: const Icon(Icons.play_arrow, size: 20),
             subtitle: Text(_formatTs(ch.startSec)),
             onTap: () {
-              final now = DateTime.now();
-              if (now.difference(_lastTap) <
-                  const Duration(milliseconds: 400)) {
-                return; // debounce rapid taps
-              }
-              _lastTap = now;
+              if (_debouncing) return;
+              _debouncing = true;
+              Future.delayed(const Duration(milliseconds: 400), () {
+                _debouncing = false;
+              });
               if (kIsWeb) {
                 // Attempt inline seek; fallback to service queue if not available.
                 seekYouTube(ch.startSec);
@@ -44,6 +43,16 @@ class _ChaptersViewState extends State<ChaptersView> {
                 VideoSeekService.instance
                     .seekOrQueue(ch.startSec, sourceUrl: widget.videoUrl);
               }
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.hideCurrentSnackBar();
+              final ts = _formatTs(ch.startSec);
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('Lecture à $ts'),
+                  duration: const Duration(milliseconds: 900),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
             trailing: IconButton(
               tooltip: 'Ouvrir dans une nouvelle fenêtre',
