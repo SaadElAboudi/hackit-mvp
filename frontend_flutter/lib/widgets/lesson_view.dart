@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
+import '../widgets/youtube_embed.dart';
 
 class LessonView extends StatelessWidget {
   final String title;
@@ -20,6 +21,9 @@ class LessonView extends StatelessWidget {
       children: [
         SummaryView(title: title, steps: steps),
         SizedBox(height: AdaptiveSpacing.medium),
+        // Embedded player on web (falls back to nothing on other platforms)
+        YouTubeEmbed(videoUrl: videoUrl),
+        SizedBox(height: AdaptiveSpacing.small),
         VideoCard(title: title, videoUrl: videoUrl),
       ],
     );
