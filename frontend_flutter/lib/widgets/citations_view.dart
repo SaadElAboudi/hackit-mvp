@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_extensions.dart';
 import '../models/base_search_result.dart';
 import '../services/video_seek_service.dart';
 
@@ -9,6 +10,8 @@ class CitationsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (citations.isEmpty) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final palette = Theme.of(context).extension<AppPalette>();
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -17,6 +20,11 @@ class CitationsView extends StatelessWidget {
         return Tooltip(
           message: 'Aller à $label',
           child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: palette?.accentInfo ?? scheme.primary,
+              side: BorderSide(
+                  color: palette?.accentInfo ?? scheme.primary, width: 1.2),
+            ),
             onPressed: () => VideoSeekService.instance
                 .seekOrQueue(c.startSec, sourceUrl: c.url),
             icon: const Icon(Icons.access_time, size: 16),

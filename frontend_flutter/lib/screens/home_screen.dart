@@ -378,7 +378,10 @@ class _SourceChip extends StatelessWidget {
                   style: TextStyle(
                     fontSize: SizeConfig.adaptiveFontSize(11),
                     letterSpacing: 0.3,
-                    color: c.withValues(alpha: 0.85),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.82),
                   ),
                 ),
               ],

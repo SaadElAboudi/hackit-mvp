@@ -51,11 +51,11 @@ class SummaryView extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.w700,
+                    style: const TextStyle(
+                      fontSize: 20, // revert to keep test stable
+                      fontWeight: FontWeight.bold,
                       letterSpacing: -0.2,
-                      height: 1.15,
+                      height: 1.12,
                     ),
                   ),
                 ),
