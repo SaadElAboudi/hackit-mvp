@@ -180,3 +180,14 @@ Optional automation: Use `gh issue create` CLI in a script iterating over headin
 
 ---
 Generated automatically; adjust scores after validation if estimates shift.
+
+#### 20. UX Polish Meta
+Labels: area:frontend, type:task, milestone:2, priority:medium
+Description: Track incremental UI/UX refinements (contrast audit, icon consistency, motion tuning, palette adoption). Consolidates sub-tasks for visibility.
+Acceptance Criteria:
+1. Contrast AA pass documented.  
+2. AppPalette applied to SourceChip, HealthBadge, citation/CTA chips.  
+3. Typography scale updated (titles + body line-heights).  
+4. Favorites badge refactored with semantic colors & animation.  
+5. Follow-up issues opened for motion/accessibility beyond initial scope.
+Dependencies: 1,2,4,5,6 (baseline features present).
