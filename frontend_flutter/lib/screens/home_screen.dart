@@ -7,13 +7,13 @@ import '../providers/search_provider.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/health_badge.dart';
 import '../widgets/summary_view.dart';
+import '../widgets/lesson_view.dart';
 import '../widgets/video_card.dart';
 import '../widgets/chat_bubbles.dart';
 import '../models/chat_message.dart';
 import '../widgets/citations_view.dart';
 import '../widgets/chapters_view.dart';
 import '../models/base_search_result.dart';
-import '../providers/history_favorites_provider.dart';
 import '../theme/app_extensions.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -46,76 +46,8 @@ class _HomeMobileLayout extends StatelessWidget {
         backgroundColor: bg,
         elevation: 0,
         title: const Text('Hackit'),
-        actions: [
-          IconButton(
-            tooltip: 'Historique',
-            icon: const Icon(Icons.history_rounded),
-            onPressed: () => Navigator.of(context).pushNamed('/history'),
-          ),
-          Builder(builder: (context) {
-            int favCount = 0;
-            try {
-              favCount =
-                  context.watch<HistoryFavoritesProvider>().favorites.length;
-            } catch (_) {
-              favCount = 0;
-            }
-            final palette = Theme.of(context).extension<AppPalette>();
-            final badge = favCount > 0
-                ? Positioned(
-                    right: -2,
-                    top: -2,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 250),
-                      opacity: favCount > 0 ? 1 : 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (palette?.badgeBg ?? Colors.redAccent),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.65),
-                            width: 0.6,
-                          ),
-                        ),
-                        constraints:
-                            const BoxConstraints(minWidth: 18, minHeight: 18),
-                        child: Text(
-                          favCount > 99 ? '99+' : '$favCount',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: palette?.badgeText ?? Colors.white,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink();
-            return IconButton(
-              tooltip: 'Favoris',
-              onPressed: () => Navigator.of(context).pushNamed('/favorites'),
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.star_border_rounded),
-                  badge,
-                ],
-              ),
-            );
-          }),
-          const Padding(
-              padding: EdgeInsets.only(right: 12), child: HealthBadge()),
+        actions: const [
+          Padding(padding: EdgeInsets.only(right: 12), child: HealthBadge()),
         ],
       ),
       body: Column(
@@ -190,7 +122,8 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
     }
 
     final children = <Widget>[];
-    for (final m in messages) {
+    for (int i = 0; i < messages.length; i++) {
+      final m = messages[i];
       if (m.role.name == 'user') {
         final text = (m.content['text'] ?? '') as String;
         if (text.isNotEmpty) {
@@ -205,6 +138,30 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
           );
         }
       } else {
+        // Attempt lesson merge: if current is steps and next is video with same title, merge.
+        final next = i + 1 < messages.length ? messages[i + 1] : null;
+        final canMerge = m.kind == ChatKind.steps &&
+            next != null &&
+            next.kind == ChatKind.video &&
+            (m.content['title'] ?? '') == (next.content['title'] ?? '');
+        if (canMerge) {
+          final steps =
+              List<String>.from(m.content['steps'] ?? const <String>[]);
+          final title = (m.content['title'] ?? '') as String;
+          final videoUrl = (next.content['videoUrl'] ?? '') as String;
+          children.add(
+            AssistantContainer(
+              child: LessonView(
+                title: title,
+                steps: steps,
+                videoUrl: videoUrl,
+              ),
+            ),
+          );
+          i++; // skip next since merged
+          children.add(SizedBox(height: AdaptiveSpacing.small));
+          continue;
+        }
         switch (m.kind) {
           case ChatKind.steps:
             children.add(
@@ -409,76 +366,8 @@ class _HomeTabletLayout extends StatelessWidget {
         backgroundColor: bg,
         elevation: 0,
         title: const Text('Hackit'),
-        actions: [
-          IconButton(
-            tooltip: 'Historique',
-            icon: const Icon(Icons.history_rounded),
-            onPressed: () => Navigator.of(context).pushNamed('/history'),
-          ),
-          Builder(builder: (context) {
-            int favCount = 0;
-            try {
-              favCount =
-                  context.watch<HistoryFavoritesProvider>().favorites.length;
-            } catch (_) {
-              favCount = 0;
-            }
-            final palette = Theme.of(context).extension<AppPalette>();
-            final badge = favCount > 0
-                ? Positioned(
-                    right: -2,
-                    top: -2,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 250),
-                      opacity: favCount > 0 ? 1 : 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (palette?.badgeBg ?? Colors.redAccent),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.65),
-                            width: 0.6,
-                          ),
-                        ),
-                        constraints:
-                            const BoxConstraints(minWidth: 18, minHeight: 18),
-                        child: Text(
-                          favCount > 99 ? '99+' : '$favCount',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: palette?.badgeText ?? Colors.white,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink();
-            return IconButton(
-              tooltip: 'Favoris',
-              onPressed: () => Navigator.of(context).pushNamed('/favorites'),
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.star_border_rounded),
-                  badge,
-                ],
-              ),
-            );
-          }),
-          const Padding(
-              padding: EdgeInsets.only(right: 16), child: HealthBadge()),
+        actions: const [
+          Padding(padding: EdgeInsets.only(right: 16), child: HealthBadge()),
         ],
       ),
       body: Center(
@@ -518,76 +407,8 @@ class _HomeDesktopLayout extends StatelessWidget {
         title: const Text('Hackit'),
         backgroundColor: bg,
         elevation: 0,
-        actions: [
-          IconButton(
-            tooltip: 'Historique',
-            icon: const Icon(Icons.history_rounded),
-            onPressed: () => Navigator.of(context).pushNamed('/history'),
-          ),
-          Builder(builder: (context) {
-            int favCount = 0;
-            try {
-              favCount =
-                  context.watch<HistoryFavoritesProvider>().favorites.length;
-            } catch (_) {
-              favCount = 0;
-            }
-            final palette = Theme.of(context).extension<AppPalette>();
-            final badge = favCount > 0
-                ? Positioned(
-                    right: -2,
-                    top: -2,
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 250),
-                      opacity: favCount > 0 ? 1 : 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (palette?.badgeBg ?? Colors.redAccent),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.65),
-                            width: 0.6,
-                          ),
-                        ),
-                        constraints:
-                            const BoxConstraints(minWidth: 18, minHeight: 18),
-                        child: Text(
-                          favCount > 99 ? '99+' : '$favCount',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: palette?.badgeText ?? Colors.white,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink();
-            return IconButton(
-              tooltip: 'Favoris',
-              onPressed: () => Navigator.of(context).pushNamed('/favorites'),
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.star_border_rounded),
-                  badge,
-                ],
-              ),
-            );
-          }),
-          const Padding(
-              padding: EdgeInsets.only(right: 20), child: HealthBadge()),
+        actions: const [
+          Padding(padding: EdgeInsets.only(right: 20), child: HealthBadge()),
         ],
       ),
       body: Center(

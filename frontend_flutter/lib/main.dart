@@ -8,6 +8,7 @@ import 'providers/search_provider.dart';
 import 'providers/history_favorites_provider.dart';
 import 'services/cache_manager.dart';
 import 'screens/home_screen.dart';
+import 'screens/root_tabs.dart';
 import 'screens/result_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/favorites_screen.dart';
@@ -61,7 +62,7 @@ class MyApp extends StatelessWidget {
               switch (settings.name) {
                 case '/':
                   return PageTransitions.fadeTransition(
-                    page: const HomeScreen(),
+                    page: const RootTabs(),
                     settings: settings,
                   );
                 case '/history':
