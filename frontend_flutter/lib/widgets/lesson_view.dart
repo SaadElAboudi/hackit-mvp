@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/lessons_provider.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
@@ -8,14 +10,16 @@ class LessonView extends StatelessWidget {
   final String title;
   final List<String> steps;
   final String videoUrl;
-  const LessonView(
-      {super.key,
-      required this.title,
-      required this.steps,
-      required this.videoUrl});
+  const LessonView({
+    super.key,
+    required this.title,
+    required this.steps,
+    required this.videoUrl,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final lessons = context.read<LessonsProvider>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -25,6 +29,41 @@ class LessonView extends StatelessWidget {
         YouTubeEmbed(videoUrl: videoUrl),
         SizedBox(height: AdaptiveSpacing.small),
         VideoCard(title: title, videoUrl: videoUrl),
+        SizedBox(height: AdaptiveSpacing.small),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            icon: const Icon(Icons.save_rounded),
+            label: const Text('Enregistrer comme leçon'),
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                final created = await lessons.generateAndAdd(
+                  // Use the current title as query to generate a persistent lesson
+                  query: title,
+                  useGemini: false,
+                );
+                if (created != null) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Leçon enregistrée.')),
+                  );
+                } else {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        lessons.error ?? 'Échec de l\'enregistrement',
+                      ),
+                    ),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+              }
+            },
+          ),
+        ),
       ],
     );
   }
