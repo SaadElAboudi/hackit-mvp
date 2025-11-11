@@ -347,16 +347,23 @@ class SearchProvider extends ChangeNotifier {
             notifyListeners();
             return;
           case 'done':
-            // append video message now that we have title/video
-            if ((currentTitle ?? '').isNotEmpty &&
+            // Attach videoUrl to the existing steps message instead of adding a separate video message
+            if (stepsMsgIndex != null &&
+                stepsMsgIndex >= 0 &&
+                stepsMsgIndex < messages.length &&
                 (currentVideo ?? '').isNotEmpty) {
-              final videoMsg = ChatMessage.assistantVideo(
-                _newId(),
-                currentTitle!,
-                currentVideo!,
-                source: currentSource,
+              final m = messages[stepsMsgIndex];
+              final updated = m.copyWith(
+                content: {
+                  ...m.content,
+                  'videoUrl': currentVideo,
+                },
               );
-              messages = [...messages, videoMsg];
+              messages = [
+                ...messages.sublist(0, stepsMsgIndex),
+                updated,
+                ...messages.sublist(stepsMsgIndex + 1),
+              ];
               _saveMessages();
             }
             stopwatch.stop();
@@ -590,20 +597,21 @@ class SearchProvider extends ChangeNotifier {
   }
 
   void _appendAssistantFromResult(BaseSearchResult r) {
+    // Prefer a single cohesive lesson-like message: steps + videoUrl together
     final stepsMsg = ChatMessage.assistantSteps(
       _newId(),
       r.title,
       r.steps,
       source: r.source,
+    ).copyWith(
+      content: {
+        "title": r.title,
+        "steps": r.steps,
+        if (r.source.isNotEmpty) "source": r.source,
+        "videoUrl": r.videoUrl,
+      },
     );
     _push(stepsMsg);
-    final videoMsg = ChatMessage.assistantVideo(
-      _newId(),
-      r.title,
-      r.videoUrl,
-      source: r.source,
-    );
-    _push(videoMsg);
     if (r.citations.isNotEmpty) {
       _push(ChatMessage.assistantCitations(
           _newId(), r.citations.map((c) => c.toMap()).toList()));

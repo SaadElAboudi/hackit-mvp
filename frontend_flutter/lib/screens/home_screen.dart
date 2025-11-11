@@ -138,17 +138,13 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
           );
         }
       } else {
-        // Attempt lesson merge: if current is steps and next is video with same title, merge.
-        final next = i + 1 < messages.length ? messages[i + 1] : null;
-        final canMerge = m.kind == ChatKind.steps &&
-            next != null &&
-            next.kind == ChatKind.video &&
-            (m.content['title'] ?? '') == (next.content['title'] ?? '');
-        if (canMerge) {
+        // Prefer cohesive lesson rendering when steps already include a videoUrl.
+        if (m.kind == ChatKind.steps &&
+            (m.content['videoUrl'] ?? '').toString().isNotEmpty) {
           final steps =
               List<String>.from(m.content['steps'] ?? const <String>[]);
           final title = (m.content['title'] ?? '') as String;
-          final videoUrl = (next.content['videoUrl'] ?? '') as String;
+          final videoUrl = (m.content['videoUrl'] ?? '') as String;
           children.add(
             AssistantContainer(
               child: LessonView(
@@ -158,9 +154,33 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
               ),
             ),
           );
-          i++; // skip next since merged
           children.add(SizedBox(height: AdaptiveSpacing.small));
           continue;
+        } else {
+          // Backward-compatible merge: steps followed by video with same title.
+          final next = i + 1 < messages.length ? messages[i + 1] : null;
+          final canMerge = m.kind == ChatKind.steps &&
+              next != null &&
+              next.kind == ChatKind.video &&
+              (m.content['title'] ?? '') == (next.content['title'] ?? '');
+          if (canMerge) {
+            final steps =
+                List<String>.from(m.content['steps'] ?? const <String>[]);
+            final title = (m.content['title'] ?? '') as String;
+            final videoUrl = (next.content['videoUrl'] ?? '') as String;
+            children.add(
+              AssistantContainer(
+                child: LessonView(
+                  title: title,
+                  steps: steps,
+                  videoUrl: videoUrl,
+                ),
+              ),
+            );
+            i++; // skip next since merged
+            children.add(SizedBox(height: AdaptiveSpacing.small));
+            continue;
+          }
         }
         switch (m.kind) {
           case ChatKind.steps:
