@@ -83,6 +83,22 @@ class ApiService {
   }
 
   // ---- Lesson persistence endpoints ----
+  Future<Response> createLesson({
+    required String userId,
+    required String title,
+    required List<String> steps,
+    required String videoUrl,
+    String? summary,
+  }) async {
+    return post('/api/lessons', data: {
+      'userId': userId,
+      'title': title,
+      'steps': steps,
+      'videoUrl': videoUrl,
+      if (summary != null) 'summary': summary,
+    });
+  }
+
   Future<Response> generateLesson(
       {required String query,
       required String userId,

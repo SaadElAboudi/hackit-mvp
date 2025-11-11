@@ -45,6 +45,24 @@ class LessonsService {
         userIdFallback: userId);
   }
 
+  /// Create a lesson directly from chat-rendered content.
+  Future<Lesson> createLessonFromChat({
+    required String title,
+    required List<String> steps,
+    required String videoUrl,
+    String? summary,
+  }) async {
+    final Response resp = await _api.createLesson(
+      userId: userId,
+      title: title,
+      steps: steps,
+      videoUrl: videoUrl,
+      summary: summary,
+    );
+    return Lesson.fromMap(resp.data as Map<String, dynamic>,
+        userIdFallback: userId);
+  }
+
   Future<List<Lesson>> listLessons(
       {bool? favorite,
       String sort = 'createdAt',

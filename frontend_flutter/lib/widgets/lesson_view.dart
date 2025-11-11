@@ -38,10 +38,10 @@ class LessonView extends StatelessWidget {
             onPressed: () async {
               final messenger = ScaffoldMessenger.of(context);
               try {
-                final created = await lessons.generateAndAdd(
-                  // Use the current title as query to generate a persistent lesson
-                  query: title,
-                  useGemini: false,
+                final created = await lessons.saveFromChat(
+                  title: title,
+                  steps: steps,
+                  videoUrl: videoUrl,
                 );
                 if (created != null) {
                   messenger.showSnackBar(
@@ -57,9 +57,9 @@ class LessonView extends StatelessWidget {
                   );
                 }
               } catch (e) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Erreur: $e')),
+                );
               }
             },
           ),

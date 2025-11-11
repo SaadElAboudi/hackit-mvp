@@ -62,6 +62,33 @@ class LessonsProvider extends ChangeNotifier {
     }
   }
 
+  Future<Lesson?> saveFromChat({
+    required String title,
+    required List<String> steps,
+    required String videoUrl,
+    String? summary,
+  }) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final lesson = await _service.createLessonFromChat(
+        title: title,
+        steps: steps,
+        videoUrl: videoUrl,
+        summary: summary,
+      );
+      _lessons = [lesson, ..._lessons];
+      return lesson;
+    } catch (e) {
+      _error = e.toString();
+      return null;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> toggleFavorite(String lessonId) async {
     final idx = _lessons.indexWhere((l) => l.id == lessonId);
     if (idx == -1) return;

@@ -574,6 +574,20 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
 }
 
 // ============ LESSON GENERATION & PERSISTENCE ============
+// POST /api/lessons { userId, title, steps[], videoUrl, summary? }
+app.post("/api/lessons", async (req, res) => {
+  try {
+    const { userId, title, steps, videoUrl, summary } = req.body || {};
+    if (!userId || !title || !videoUrl || !Array.isArray(steps)) {
+      return res.status(400).json({ error: "userId, title, videoUrl and steps[] are required" });
+    }
+    const saved = await saveLesson({ userId, title, summary: summary || "", steps, videoUrl });
+    // Return full saved record (already shaped by persistence)
+    return res.json(saved);
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to save lesson', detail: e?.message || 'Unknown error' });
+  }
+});
 // POST /api/generateLesson { query, userId }
 app.post("/api/generateLesson", async (req, res) => {
   const { query, userId } = req.body || {};
