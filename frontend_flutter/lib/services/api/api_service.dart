@@ -1,16 +1,31 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../analytics/analytics_manager.dart';
 
 class ApiService {
   final Dio _dio;
   final AnalyticsManager _analytics = AnalyticsManager.instance;
 
+  /// Base URL resolution priority:
+  /// 1. --dart-define=API_BASE_URL=...
+  /// 2. Fallback localhost (web & native dev)
+  static final String _baseUrl = (() {
+    final fromDefine =
+        const String.fromEnvironment('API_BASE_URL', defaultValue: '').trim();
+    if (fromDefine.isNotEmpty) return fromDefine;
+    // In dev we assume backend runs on 3000.
+    return 'http://localhost:3000';
+  })();
+
+  String get baseUrl => _baseUrl;
+
   ApiService(this._dio);
 
-  /// Convenience factory to build a default Dio client.
+  /// Convenience factory to build a default Dio client with baseUrl.
   static ApiService create() {
     final dio = Dio(BaseOptions(
+      baseUrl: _baseUrl,
       connectTimeout: const Duration(seconds: 20),
       receiveTimeout: const Duration(seconds: 30),
     ));
@@ -99,14 +114,16 @@ class ApiService {
   Future<Response> setFavorite(
       {required String lessonId, required bool favorite}) async {
     return _trackApiCall(
-        endpoint: '/api/lessons/:id/favorite',
-        apiCall: () => _dio.patch('/api/lessons/$lessonId/favorite',
-            data: {'favorite': favorite}));
+      endpoint: '/api/lessons/:id/favorite',
+      apiCall: () => _dio.patch('/api/lessons/$lessonId/favorite',
+          data: {'favorite': favorite}),
+    );
   }
 
   Future<Response> recordView({required String lessonId}) async {
     return _trackApiCall(
-        endpoint: '/api/lessons/:id/view',
-        apiCall: () => _dio.post('/api/lessons/$lessonId/view'));
+      endpoint: '/api/lessons/:id/view',
+      apiCall: () => _dio.post('/api/lessons/$lessonId/view'),
+    );
   }
 }
