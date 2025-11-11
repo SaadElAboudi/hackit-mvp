@@ -1,5 +1,6 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart' as firebase_core;
 
 // Lightweight facade to avoid hard dependency on Firebase initialization in tests
 abstract class Analytics {
@@ -109,17 +110,20 @@ class AnalyticsManager {
 
   Analytics _tryCreateAdapter() {
     try {
-      // Touching FirebaseAnalytics.instance can throw if Firebase isn't initialized
-      // Adapter defers to Firebase under the hood
+      // If no Firebase app is initialized, avoid using FirebaseAnalytics
+      final hasFirebaseApp = firebase_core.Firebase.apps.isNotEmpty;
+      if (!hasFirebaseApp) return _NoopAnalytics();
+      // Creating adapter is cheap; instance is resolved lazily in methods
       return _FirebaseAnalyticsAdapter();
     } catch (_) {
+      // Any unexpected firebase_core error -> fallback to noop
       return _NoopAnalytics();
     }
   }
 
   Future<void> initializeAnalytics() async {
     _sessionStartTime = DateTime.now();
-    await _a.logSessionStart();
+    await _safe(() => _a.logSessionStart());
     await _logAppStart();
   }
 
@@ -127,7 +131,8 @@ class AnalyticsManager {
     required String screenName,
     String? screenClass,
   }) async {
-    await _a.logScreenView(screenName: screenName, screenClass: screenClass);
+    await _safe(() =>
+        _a.logScreenView(screenName: screenName, screenClass: screenClass));
   }
 
   Future<void> _logAppStart() async {
@@ -135,15 +140,15 @@ class AnalyticsManager {
     final startupTime =
         endTime.difference(_sessionStartTime).inMilliseconds.toDouble();
 
-    await _a.logAppStartup(
-      coldStartMs: startupTime,
-      isColdStart: true,
-    );
+    await _safe(() => _a.logAppStartup(
+          coldStartMs: startupTime,
+          isColdStart: true,
+        ));
   }
 
   Future<void> disposeSession() async {
     final seconds = DateTime.now().difference(_sessionStartTime).inSeconds;
-    await _a.logSessionDuration(durationSeconds: seconds);
+    await _safe(() => _a.logSessionDuration(durationSeconds: seconds));
   }
 
   // Search Analytics
@@ -155,17 +160,17 @@ class AnalyticsManager {
     double? latency,
   }) async {
     // Use a custom event name to avoid conflicts with FirebaseAnalytics built-in logSearch signature.
-    await _a.logEvent(
-      name: 'app_search',
-      parameters: {
-        'query': query,
-        'success': isSuccess,
-        'error_message': errorMessage ?? '',
-        'result_count': resultCount ?? 0,
-        'latency_ms': latency ?? 0.0,
-        'timestamp': DateTime.now().toIso8601String(),
-      },
-    );
+    await _safe(() => _a.logEvent(
+          name: 'app_search',
+          parameters: {
+            'query': query,
+            'success': isSuccess,
+            'error_message': errorMessage ?? '',
+            'result_count': resultCount ?? 0,
+            'latency_ms': latency ?? 0.0,
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+        ));
   }
 
   Future<void> trackSearchResultClick({
@@ -174,16 +179,16 @@ class AnalyticsManager {
     required int position,
     String? videoTitle,
   }) async {
-    await _a.logEvent(
-      name: 'app_search_result_click',
-      parameters: {
-        'query': query,
-        'video_id': videoId,
-        'position': position,
-        'video_title': videoTitle ?? '',
-        'timestamp': DateTime.now().toIso8601String(),
-      },
-    );
+    await _safe(() => _a.logEvent(
+          name: 'app_search_result_click',
+          parameters: {
+            'query': query,
+            'video_id': videoId,
+            'position': position,
+            'video_title': videoTitle ?? '',
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+        ));
   }
 
   // Performance Analytics
@@ -193,12 +198,12 @@ class AnalyticsManager {
     bool isSuccess = true,
     String? errorMessage,
   }) async {
-    await _a.logApiLatency(
-      endpoint: endpoint,
-      latencyMs: latencyMs,
-      isSuccess: isSuccess,
-      errorMessage: errorMessage,
-    );
+    await _safe(() => _a.logApiLatency(
+          endpoint: endpoint,
+          latencyMs: latencyMs,
+          isSuccess: isSuccess,
+          errorMessage: errorMessage,
+        ));
   }
 
   void startPerformanceMonitoring() {
@@ -214,10 +219,10 @@ class AnalyticsManager {
     try {
       // This is a simplified version. In production, you'd want to use
       // a proper memory tracking package
-      await _a.logEvent(name: 'memory_usage', parameters: {
-        'memory_mb': 0,
-        'screen': 'current_screen',
-      });
+      await _safe(() => _a.logEvent(name: 'memory_usage', parameters: {
+            'memory_mb': 0,
+            'screen': 'current_screen',
+          }));
     } finally {
       // Schedule next tracking
       if (kReleaseMode) {
@@ -231,14 +236,23 @@ class AnalyticsManager {
     required String message,
     StackTrace? stackTrace,
   }) async {
-    await _a.logEvent(
-      name: 'app_error',
-      parameters: {
-        'error_type': errorType,
-        'message': message,
-        'stack_trace': stackTrace?.toString() ?? '',
-        'timestamp': DateTime.now().toIso8601String(),
-      },
-    );
+    await _safe(() => _a.logEvent(
+          name: 'app_error',
+          parameters: {
+            'error_type': errorType,
+            'message': message,
+            'stack_trace': stackTrace?.toString() ?? '',
+            'timestamp': DateTime.now().toIso8601String(),
+          },
+        ));
+  }
+
+  // Ensure analytics never crash the app; fallback to Noop on any failure
+  Future<void> _safe(Future<void> Function() op) async {
+    try {
+      await op();
+    } catch (_) {
+      _analytics = _NoopAnalytics();
+    }
   }
 }
