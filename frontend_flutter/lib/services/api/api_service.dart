@@ -1,21 +1,16 @@
-  Future<Response> deleteLesson({required String lessonId}) async {
-    return _trackApiCall(
-      endpoint: '/api/lessons/:id',
-      apiCall: () => _dio.delete('/api/lessons/$lessonId'),
-    );
-  }
 import '../../providers/google_auth_provider.dart';
 import 'dart:async';
 import 'package:dio/dio.dart';
 import '../analytics/analytics_manager.dart';
 
 class ApiService {
-    Future<Response> deleteLesson({required String lessonId}) async {
-      return _trackApiCall(
-        endpoint: '/api/lessons/:id',
-        apiCall: () => _dio.delete('/api/lessons/$lessonId'),
-      );
-    }
+  Future<Response> deleteLesson({required String lessonId}) async {
+    return _trackApiCall(
+      endpoint: '/api/lessons/:id',
+      apiCall: () => _dio.delete('/api/lessons/$lessonId'),
+    );
+  }
+
   /// Ajoute un interceptor pour injecter le token Google sur toutes les requêtes
   void addAuthInterceptor(GoogleAuthProvider googleAuth) {
     _dio.interceptors.add(

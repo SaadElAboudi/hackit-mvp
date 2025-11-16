@@ -1,3 +1,11 @@
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/lesson.dart';
+import '../services/api/api_service.dart';
+import '../services/lessons_service.dart';
+
+class LessonsProvider extends ChangeNotifier {
   Future<void> deleteLesson(String lessonId) async {
     final idx = lessons.indexWhere((l) => l.id == lessonId);
     if (idx == -1) return;
@@ -10,26 +18,7 @@
       notifyListeners();
     }
   }
-import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/lesson.dart';
-import '../services/api/api_service.dart';
-import '../services/lessons_service.dart';
-
-class LessonsProvider extends ChangeNotifier {
-    Future<void> deleteLesson(String lessonId) async {
-      final idx = lessons.indexWhere((l) => l.id == lessonId);
-      if (idx == -1) return;
-      try {
-        await _service.deleteLesson(lessonId: lessonId);
-        lessons.removeAt(idx);
-        notifyListeners();
-      } catch (e) {
-        error = e.toString();
-        notifyListeners();
-      }
-    }
   bool _initialized = false;
 
   /// Initializes lessons if not already loaded

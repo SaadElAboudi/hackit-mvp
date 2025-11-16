@@ -1,6 +1,3 @@
-  Future<void> deleteLesson({required String lessonId}) async {
-    await _api.deleteLesson(lessonId: lessonId);
-  }
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
@@ -10,9 +7,10 @@ import 'api/api_service.dart';
 
 /// Service wrapper around lesson persistence endpoints.
 class LessonsService {
-    Future<void> deleteLesson({required String lessonId}) async {
-      await _api.deleteLesson(lessonId: lessonId);
-    }
+  Future<void> deleteLesson({required String lessonId}) async {
+    await _api.deleteLesson(lessonId: lessonId);
+  }
+
   /// Static method for provider: returns items, total, suggestedActions from API response
   static Future<Map<String, dynamic>> getLessons() async {
     final api = ApiService.create();
