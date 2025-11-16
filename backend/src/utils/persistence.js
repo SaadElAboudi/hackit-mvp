@@ -1,140 +1,218 @@
+export async function deleteLesson(lessonId) {
+    if (!db) initPersistence();
+    db.prepare('DELETE FROM lessons WHERE id = ?').run(lessonId);
+    return { deleted: true, id: lessonId };
+}
 // Lightweight persistence layer with MongoDB (via mongoose) when MONGO_URI is set,
 // and an in-memory fallback for local/dev without Mongo.
+
+
+import Database from 'better-sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
-let isMongo = false;
-let mongoose; // lazy import
-let LessonModel; // mongoose model when available
+let db;
 
-const memory = {
-    lessons: new Map(), // id -> lesson
-};
+function getDbPath() {
+    // Place DB in backend root
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    return path.join(__dirname, '../../hackit.db');
+}
 
-export async function initPersistence() {
-    const uri = process.env.MONGO_URI || '';
-    if (!uri) {
-        isMongo = false;
-        return { ok: true, mode: 'memory' };
+export function initPersistence() {
+    if (!db) {
+        const dbPath = getDbPath();
+        db = new Database(dbPath);
+        db.pragma('journal_mode = WAL');
+        db.exec(`CREATE TABLE IF NOT EXISTS lessons (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            title TEXT NOT NULL,
+            summary TEXT,
+            steps TEXT NOT NULL,
+            videoUrl TEXT NOT NULL,
+            favorite INTEGER DEFAULT 0,
+            views INTEGER DEFAULT 0,
+            lastViewedAt TEXT,
+            createdAt TEXT NOT NULL,
+            updatedAt TEXT NOT NULL
+        )`);
+        db.exec(`CREATE TABLE IF NOT EXISTS gemini_cache (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            videoId TEXT,
+            transcriptHash TEXT,
+            summary TEXT,
+            keyTakeaways TEXT,
+            quiz TEXT,
+            createdAt TEXT NOT NULL
+        )`);
+
+
+        // Gemini cache helpers (top-level, ES module compliant)
+        function hashTranscript(transcript) {
+            return crypto.createHash('sha256').update(transcript.join('\n')).digest('hex');
+        }
+
+        function levenshtein(a, b) {
+            const matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
+            for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+            for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= a.length; i++) {
+                for (let j = 1; j <= b.length; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j - 1] + cost
+                    );
+                }
+            }
+            return matrix[a.length][b.length];
+        }
+
+        function getGeminiCacheFuzzy(transcript, threshold = 0.15) {
+            if (!db) initPersistence();
+            const rows = db.prepare('SELECT * FROM gemini_cache').all();
+            if (!rows.length) return null;
+            const inputText = transcript.join('\n');
+            let best = null;
+            let bestScore = Infinity;
+            for (const row of rows) {
+                const rowText = row.transcriptHash || '';
+                if (rowText === hashTranscript(transcript)) {
+                    return {
+                        summary: row.summary || '',
+                        keyTakeaways: row.keyTakeaways ? JSON.parse(row.keyTakeaways) : [],
+                        quiz: row.quiz ? JSON.parse(row.quiz) : [],
+                        createdAt: row.createdAt
+                    };
+                }
+                const rowTranscript = db.prepare('SELECT transcriptHash FROM gemini_cache WHERE id = ?').get(row.id)?.transcriptHash || '';
+                const dist = levenshtein(inputText, rowTranscript);
+                const norm = dist / Math.max(inputText.length, rowTranscript.length, 1);
+                if (norm < threshold && norm < bestScore) {
+                    best = row;
+                    bestScore = norm;
+                }
+            }
+            if (best) {
+                return {
+                    summary: best.summary || '',
+                    keyTakeaways: best.keyTakeaways ? JSON.parse(best.keyTakeaways) : [],
+                    quiz: best.quiz ? JSON.parse(best.quiz) : [],
+                    createdAt: best.createdAt
+                };
+            }
+            return null;
+        }
+
+        function setGeminiCache(videoId, { summary, keyTakeaways, quiz, transcript }) {
+            if (!db) initPersistence();
+            const transcriptHash = hashTranscript(transcript || []);
+            db.prepare(`INSERT OR REPLACE INTO gemini_cache (videoId, transcriptHash, summary, keyTakeaways, quiz, createdAt)
+            VALUES (?, ?, ?, ?, ?, ?)`)
+                .run(videoId, transcriptHash, summary || '', JSON.stringify(keyTakeaways || []), JSON.stringify(quiz || []), new Date().toISOString());
+        }
+
+        function getGeminiCache(videoId) {
+            if (!db) initPersistence();
+            const row = db.prepare('SELECT * FROM gemini_cache WHERE videoId = ?').get(videoId);
+            if (!row) return null;
+            return {
+                summary: row.summary || '',
+                keyTakeaways: row.keyTakeaways ? JSON.parse(row.keyTakeaways) : [],
+                quiz: row.quiz ? JSON.parse(row.quiz) : [],
+                createdAt: row.createdAt
+            };
+        }
+
     }
-    try {
-        // dynamic import so tests without deps won't crash
-        ({ default: mongoose } = await import('mongoose'));
-        await mongoose.connect(uri, {
-            dbName: process.env.MONGO_DB || undefined,
-            autoIndex: true,
-        });
-        const lessonSchema = new mongoose.Schema(
-            {
-                userId: { type: String, index: true, required: true },
-                title: { type: String, required: true },
-                summary: { type: String, default: '' },
-                steps: { type: [String], default: [] },
-                videoUrl: { type: String, required: true },
-                favorite: { type: Boolean, default: false, index: true },
-                views: { type: Number, default: 0 },
-                lastViewedAt: { type: Date, default: null, index: true },
-            },
-            { timestamps: { createdAt: true, updatedAt: true } }
-        );
-        LessonModel = mongoose.models.Lesson || mongoose.model('Lesson', lessonSchema);
-        isMongo = true;
-        return { ok: true, mode: 'mongo' };
-    } catch (e) {
-        console.warn('Mongo init failed, falling back to memory:', e?.message || e);
-        isMongo = false;
-        return { ok: false, mode: 'memory', error: e?.message };
-    }
+    return { ok: true, mode: 'sqlite' };
 }
 
 export async function saveLesson({ userId, title, summary, steps, videoUrl }) {
-    const createdAt = new Date();
-    if (isMongo && LessonModel) {
-        const doc = await LessonModel.create({ userId, title, summary, steps, videoUrl });
-        return toPublic(doc);
+    if (!db) initPersistence();
+    // Vérifier si une leçon existe déjà pour ce userId, ce titre et ce videoUrl
+    const existing = db.prepare(`SELECT * FROM lessons WHERE userId = ? AND title = ? AND videoUrl = ?`).get(userId, title, videoUrl);
+    if (existing) {
+        return toPublic(existing);
     }
-    const id = crypto.randomUUID();
-    const rec = {
-        id,
-        userId,
-        title: String(title || ''),
-        summary: String(summary || ''),
-        steps: Array.isArray(steps) ? steps.map(String) : [],
-        videoUrl: String(videoUrl || ''),
-        favorite: false,
-        views: 0,
-        lastViewedAt: null,
-        createdAt,
-        updatedAt: createdAt,
-    };
-    memory.lessons.set(id, rec);
-    return rec;
+    const id = cryptoRandomId();
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO lessons (id, userId, title, summary, steps, videoUrl, favorite, views, lastViewedAt, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, 0, 0, NULL, ?, ?)`)
+        .run(id, userId, title, summary || '', JSON.stringify(steps), videoUrl, now, now);
+    return getLessonById(id);
 }
 
 export async function setFavorite(lessonId, favorite) {
-    if (isMongo && LessonModel) {
-        const doc = await LessonModel.findByIdAndUpdate(lessonId, { favorite: !!favorite }, { new: true });
-        if (!doc) return null;
-        return toPublic(doc);
-    }
-    const rec = memory.lessons.get(lessonId);
-    if (!rec) return null;
-    rec.favorite = !!favorite;
-    rec.updatedAt = new Date();
-    return rec;
+    if (!db) initPersistence();
+    db.prepare(`UPDATE lessons SET favorite = ?, updatedAt = ? WHERE id = ?`)
+        .run(favorite ? 1 : 0, new Date().toISOString(), lessonId);
+    return getLessonById(lessonId);
 }
 
 export async function recordView(lessonId) {
-    const now = new Date();
-    if (isMongo && LessonModel) {
-        const doc = await LessonModel.findByIdAndUpdate(
-            lessonId,
-            { $inc: { views: 1 }, lastViewedAt: now },
-            { new: true }
-        );
-        if (!doc) return null;
-        return toPublic(doc);
-    }
-    const rec = memory.lessons.get(lessonId);
-    if (!rec) return null;
-    rec.views += 1;
-    rec.lastViewedAt = now;
-    rec.updatedAt = now;
-    return rec;
+    if (!db) initPersistence();
+    const now = new Date().toISOString();
+    db.prepare(`UPDATE lessons SET views = views + 1, lastViewedAt = ?, updatedAt = ? WHERE id = ?`)
+        .run(now, now, lessonId);
+    return getLessonById(lessonId);
 }
 
 export async function listLessons({ userId, favorite, sortBy = 'createdAt', order = 'desc', limit = 50, offset = 0 } = {}) {
-    if (isMongo && LessonModel) {
-        const q = { userId };
-        if (favorite !== undefined) q.favorite = !!favorite;
-        const sort = {};
-        sort[sortBy] = order === 'asc' ? 1 : -1;
-        const docs = await LessonModel.find(q).sort(sort).skip(offset).limit(limit);
-        return docs.map(toPublic);
+    if (!db) initPersistence();
+    let sql = `SELECT * FROM lessons WHERE userId = ?`;
+    const params = [userId];
+    if (favorite !== undefined) {
+        sql += ' AND favorite = ?';
+        params.push(favorite ? 1 : 0);
     }
-    const arr = Array.from(memory.lessons.values()).filter((l) => (userId ? l.userId === userId : true));
-    const filtered = favorite === undefined ? arr : arr.filter((l) => !!l.favorite === !!favorite);
-    const sorter = (a, b) => {
-        const va = a[sortBy];
-        const vb = b[sortBy];
-        const cmp = (va > vb ? 1 : va < vb ? -1 : 0);
-        return order === 'asc' ? cmp : -cmp;
-    };
-    return filtered.sort(sorter).slice(offset, offset + limit);
+    const allowedSort = ['createdAt', 'lastViewedAt', 'views'];
+    sql += ` ORDER BY ${allowedSort.includes(sortBy) ? sortBy : 'createdAt'} ${order === 'asc' ? 'ASC' : 'DESC'}`;
+    sql += ' LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+    console.log('[listLessons] DB path:', getDbPath());
+    console.log('[listLessons] SQL:', sql);
+    console.log('[listLessons] Params:', params);
+    try {
+        const rows = db.prepare(sql).all(...params);
+        return rows.map(toPublic);
+    } catch (err) {
+        console.error('[listLessons] DB error:', err);
+        throw err;
+    }
 }
 
-function toPublic(doc) {
-    const o = doc.toObject ? doc.toObject({ getters: false, virtuals: false }) : doc;
+
+function getLessonById(id) {
+    if (!db) initPersistence();
+    const row = db.prepare('SELECT * FROM lessons WHERE id = ?').get(id);
+    return row ? toPublic(row) : null;
+}
+
+function toPublic(row) {
     return {
-        id: String(o._id || o.id),
-        userId: String(o.userId),
-        title: String(o.title || ''),
-        summary: String(o.summary || ''),
-        steps: Array.isArray(o.steps) ? o.steps.map(String) : [],
-        videoUrl: String(o.videoUrl || ''),
-        favorite: !!o.favorite,
-        views: Number(o.views || 0),
-        lastViewedAt: o.lastViewedAt ? new Date(o.lastViewedAt) : null,
-        createdAt: o.createdAt ? new Date(o.createdAt) : undefined,
-        updatedAt: o.updatedAt ? new Date(o.updatedAt) : undefined,
+        id: row.id,
+        userId: row.userId,
+        title: row.title,
+        summary: row.summary,
+        steps: JSON.parse(row.steps),
+        videoUrl: row.videoUrl,
+        favorite: !!row.favorite,
+        views: row.views,
+        lastViewedAt: row.lastViewedAt ? new Date(row.lastViewedAt) : null,
+        createdAt: row.createdAt ? new Date(row.createdAt) : undefined,
+        updatedAt: row.updatedAt ? new Date(row.updatedAt) : undefined,
     };
+}
+
+function cryptoRandomId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    // fallback for Node < 16.14
+    return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+        (c ^ crypto.randomBytes(1)[0] & 15 >> c / 4).toString(16)
+    );
 }

@@ -7,6 +7,8 @@ class BaseSearchResult {
   final Map<String, dynamic> metadata;
   final List<Citation> citations;
   final List<Chapter> chapters;
+  final List<String> keyTakeaways;
+  final List<Map<String, dynamic>> quiz;
 
   const BaseSearchResult({
     required this.title,
@@ -17,6 +19,8 @@ class BaseSearchResult {
     this.metadata = const {},
     this.citations = const [],
     this.chapters = const [],
+    this.keyTakeaways = const [],
+    this.quiz = const [],
   });
 
   factory BaseSearchResult.fromMap(Map<String, dynamic> map) {
@@ -35,6 +39,12 @@ class BaseSearchResult {
       chapters: (map['chapters'] as List<dynamic>? ?? [])
           .map((e) => Chapter.fromMap(e as Map<String, dynamic>))
           .toList(),
+      keyTakeaways: (map['keyTakeaways'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      quiz: (map['quiz'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
     );
   }
 
@@ -47,6 +57,8 @@ class BaseSearchResult {
         'metadata': metadata,
         'citations': citations.map((c) => c.toMap()).toList(),
         'chapters': chapters.map((c) => c.toMap()).toList(),
+        'keyTakeaways': keyTakeaways,
+        'quiz': quiz,
       };
 }
 

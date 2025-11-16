@@ -50,15 +50,50 @@ async function fetchRemoteTranscript(videoId, videoTitle) {
 
 export async function getTranscript(videoId, videoTitle) {
     const cached = getCacheEntry(videoId);
-    if (cached) {
-        return { transcript: cached.value, cache: 'HIT' };
-    }
-    const transcript = await fetchRemoteTranscript(videoId, videoTitle);
+    const transcript = cached ? cached.value : await fetchRemoteTranscript(videoId, videoTitle);
     if (!transcript || transcript.length === 0) {
-        return { transcript: [], cache: 'MISS' };
+        return { transcript: [], cache: 'MISS', keyTakeaways: [], quiz: [], summary: '' };
     }
-    setCacheEntry(videoId, transcript);
-    return { transcript, cache: 'MISS' };
+    if (!cached) setCacheEntry(videoId, transcript);
+
+    // Fuzzy Gemini cache lookup
+    let keyTakeaways = [];
+    let quiz = [];
+    let summary = '';
+    try {
+        const { getGeminiCacheFuzzy, setGeminiCache } = await import('../utils/persistence.js');
+        const gemini = getGeminiCacheFuzzy(transcript);
+        if (gemini && gemini.keyTakeaways && gemini.quiz) {
+            keyTakeaways = gemini.keyTakeaways;
+            quiz = gemini.quiz;
+            summary = gemini.summary || '';
+        } else {
+            const { generateWithGemini } = await import('./gemini.js');
+            // Single prompt for all info
+            const prompt = `Given the following transcript, provide:\n1. A concise summary.\n2. Three key takeaways as a list.\n3. Two quiz questions and answers.\nTranscript:\n${transcript.map(t => t.text).join('\n')}`;
+            const geminiText = await generateWithGemini(prompt, 256);
+            // Parse Gemini response
+            // Expect: Summary: ...\nKey Takeaways:\n- ...\n- ...\nQuiz:\nQ: ...\nA: ...
+            const summaryMatch = geminiText.match(/Summary:(.*?)(Key Takeaways:|$)/is);
+            summary = summaryMatch ? summaryMatch[1].trim() : '';
+            const takeawaysMatch = geminiText.match(/Key Takeaways:(.*?)(Quiz:|$)/is);
+            keyTakeaways = takeawaysMatch ? takeawaysMatch[1].split(/\n|-/).map(s => s.trim()).filter(Boolean) : [];
+            const quizMatch = geminiText.match(/Quiz:(.*)$/is);
+            quiz = quizMatch ? quizMatch[1].split(/Q:/).map(q => {
+                const parts = q.split(/A:/);
+                if (parts.length === 2) {
+                    return { question: parts[0].trim(), answer: parts[1].trim() };
+                }
+                return null;
+            }).filter(Boolean) : [];
+            setGeminiCache(videoId, { summary, keyTakeaways, quiz, transcript });
+        }
+    } catch (e) {
+        keyTakeaways = [];
+        quiz = [];
+        summary = '';
+    }
+    return { transcript, cache: cached ? 'HIT' : 'MISS', keyTakeaways, quiz, summary };
 }
 
 export function clearTranscriptCache() {

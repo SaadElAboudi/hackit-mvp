@@ -56,8 +56,6 @@ class SearchProvider extends ChangeNotifier {
   String? _draftText;
   bool _draftRestored = false;
 
-  final bool _testMode;
-
   final HistoryFavoritesProvider? _historyFavs;
 
   SearchProvider({
@@ -65,15 +63,11 @@ class SearchProvider extends ChangeNotifier {
     CacheManager? cacheManager,
     SharedPreferences? prefs,
     HistoryFavoritesProvider? historyFavorites,
-    bool testMode = false,
   })  : _api = api ?? ApiService.create(),
         _cacheManager = cacheManager,
         _prefs = prefs,
-        _historyFavs = historyFavorites,
-        _testMode = testMode {
-    if (!_testMode) {
-      _initConnectivity();
-    }
+        _historyFavs = historyFavorites {
+    _initConnectivity();
     _loadMessages();
   }
 

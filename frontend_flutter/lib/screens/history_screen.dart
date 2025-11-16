@@ -5,6 +5,7 @@ import '../providers/search_provider.dart';
 import '../providers/lessons_provider.dart';
 import '../screens/lesson_detail_screen.dart';
 import '../core/responsive/adaptive_spacing.dart';
+import 'home_screen.dart';
 import '../widgets/empty_state.dart';
 
 class HistoryScreen extends StatelessWidget {
@@ -13,138 +14,142 @@ class HistoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Historique'),
-      ),
-      body:
-          Consumer3<HistoryFavoritesProvider, SearchProvider, LessonsProvider>(
-        builder: (context, hist, search, lessons, _) {
-          final items = hist.history;
-          final recentLessons = [...lessons.lessons]
-            ..removeWhere((l) => l.lastViewedAt == null)
-            ..sort((a, b) => b.lastViewedAt!.compareTo(a.lastViewedAt!));
-          if (items.isEmpty && recentLessons.isEmpty) {
-            return EmptyState(
-              icon: Icons.history_rounded,
-              title: 'Aucun historique',
-              subtitle:
-                  'Vos recherches récentes apparaîtront ici pour les relancer en un tap.',
-              actionLabel: 'Rechercher une vidéo',
-              onAction: () => Navigator.of(context).pop(),
-            );
-          }
-          return ListView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.all(AdaptiveSpacing.medium),
-            children: [
-              // Legacy local search history
-              if (items.isNotEmpty) ...[
-                ...List.generate(items.length, (index) {
-                  final e = items[index];
-                  final title = (e.title == null || e.title!.isEmpty)
-                      ? e.query
-                      : e.title!;
-                  final subtitle = e.query;
-                  return Padding(
-                    padding: EdgeInsets.only(bottom: AdaptiveSpacing.tiny),
-                    child: Card(
-                      elevation: 0,
+    return WillPopScope(
+      onWillPop: () async {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (route) => false,
+          );
+        });
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Historique'),
+        ),
+        body: Consumer3<HistoryFavoritesProvider, SearchProvider,
+            LessonsProvider>(
+          builder: (context, hist, search, lessons, _) {
+            final items = hist.history;
+            final recentLessons = [...lessons.lessons]
+              ..removeWhere((l) => l.lastViewedAt == null)
+              ..sort((a, b) => b.lastViewedAt!.compareTo(a.lastViewedAt!));
+            if (items.isEmpty && recentLessons.isEmpty) {
+              return EmptyState(
+                icon: Icons.history_rounded,
+                title: 'Aucun historique',
+                subtitle: 'Vos recherches et leçons récentes apparaîtront ici.',
+                actionLabel: 'Demander de l\'aide',
+                onAction: () {
+                  Navigator.of(context).pushNamed('/support');
+                },
+              );
+            }
+            return ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.all(AdaptiveSpacing.medium),
+              children: [
+                // Legacy local search history
+                if (items.isNotEmpty) ...[
+                  ...List.generate(items.length, (index) {
+                    final e = items[index];
+                    final title = (e.title == null || e.title!.isEmpty)
+                        ? e.query
+                        : e.title!;
+                    final subtitle = e.query;
+                    return Card(
+                      elevation: 2,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(
-                          color: scheme.outlineVariant.withValues(alpha: 0.35),
-                        ),
+                        borderRadius: BorderRadius.circular(18),
                       ),
+                      margin: const EdgeInsets.symmetric(vertical: 6),
                       child: ListTile(
                         contentPadding: EdgeInsets.symmetric(
-                          horizontal: AdaptiveSpacing.small,
-                          vertical: AdaptiveSpacing.tiny,
+                          horizontal: AdaptiveSpacing.large,
+                          vertical: AdaptiveSpacing.medium,
                         ),
-                        title: Text(title,
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(subtitle,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        leading: const Icon(Icons.history),
-                        trailing: IconButton(
-                          tooltip: 'Relancer',
-                          icon: const Icon(Icons.play_arrow_rounded),
-                          color: scheme.primary,
-                          onPressed: search.loading
-                              ? null
-                              : () {
-                                  Navigator.of(context).pop();
-                                  Future.microtask(
-                                      () => search.searchStreaming(e.query));
-                                },
+                        leading: const Icon(Icons.history, size: 26),
+                        title: Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
                         ),
-                        onTap: search.loading
-                            ? null
-                            : () {
-                                Navigator.of(context).pop();
-                                Future.microtask(
-                                    () => search.searchStreaming(e.query));
-                              },
+                        subtitle: Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
                       ),
-                    ),
-                  );
-                }),
-                SizedBox(height: AdaptiveSpacing.medium),
-              ],
+                    );
+                  }),
+                  SizedBox(height: AdaptiveSpacing.medium),
+                ],
 
-              // Recent viewed lessons
-              if (recentLessons.isNotEmpty) ...[
-                Padding(
-                  padding: EdgeInsets.only(
-                      left: AdaptiveSpacing.small,
-                      bottom: AdaptiveSpacing.small),
-                  child: const Text(
-                    'Vos leçons vues récemment',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                // Recent viewed lessons
+                if (recentLessons.isNotEmpty) ...[
+                  Padding(
+                    padding: EdgeInsets.only(
+                        left: AdaptiveSpacing.small,
+                        bottom: AdaptiveSpacing.small),
+                    child: const Text(
+                      'Vos leçons vues récemment',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-                ...recentLessons.map((l) => Padding(
-                      padding: EdgeInsets.only(bottom: AdaptiveSpacing.tiny),
-                      child: Card(
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(
-                            color:
-                                scheme.outlineVariant.withValues(alpha: 0.35),
+                  ...recentLessons.map((l) => Padding(
+                        padding: EdgeInsets.only(bottom: AdaptiveSpacing.tiny),
+                        child: Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(
+                              color:
+                                  scheme.outlineVariant.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: ListTile(
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: AdaptiveSpacing.small,
+                              vertical: AdaptiveSpacing.tiny,
+                            ),
+                            leading: const Icon(Icons.school_rounded,
+                                color: Colors.blueGrey),
+                            title: Text(l.title,
+                                maxLines: 2, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              l.videoUrl,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Text('${l.views} vues'),
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => LessonDetailScreen(lesson: l),
+                                ),
+                              );
+                              await lessons.recordView(l.id);
+                            },
                           ),
                         ),
-                        child: ListTile(
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: AdaptiveSpacing.small,
-                            vertical: AdaptiveSpacing.tiny,
-                          ),
-                          leading: const Icon(Icons.school_rounded,
-                              color: Colors.blueGrey),
-                          title: Text(l.title,
-                              maxLines: 2, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(
-                            l.videoUrl,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: Text('${l.views} vues'),
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => LessonDetailScreen(lesson: l),
-                              ),
-                            );
-                            await lessons.recordView(l.id);
-                          },
-                        ),
-                      ),
-                    )),
+                      )),
+                ],
               ],
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
-    );
+    ); // Fin WillPopScope
   }
 }

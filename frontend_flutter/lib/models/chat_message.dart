@@ -5,6 +5,21 @@ enum ChatRole { user, assistant }
 enum ChatKind { text, steps, video, citations, chapters, error }
 
 class ChatMessage {
+  Map<String, dynamic> toSqlMap() => {
+        'id': id,
+        'role': role.name,
+        'kind': kind.name,
+        'content': jsonEncode(content),
+        'ts': ts.toIso8601String(),
+      };
+
+  static ChatMessage fromSqlMap(Map<String, dynamic> map) => ChatMessage(
+        id: map['id'] as String,
+        role: ChatRole.values.firstWhere((e) => e.name == map['role']),
+        kind: ChatKind.values.firstWhere((e) => e.name == map['kind']),
+        content: jsonDecode(map['content'] as String) as Map<String, dynamic>,
+        ts: DateTime.parse(map['ts'] as String),
+      );
   final String id;
   final ChatRole role;
   final ChatKind kind;

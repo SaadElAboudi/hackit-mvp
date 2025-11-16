@@ -13,11 +13,19 @@ class LessonDetailScreen extends StatelessWidget {
       appBar: AppBar(title: Text(lesson.title)),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: LessonView(
-            title: lesson.title,
-            steps: lesson.steps,
-            videoUrl: lesson.videoUrl,
+          padding: const EdgeInsets.all(24.0),
+          child: Card(
+            elevation: 3,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: LessonView(
+                title: lesson.title,
+                steps: lesson.steps,
+                videoUrl: lesson.videoUrl,
+              ),
+            ),
           ),
         ),
       ),

@@ -9,6 +9,9 @@ class Lesson {
   final int views;
   final DateTime? lastViewedAt;
   final DateTime createdAt;
+  final int progress;
+  final String? reminder;
+  final String? guestPrompt;
 
   Lesson({
     required this.id,
@@ -21,6 +24,9 @@ class Lesson {
     required this.views,
     required this.lastViewedAt,
     required this.createdAt,
+    this.progress = 0,
+    this.reminder,
+    this.guestPrompt,
   });
 
   factory Lesson.fromMap(Map<String, dynamic> m, {String? userIdFallback}) {
@@ -39,6 +45,9 @@ class Lesson {
           : null,
       createdAt: DateTime.tryParse((m['createdAt'] as String?) ?? '') ??
           DateTime.now(),
+      progress: (m['progress'] as int?) ?? 0,
+      reminder: m['reminder'] as String?,
+      guestPrompt: m['guestPrompt'] as String?,
     );
   }
 }

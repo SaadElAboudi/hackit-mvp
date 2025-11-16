@@ -1,9 +1,44 @@
+  Future<Response> deleteLesson({required String lessonId}) async {
+    return _trackApiCall(
+      endpoint: '/api/lessons/:id',
+      apiCall: () => _dio.delete('/api/lessons/$lessonId'),
+    );
+  }
+import '../../providers/google_auth_provider.dart';
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../analytics/analytics_manager.dart';
 
 class ApiService {
+    Future<Response> deleteLesson({required String lessonId}) async {
+      return _trackApiCall(
+        endpoint: '/api/lessons/:id',
+        apiCall: () => _dio.delete('/api/lessons/$lessonId'),
+      );
+    }
+  /// Ajoute un interceptor pour injecter le token Google sur toutes les requêtes
+  void addAuthInterceptor(GoogleAuthProvider googleAuth) {
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final user = googleAuth.user;
+          final auth = await user?.authentication;
+          if (auth?.idToken != null) {
+            options.headers['Authorization'] = 'Bearer ${auth?.idToken}';
+          } else if (auth?.accessToken != null) {
+            options.headers['Authorization'] = 'Bearer ${auth?.accessToken}';
+          }
+          options.headers['x-user-id'] = user?.id;
+          if (user == null) {
+            // Mode invité : injecte seulement le userId local (géré par LessonsService)
+            // Le userId est ajouté dans les query/body par LessonsService
+          }
+          handler.next(options);
+        },
+      ),
+    );
+  }
+
   final Dio _dio;
   final AnalyticsManager _analytics = AnalyticsManager.instance;
 

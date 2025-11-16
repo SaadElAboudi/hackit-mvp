@@ -29,35 +29,41 @@ class FavoritesScreen extends StatelessWidget {
             // Show backend-persisted favorites (lessons)
             return ListView.separated(
               physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.all(AdaptiveSpacing.medium),
+              padding: EdgeInsets.all(AdaptiveSpacing.large),
               itemBuilder: (context, index) {
                 final l = lessonFavs[index];
                 return Card(
-                  elevation: 0,
+                  elevation: 2,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: scheme.outlineVariant.withValues(alpha: 0.35),
-                    ),
+                    borderRadius: BorderRadius.circular(18),
                   ),
+                  margin: const EdgeInsets.symmetric(vertical: 6),
                   child: ListTile(
                     contentPadding: EdgeInsets.symmetric(
-                      horizontal: AdaptiveSpacing.small,
-                      vertical: AdaptiveSpacing.tiny,
+                      horizontal: AdaptiveSpacing.large,
+                      vertical: AdaptiveSpacing.medium,
                     ),
-                    leading: const Icon(Icons.star, color: Colors.amber),
-                    title: Text(l.title,
-                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    leading:
+                        const Icon(Icons.star, color: Colors.amber, size: 28),
+                    title: Text(
+                      l.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
                     subtitle: Text(
                       l.videoUrl,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Retirer',
-                      icon: const Icon(Icons.close_rounded),
-                      color: scheme.error,
-                      onPressed: () => lp.toggleFavorite(l.id),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
@@ -80,8 +86,10 @@ class FavoritesScreen extends StatelessWidget {
               title: 'Aucun favori',
               subtitle:
                   'Ajoutez des vidéos à conserver pour les retrouver rapidement.',
-              actionLabel: 'Retour',
-              onAction: () => Navigator.of(context).pop(),
+              actionLabel: 'Rechercher des leçons',
+              onAction: () {
+                Navigator.of(context).pushNamed('/search');
+              },
             );
           }
           return ListView.separated(
@@ -110,17 +118,17 @@ class FavoritesScreen extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  trailing: IconButton(
-                    tooltip: 'Retirer',
-                    icon: const Icon(Icons.close_rounded),
-                    color: scheme.error,
-                    onPressed: () => favs.toggleFavorite(
-                      videoId: f.id,
-                      title: f.title,
-                      channel: f.channel,
-                      videoUrl: f.videoUrl,
-                    ),
-                  ),
+                  // trailing: IconButton(
+                  //   tooltip: 'Retirer',
+                  //   icon: const Icon(Icons.close_rounded),
+                  //   color: scheme.error,
+                  //   onPressed: () => favs.toggleFavorite(
+                  //     videoId: f.id,
+                  //     title: f.title,
+                  //     channel: f.channel,
+                  //     videoUrl: f.videoUrl,
+                  //   ),
+                  // ),
                   onTap: () => _openUrl(f.videoUrl ?? ''),
                 ),
               );

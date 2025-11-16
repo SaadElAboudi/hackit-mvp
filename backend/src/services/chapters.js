@@ -44,7 +44,7 @@ export async function getChapters(videoId, videoTitle, { desired } = {}) {
     if (cached) {
         return { chapters: cached, cache: 'HIT' };
     }
-    const { transcript } = await getTranscript(videoId, videoTitle);
+    const { transcript, keyTakeaways, quiz } = await getTranscript(videoId, videoTitle);
     // Determine desired chapter count from explicit param or inferrable title text
     let desiredCount = null;
     if (Number.isInteger(desired) && desired > 0) desiredCount = desired;
@@ -68,7 +68,7 @@ export async function getChapters(videoId, videoTitle, { desired } = {}) {
     // Ensure ascending order only; do not enforce arbitrary min/max counts
     const normalized = chapters.sort((a, b) => a.startSec - b.startSec);
     setCache(key, normalized);
-    return { chapters: normalized, cache: 'MISS' };
+    return { chapters: normalized, cache: 'MISS', keyTakeaways, quiz };
 }
 
 export function clearChapterCache() { chapterCache.clear(); }

@@ -1,3 +1,56 @@
+import { deleteLesson } from "./utils/persistence.js";
+// DELETE /api/lessons/:id
+app.delete("/api/lessons/:id", userIdMiddleware, async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  try {
+    await deleteLesson(id);
+    return res.json({ deleted: true, id });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to delete lesson', detail: e?.message || 'Unknown error' });
+  }
+});
+import { initPersistence, listLessons, saveLesson, setFavorite, recordView } from "./utils/persistence.js";
+import { OAuth2Client } from 'google-auth-library';
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Middleware pour exiger une authentification Google ou un token Google
+async function requireAuth(req, res, next) {
+  // Logging of authorization header removed for security.
+  // Vérifie d'abord la session Passport
+  if (req.isAuthenticated?.() && req.user) {
+    return next();
+  }
+
+  // Vérifie le token Google envoyé en header
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+      if (payload && payload.sub) {
+        req.user = {
+          id: payload.sub,
+          email: payload.email,
+          displayName: payload.name,
+          photo: payload.picture,
+          provider: 'google',
+        };
+        return next();
+      }
+    } catch (err) {
+      // Token invalide
+      return res.status(401).json({ error: 'Invalid Google token', detail: err.message });
+    }
+  }
+
+  // Sinon, refuse
+  res.status(401).json({ error: 'Authentication required' });
+}
 import { pathToFileURL } from "url";
 
 import axios from "axios";
@@ -10,17 +63,74 @@ import morgan from "morgan";
 import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
 import { getTranscript } from "./services/transcript.js";
 import { getChapters, extractDesiredChapters } from "./services/chapters.js";
-import { initPersistence, saveLesson, setFavorite, recordView, listLessons } from "./utils/persistence.js";
+
+
+import { userIdMiddleware } from "./utils/userIdMiddleware.js";
+import passport from "./utils/passportGoogle.js";
+import session from "express-session";
 
 dotenv.config({ quiet: true });
 
+
+
 const app = express();
+// CORS middleware at the very top
+// Restrict CORS in production, allow all in dev
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? [process.env.FRONTEND_ORIGIN || 'https://yourfrontend.com']
+    : true,
+  credentials: true
+}));
 app.use(express.json());
-app.use(cors());
-// Silence noisy request logs during tests to avoid breaking node:test TAP output
-if (process.env.NODE_ENV !== "test") {
+// Simple rate limiter for expensive endpoints
+const rateLimit = {};
+function simpleRateLimit(key, maxPerMinute = 30) {
+  const now = Date.now();
+  if (!rateLimit[key]) rateLimit[key] = [];
+  rateLimit[key] = rateLimit[key].filter(ts => now - ts < 60000);
+  if (rateLimit[key].length >= maxPerMinute) return false;
+  rateLimit[key].push(now);
+  return true;
+}
+// ...existing code...
+// Route GET /api/lessons accessible sans requireAuth
+// Removed duplicate /api/lessons route. Only the protected version remains below.
+// Session pour Passport
+app.use(session({
+  secret: process.env.SESSION_SECRET || "dev_secret",
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 3600 * 24 * 365 }
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+// Enable concise logging in all non-test environments
+if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
+// ============ AUTHENTIFICATION GOOGLE ============
+// Lance le flow OAuth Google
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+// Callback Google OAuth
+app.get('/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: '/' }),
+  (req, res) => {
+    // Redirige vers le frontend avec le userId en paramètre (à adapter selon l'URL du frontend)
+    const userId = req.user?.id;
+    res.redirect(`/auth-success?userId=${userId}`);
+  }
+);
+
+// Endpoint pour récupérer l'utilisateur authentifié
+app.get('/api/me', (req, res) => {
+  if (req.isAuthenticated?.() && req.user) {
+    res.json({ ok: true, user: req.user });
+  } else {
+    res.status(401).json({ ok: false, error: 'Not authenticated' });
+  }
+});
 
 const USE_GEMINI_ENV = (process.env.USE_GEMINI || "false") === "true";
 const USE_GEMINI_REFORMULATION = (process.env.USE_GEMINI_REFORMULATION || "false") === "true";
@@ -274,6 +384,11 @@ app.get("/health/extended", (_req, res) => {
 });
 
 app.post("/api/search", async (req, res) => {
+  // Rate limit by IP
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  if (!simpleRateLimit(`search:${ip}`, 20)) {
+    return res.status(429).json({ error: 'Too many requests, slow down.' });
+  }
   const { query } = req.body;
   if (!query) return res.status(400).json({ error: "query is required" });
 
@@ -388,6 +503,11 @@ app.post("/api/search", async (req, res) => {
 // Server-Sent Events streaming endpoint for progressive UI updates
 // Usage: GET /api/search/stream?query=...
 app.get("/api/search/stream", async (req, res) => {
+  // Rate limit by IP
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  if (!simpleRateLimit(`stream:${ip}`, 10)) {
+    return res.status(429).json({ error: 'Too many requests, slow down.' });
+  }
   const query = String(req.query.query || "").trim();
   if (!query) return res.status(400).json({ error: "query is required" });
 
@@ -531,10 +651,18 @@ app.get("/api/transcript", async (req, res) => {
   if (!videoId) return res.status(400).json({ error: 'videoId is required' });
   try {
     const { transcript, cache } = await getTranscript(videoId, title);
+    // Optional key takeaways and quiz fields
+    const keyTakeaways = transcript ? transcript.slice(0, 3).map(seg => seg.text) : [];
+    const quiz = transcript ? [{ question: 'What is the first step?', answer: transcript[0]?.text }] : [];
     res.setHeader('X-Cache', cache);
-    return res.json({ videoId, transcript, cached: cache === 'HIT' });
+    return res.json({ videoId, transcript, cached: cache === 'HIT', keyTakeaways, quiz });
   } catch (e) {
-    return res.status(500).json({ error: 'Transcript fetch failed', detail: e?.message || 'Unknown error' });
+    return res.status(500).json({
+      error: 'Transcript fetch failed', detail: e?.message || 'Unknown error', suggestedActions: [
+        { label: 'Retry', action: '/api/transcript' },
+        { label: 'Request help', action: '/support' }
+      ]
+    });
   }
 });
 
@@ -546,10 +674,18 @@ app.get("/api/chapters", async (req, res) => {
   if (!videoId) return res.status(400).json({ error: 'videoId is required' });
   try {
     const { chapters, cache } = await getChapters(videoId, title, { desired });
+    // Optional key takeaways and quiz fields
+    const keyTakeaways = chapters ? chapters.slice(0, 3).map(ch => ch.title) : [];
+    const quiz = chapters ? [{ question: 'What is the main chapter?', answer: chapters[0]?.title }] : [];
     res.setHeader('X-Cache', cache);
-    return res.json({ videoId, chapters, cached: cache === 'HIT', desired: Number.isFinite(desired) ? desired : null });
+    return res.json({ videoId, chapters, cached: cache === 'HIT', desired: Number.isFinite(desired) ? desired : null, keyTakeaways, quiz });
   } catch (e) {
-    return res.status(500).json({ error: 'Chapterization failed', detail: e?.message || 'Unknown error' });
+    return res.status(500).json({
+      error: 'Chapterization failed', detail: e?.message || 'Unknown error', suggestedActions: [
+        { label: 'Retry', action: '/api/chapters' },
+        { label: 'Request help', action: '/support' }
+      ]
+    });
   }
 });
 
@@ -561,36 +697,57 @@ export function createApp() {
 // Use URL-safe comparison to handle paths with spaces (e.g., "app howto")
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const PORT = process.env.PORT || 3000;
-  initPersistence().then((info) => {
-    console.log(`Persistence: ${info.mode}`);
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
-      console.log(`Mock mode: ${(process.env.MOCK_MODE || 'true') === 'true' ? 'enabled' : 'disabled'}`);
-      console.log(`Gemini: ${USE_GEMINI_ENV ? `enabled (${GEMINI_MODEL}, timeout=${GEMINI_TIMEOUT_MS}ms)` : 'disabled'}`);
-      console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
-    });
+  const info = initPersistence();
+  console.log(`Persistence: ${info.mode}`);
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
+    console.log(`Mock mode: ${(process.env.MOCK_MODE || 'true') === 'true' ? 'enabled' : 'disabled'}`);
+    console.log(`Gemini: ${USE_GEMINI_ENV ? `enabled (${GEMINI_MODEL}, timeout=${GEMINI_TIMEOUT_MS}ms)` : 'disabled'}`);
+    console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
   });
 }
 
 // ============ LESSON GENERATION & PERSISTENCE ============
-// POST /api/lessons { userId, title, steps[], videoUrl, summary? }
-app.post("/api/lessons", async (req, res) => {
+// POST /api/lessons { title, steps[], videoUrl, summary? } (userId via middleware)
+app.post("/api/lessons", userIdMiddleware, async (req, res) => {
+  // Only log userId, not full headers
+  console.log('[POST /api/lessons] userId:', req.userId);
   try {
-    const { userId, title, steps, videoUrl, summary } = req.body || {};
-    if (!userId || !title || !videoUrl || !Array.isArray(steps)) {
-      return res.status(400).json({ error: "userId, title, videoUrl and steps[] are required" });
+    const { title, steps, videoUrl, summary } = req.body || {};
+    const userId = req.userId;
+    // Advanced validation
+    if (!userId || typeof userId !== 'string' || userId.length < 3 || userId.length > 128) {
+      return res.status(400).json({ error: "Invalid userId" });
+    }
+    // Autoriser les userId anonymes ou numériques
+    const isAnon = userId.startsWith('anon_');
+    const isNumeric = /^[0-9]+$/.test(userId);
+    const isAlphaNum = /^[a-zA-Z0-9_\-]+$/.test(userId);
+    if (!(isAnon || isNumeric || isAlphaNum)) {
+      return res.status(400).json({ error: "userId must be anon_, numeric, or alphanum" });
+    }
+    if (!title || typeof title !== 'string' || title.length < 2 || title.length > 120) {
+      return res.status(400).json({ error: "Title must be 2-120 chars" });
+    }
+    if (!videoUrl || typeof videoUrl !== 'string' || !/^https?:\/\/.{8,}/.test(videoUrl)) {
+      return res.status(400).json({ error: "Invalid videoUrl" });
+    }
+    if (!Array.isArray(steps) || steps.length === 0 || steps.length > 20 || !steps.every(s => typeof s === 'string' && s.length > 1 && s.length < 200)) {
+      return res.status(400).json({ error: "steps[] must be 1-20 non-empty strings, each 2-200 chars" });
     }
     const saved = await saveLesson({ userId, title, summary: summary || "", steps, videoUrl });
-    // Return full saved record (already shaped by persistence)
     return res.json(saved);
   } catch (e) {
-    return res.status(500).json({ error: 'Failed to save lesson', detail: e?.message || 'Unknown error' });
+    console.error('[POST /api/lessons] Internal error:', e?.message || e);
+    return res.status(500).json({ error: 'Failed to save lesson', detail: 'Internal error' });
   }
 });
-// POST /api/generateLesson { query, userId }
-app.post("/api/generateLesson", async (req, res) => {
-  const { query, userId } = req.body || {};
+// POST /api/generateLesson { query } (userId via middleware)
+app.post("/api/generateLesson", userIdMiddleware, async (req, res) => {
+  console.log('[POST /api/generateLesson] Authorization:', req.headers.authorization, 'userId:', req.userId);
+  const { query } = req.body || {};
+  const userId = req.userId;
   if (!query || !userId) return res.status(400).json({ error: "query and userId are required" });
 
   try {
@@ -665,34 +822,38 @@ app.post("/api/generateLesson", async (req, res) => {
 
 // PATCH /api/lessons/:id/favorite { favorite: true|false }
 app.patch("/api/lessons/:id/favorite", async (req, res) => {
+  console.log('[PATCH /api/lessons/:id/favorite] Authorization:', req.headers.authorization, 'userId:', req.userId);
   const id = String(req.params.id || '').trim();
   const favorite = !!req.body?.favorite;
-  if (!id) return res.status(400).json({ error: 'id is required' });
+  if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id is required' });
   try {
     const updated = await setFavorite(id, favorite);
     if (!updated) return res.status(404).json({ error: 'Not found' });
     return res.json(updated);
   } catch (e) {
+    console.error('[PATCH /api/lessons/:id/favorite] Internal error:', e?.message || e);
     return res.status(500).json({ error: 'Failed to update favorite', detail: e?.message || 'Unknown error' });
   }
 });
 
 // POST /api/lessons/:id/view -> record history entry (views++, lastViewedAt=now)
 app.post("/api/lessons/:id/view", async (req, res) => {
+  console.log('[POST /api/lessons/:id/view] Authorization:', req.headers.authorization, 'userId:', req.userId);
   const id = String(req.params.id || '').trim();
-  if (!id) return res.status(400).json({ error: 'id is required' });
+  if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id is required' });
   try {
     const updated = await recordView(id);
     if (!updated) return res.status(404).json({ error: 'Not found' });
     return res.json(updated);
   } catch (e) {
+    console.error('[POST /api/lessons/:id/view] Internal error:', e?.message || e);
     return res.status(500).json({ error: 'Failed to record view', detail: e?.message || 'Unknown error' });
   }
 });
 
-// GET /api/lessons?userId=...&favorite=true|false&sort=createdAt|lastViewedAt&order=desc|asc
-app.get("/api/lessons", async (req, res) => {
-  const userId = String(req.query.userId || '').trim();
+// GET /api/lessons?favorite=true|false&sort=createdAt|lastViewedAt&order=desc|asc (userId via middleware)
+app.get("/api/lessons", userIdMiddleware, async (req, res) => {
+  const userId = req.userId;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   const favorite = req.query.favorite === undefined ? undefined : String(req.query.favorite).toLowerCase() === 'true';
   const sortBy = ['createdAt', 'lastViewedAt', 'views'].includes(String(req.query.sort || '')) ? String(req.query.sort) : 'createdAt';
@@ -700,9 +861,27 @@ app.get("/api/lessons", async (req, res) => {
   const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10)));
   const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10));
   try {
-    const items = await listLessons({ userId, favorite, sortBy, order, limit, offset });
-    return res.json({ items, total: items.length });
+    let items = await listLessons({ userId, favorite, sortBy, order, limit, offset });
+    // Add progress/reminder fields for My Learning Journey pivot
+    items = items.map(lesson => ({
+      ...lesson,
+      progress: lesson.progress || 0, // Placeholder, to be implemented
+      reminder: lesson.reminder || null, // Placeholder, to be implemented
+      // Guest mode prompt
+      guestPrompt: (!req.isAuthenticated?.() && !req.user) ? 'Save progress or unlock premium features by signing in.' : undefined
+    }));
+    // Suggested actions for empty/error states
+    const suggestedActions = items.length === 0 ? [
+      { label: 'Search for a lesson', action: '/api/search' },
+      { label: 'Request help', action: '/support' }
+    ] : undefined;
+    return res.json({ items, total: items.length, suggestedActions });
   } catch (e) {
-    return res.status(500).json({ error: 'Failed to list lessons', detail: e?.message || 'Unknown error' });
+    return res.status(500).json({
+      error: 'Failed to list lessons', detail: e?.message || 'Unknown error', suggestedActions: [
+        { label: 'Retry', action: '/api/lessons' },
+        { label: 'Request help', action: '/support' }
+      ]
+    });
   }
 });

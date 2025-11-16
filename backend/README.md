@@ -1,3 +1,24 @@
+# Authentification Google (OAuth)
+
+Pour activer l’authentification Google côté backend :
+
+1. Installez les dépendances nécessaires :
+  ```bash
+  npm install passport passport-google-oauth20 express-session
+  ```
+
+2. Configurez un projet Google Cloud et récupérez un client ID/secret OAuth2.
+3. Ajoutez les variables d’environnement suivantes dans `.env` :
+  ```env
+  GOOGLE_CLIENT_ID=xxx
+  GOOGLE_CLIENT_SECRET=yyy
+  GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
+  SESSION_SECRET=un_secret_long
+  ```
+
+4. Ajoutez la configuration Passport et les routes d’authentification dans `src/index.js`.
+
+5. Protégez les endpoints nécessitant un userId authentifié.
 # Hackit MVP Backend
 
 Backend HTTP API that searches YouTube for a how-to video and returns a concise 5-step summary. It supports mock mode, official YouTube API, a yt-search fallback, and optional Gemini reformulation/summary.

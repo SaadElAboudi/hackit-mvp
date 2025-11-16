@@ -45,7 +45,14 @@ class _HomeMobileLayout extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: bg,
         elevation: 0,
-        title: const Text('Hackit'),
+        title: const Text(
+          'Hackit',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
         actions: const [
           Padding(padding: EdgeInsets.only(right: 12), child: HealthBadge()),
         ],
@@ -55,7 +62,7 @@ class _HomeMobileLayout extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: AdaptiveSpacing.medium,
+                horizontal: AdaptiveSpacing.large,
               ),
               child: _ChatMessagesList(),
             ),
@@ -71,12 +78,16 @@ class _HomeMobileLayout extends StatelessWidget {
                 )
               ],
             ),
-            child: ChatInput(
-              onSearch: (query) => provider.searchStreaming(query),
-              disabled: provider.loading,
-              onRegenerate: provider.regenerateLast,
-              onEditLast: () {},
-              getLastQuery: () => provider.lastQuery ?? '',
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              child: ChatInput(
+                onSearch: (query) => provider.searchStreaming(query),
+                disabled: provider.loading,
+                onRegenerate: provider.regenerateLast,
+                onEditLast: () {},
+                getLastQuery: () => provider.lastQuery ?? '',
+              ),
             ),
           ),
         ],
@@ -112,7 +123,38 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<SearchProvider>();
-    final messages = provider.messages;
+    // Filtrage des messages vides pour éviter les bulles grises
+    final messages = provider.messages.where((m) {
+      if (m.role.name == 'user') {
+        final text = (m.content['text'] ?? '') as String;
+        return text.trim().isNotEmpty;
+      }
+      if (m.kind == ChatKind.text) {
+        final text = (m.content['text'] ?? '') as String;
+        return text.trim().isNotEmpty;
+      }
+      if (m.kind == ChatKind.steps) {
+        final steps = m.content['steps'];
+        return steps is List && steps.isNotEmpty;
+      }
+      if (m.kind == ChatKind.video) {
+        final url = (m.content['videoUrl'] ?? '') as String;
+        return url.trim().isNotEmpty;
+      }
+      if (m.kind == ChatKind.citations) {
+        final c = m.content['citations'];
+        return c is List && c.isNotEmpty;
+      }
+      if (m.kind == ChatKind.chapters) {
+        final c = m.content['chapters'];
+        return c is List && c.isNotEmpty;
+      }
+      if (m.kind == ChatKind.error) {
+        final msg = (m.content['message'] ?? '') as String;
+        return msg.trim().isNotEmpty;
+      }
+      return true;
+    }).toList();
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     // Auto-scroll when messages appended

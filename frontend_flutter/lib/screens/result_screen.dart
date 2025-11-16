@@ -9,6 +9,7 @@ import '../models/base_search_result.dart';
 import '../widgets/citations_view.dart';
 import '../widgets/chapters_view.dart';
 import '../providers/search_provider.dart';
+import '../widgets/empty_state.dart';
 
 class ResultScreen extends StatelessWidget {
   const ResultScreen({super.key});
@@ -31,41 +32,100 @@ class _ResultMobileLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final result = _getResult(context);
 
+    final isEmpty = result.title.isEmpty &&
+        result.steps.isEmpty &&
+        result.citations.isEmpty &&
+        result.chapters.isEmpty;
     return Scaffold(
       appBar: AppBar(title: const Text('Résultats')),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(AdaptiveSpacing.medium),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SummaryView(title: result.title, steps: result.steps),
-            if (result.citations.isNotEmpty) ...[
-              SizedBox(height: AdaptiveSpacing.medium),
-              CitationsView(citations: result.citations),
-            ],
-            if (result.chapters.isNotEmpty) ...[
-              SizedBox(height: AdaptiveSpacing.medium),
-              ChaptersView(
-                  chapters: result.chapters, videoUrl: result.videoUrl),
-            ],
-            SizedBox(height: AdaptiveSpacing.small),
-            VideoCard(title: result.title, videoUrl: result.videoUrl),
-            SizedBox(height: AdaptiveSpacing.medium),
-            if (result.source.isNotEmpty)
-              Center(
-                child: Text(
-                  'Source: ${result.source}',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: SizeConfig.adaptiveFontSize(12),
-                  ),
-                ),
+      body: isEmpty
+          ? EmptyState(
+              icon: Icons.search_off_rounded,
+              title: 'Aucun résultat',
+              subtitle: 'Essayez une autre recherche ou demandez de l\'aide.',
+              actionLabel: 'Demander de l\'aide',
+              onAction: () {
+                Navigator.of(context).pushNamed('/support');
+              },
+            )
+          : SingleChildScrollView(
+              padding: EdgeInsets.all(AdaptiveSpacing.medium),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SummaryView(title: result.title, steps: result.steps),
+                  if (result.keyTakeaways.isNotEmpty) ...[
+                    SizedBox(height: AdaptiveSpacing.medium),
+                    Card(
+                      elevation: 2,
+                      child: Padding(
+                        padding: EdgeInsets.all(AdaptiveSpacing.medium),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Key Takeaways',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16)),
+                            ...result.keyTakeaways.map((t) => Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: Text('• $t'),
+                                ))
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (result.quiz.isNotEmpty) ...[
+                    SizedBox(height: AdaptiveSpacing.medium),
+                    Card(
+                      elevation: 2,
+                      child: Padding(
+                        padding: EdgeInsets.all(AdaptiveSpacing.medium),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Quiz Yourself',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16)),
+                            ...result.quiz.map((q) => Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 4.0),
+                                  child: Text(
+                                      'Q: ${q['question']}\nA: ${q['answer']}'),
+                                ))
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (result.citations.isNotEmpty) ...[
+                    SizedBox(height: AdaptiveSpacing.medium),
+                    CitationsView(citations: result.citations),
+                  ],
+                  if (result.chapters.isNotEmpty) ...[
+                    SizedBox(height: AdaptiveSpacing.medium),
+                    ChaptersView(
+                        chapters: result.chapters, videoUrl: result.videoUrl),
+                  ],
+                  SizedBox(height: AdaptiveSpacing.small),
+                  VideoCard(title: result.title, videoUrl: result.videoUrl),
+                  SizedBox(height: AdaptiveSpacing.medium),
+                  if (result.source.isNotEmpty)
+                    Center(
+                      child: Text(
+                        'Source: ${result.source}',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: SizeConfig.adaptiveFontSize(12),
+                        ),
+                      ),
+                    ),
+                  SizedBox(height: AdaptiveSpacing.large),
+                  _BackButton(),
+                ],
               ),
-            SizedBox(height: AdaptiveSpacing.large),
-            _BackButton(),
-          ],
-        ),
-      ),
+            ),
     );
   }
 }
@@ -237,14 +297,19 @@ class _ResultDesktopLayout extends StatelessWidget {
 class _BackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton.icon(
-      onPressed: () => Navigator.pop(context),
-      icon: const Icon(Icons.arrow_back),
-      label: Text(
-        '← Nouvelle recherche',
-        style: TextStyle(
-          fontSize: SizeConfig.adaptiveFontSize(14),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12.0),
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(180, 44),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
+        onPressed: () => Navigator.pop(context),
+        icon: const Icon(Icons.arrow_back, size: 20),
+        label: const Text('← Nouvelle recherche'),
       ),
     );
   }
