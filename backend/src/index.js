@@ -1,17 +1,24 @@
 import { deleteLesson } from "./utils/persistence.js";
-// DELETE /api/lessons/:id
-app.delete("/api/lessons/:id", userIdMiddleware, async (req, res) => {
-  const id = String(req.params.id || '').trim();
-  if (!id) return res.status(400).json({ error: 'id is required' });
-  try {
-    await deleteLesson(id);
-    return res.json({ deleted: true, id });
-  } catch (e) {
-    return res.status(500).json({ error: 'Failed to delete lesson', detail: e?.message || 'Unknown error' });
-  }
-});
 import { initPersistence, listLessons, saveLesson, setFavorite, recordView } from "./utils/persistence.js";
 import { OAuth2Client } from 'google-auth-library';
+import { pathToFileURL } from "url";
+
+import axios from "axios";
+import cors from "cors";
+import dotenv from "dotenv";
+import express from "express";
+import morgan from "morgan";
+// Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
+
+import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
+import { getTranscript } from "./services/transcript.js";
+import { getChapters, extractDesiredChapters } from "./services/chapters.js";
+
+
+import { userIdMiddleware } from "./utils/userIdMiddleware.js";
+import passport from "./utils/passportGoogle.js";
+import session from "express-session";
+
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Middleware pour exiger une authentification Google ou un token Google
@@ -51,23 +58,7 @@ async function requireAuth(req, res, next) {
   // Sinon, refuse
   res.status(401).json({ error: 'Authentication required' });
 }
-import { pathToFileURL } from "url";
 
-import axios from "axios";
-import cors from "cors";
-import dotenv from "dotenv";
-import express from "express";
-import morgan from "morgan";
-// Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
-
-import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
-import { getTranscript } from "./services/transcript.js";
-import { getChapters, extractDesiredChapters } from "./services/chapters.js";
-
-
-import { userIdMiddleware } from "./utils/userIdMiddleware.js";
-import passport from "./utils/passportGoogle.js";
-import session from "express-session";
 
 dotenv.config({ quiet: true });
 
@@ -122,6 +113,17 @@ app.get('/auth/google/callback',
     res.redirect(`/auth-success?userId=${userId}`);
   }
 );
+// DELETE /api/lessons/:id
+app.delete("/api/lessons/:id", userIdMiddleware, async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  try {
+    await deleteLesson(id);
+    return res.json({ deleted: true, id });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to delete lesson', detail: e?.message || 'Unknown error' });
+  }
+});
 
 // Endpoint pour récupérer l'utilisateur authentifié
 app.get('/api/me', (req, res) => {
