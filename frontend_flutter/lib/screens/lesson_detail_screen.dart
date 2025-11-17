@@ -24,6 +24,8 @@ class LessonDetailScreen extends StatelessWidget {
                 title: lesson.title,
                 steps: lesson.steps,
                 videoUrl: lesson.videoUrl,
+                transcript: lesson.summary.isNotEmpty ? [lesson.summary] : null,
+                chapters: lesson.steps.isNotEmpty ? lesson.steps : null,
               ),
             ),
           ),

@@ -98,145 +98,150 @@ class _LessonTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final lp = context.read<LessonsProvider>();
     return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: AdaptiveSpacing.large,
-              vertical: AdaptiveSpacing.medium,
-            ),
-            title: Text(
-              lesson.title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      shadowColor: Colors.black12,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: AdaptiveSpacing.large,
+                vertical: AdaptiveSpacing.medium,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _subtitle(lesson),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w400,
-                  ),
+              title: Text(
+                lesson.title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.3,
                 ),
-                if (lesson.progress > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2.0),
-                    child: LinearProgressIndicator(
-                      value: lesson.progress / 100.0,
-                      minHeight: 6,
-                      backgroundColor: Colors.grey.shade200,
-                      color: Colors.blueAccent,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _subtitle(lesson),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
-                if (lesson.reminder != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      'Rappel: ${lesson.reminder}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.orange,
-                        fontWeight: FontWeight.w500,
+                  if (lesson.progress > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2.0),
+                      child: LinearProgressIndicator(
+                        value: lesson.progress / 100.0,
+                        minHeight: 6,
+                        backgroundColor: Colors.grey.shade200,
+                        color: Colors.blueAccent,
                       ),
                     ),
-                  ),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  tooltip: lesson.favorite
-                      ? 'Retirer des favoris'
-                      : 'Ajouter aux favoris',
-                  icon: Icon(
-                    lesson.favorite
-                        ? Icons.star_rounded
-                        : Icons.star_border_rounded,
-                    color: lesson.favorite ? Colors.amber : Colors.grey,
-                    size: 28,
-                  ),
-                  onPressed: () => lp.toggleFavorite(lesson.id),
-                ),
-                IconButton(
-                  tooltip: 'Supprimer la leçon',
-                  icon: const Icon(Icons.delete_outline,
-                      color: Colors.redAccent, size: 26),
-                  onPressed: () async {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Supprimer la leçon ?'),
-                        content: const Text('Cette action est irréversible.'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(false),
-                            child: const Text('Annuler'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(true),
-                            child: const Text('Supprimer'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirm == true) {
-                      await lp.deleteLesson(lesson.id);
-                    }
-                  },
-                ),
-              ],
-            ),
-            onTap: () async {
-              WidgetsBinding.instance.addPostFrameCallback((_) async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => LessonDetailScreen(lesson: lesson),
-                  ),
-                );
-                await lp.recordView(lesson.id);
-              });
-            },
-          ),
-          if (lesson.guestPrompt != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.yellow.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.lock_outline, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Expanded(
+                  if (lesson.reminder != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
                       child: Text(
-                        lesson.guestPrompt!,
+                        'Rappel: ${lesson.reminder}',
                         style: const TextStyle(
+                          fontSize: 13,
                           color: Colors.orange,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
-                  ],
+                ],
+              ),
+              trailing: Wrap(
+                spacing: 0,
+                children: [
+                  IconButton(
+                    tooltip: lesson.favorite
+                        ? 'Retirer des favoris'
+                        : 'Ajouter aux favoris',
+                    icon: Icon(
+                      lesson.favorite
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      color: lesson.favorite ? Colors.amber : Colors.grey,
+                      size: 28,
+                    ),
+                    onPressed: () => lp.toggleFavorite(lesson.id),
+                  ),
+                  IconButton(
+                    tooltip: 'Supprimer la leçon',
+                    icon: const Icon(Icons.delete_outline,
+                        color: Colors.redAccent, size: 26),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Supprimer la leçon ?'),
+                          content: const Text('Cette action est irréversible.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Annuler'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text('Supprimer'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await lp.deleteLesson(lesson.id);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              onTap: () async {
+                WidgetsBinding.instance.addPostFrameCallback((_) async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => LessonDetailScreen(lesson: lesson),
+                    ),
+                  );
+                  await lp.recordView(lesson.id);
+                });
+              },
+            ),
+            if (lesson.guestPrompt != null)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.yellow.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_outline, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          lesson.guestPrompt!,
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

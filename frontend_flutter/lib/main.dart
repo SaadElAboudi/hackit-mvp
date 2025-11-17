@@ -50,7 +50,7 @@ class _MyAppState extends State<MyApp> {
       providers: [
         ChangeNotifierProvider(create: (_) => GoogleAuthProvider()),
         ChangeNotifierProvider(
-          create: (_) => ThemeProvider(getIt<SharedPreferences>()),
+          create: (_) => ThemeProvider(),
         ),
         ChangeNotifierProvider(
           create: (_) => HistoryFavoritesProvider(getIt<SharedPreferences>()),
@@ -83,7 +83,8 @@ class _MyAppState extends State<MyApp> {
                   final hist = context.read<HistoryFavoritesProvider>();
                   final lessons = context.read<LessonsProvider>();
                   // Ajoute l'interceptor d'auth Google sur l'ApiService
-                  lessons.service.api.addAuthInterceptor(Provider.of<GoogleAuthProvider>(context, listen: false));
+                  lessons.service.api.addAuthInterceptor(
+                      Provider.of<GoogleAuthProvider>(context, listen: false));
                   hist.linkLessons(lessons);
                   if (!widget.skipLessonsInit) {
                     lessons.initIfNeeded();

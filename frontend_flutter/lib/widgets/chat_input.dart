@@ -136,84 +136,105 @@ class _ChatInputState extends State<ChatInput> {
         AdaptiveSpacing.large,
         AdaptiveSpacing.medium,
       ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest.withValues(
-              alpha: scheme.brightness == Brightness.dark ? 0.22 : 0.65),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: 0.35),
-            width: 1.2,
+      child: Material(
+        elevation: 6,
+        borderRadius: BorderRadius.circular(22),
+        shadowColor: Colors.black12,
+        child: Container(
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withValues(
+                alpha: scheme.brightness == Brightness.dark ? 0.18 : 0.75),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.25),
+              width: 1.1,
+            ),
           ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: AdaptiveSpacing.medium,
-            vertical: AdaptiveSpacing.small,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (widget.showTemplates) ...[
-                _TemplateChips(
-                  selected: _selectedTemplate ?? provider?.lastTemplate,
-                  onSelected: (id) {
-                    setState(() => _selectedTemplate = id);
-                    provider?.setLastTemplate(id);
-                    if (id != null) {
-                      final transformed =
-                          provider?.applyTemplateText(id, _controller.text) ??
-                              _controller.text;
-                      setState(() {
-                        _controller.text = transformed;
-                        _controller.selection =
-                            TextSelection.collapsed(offset: transformed.length);
-                      });
-                    }
-                    _focusNode.requestFocus();
-                  },
-                ),
-                SizedBox(height: AdaptiveSpacing.small),
-              ],
-              Row(
-                children: [
-                  Expanded(
-                    child: KeyboardListener(
-                      focusNode: _focusNode,
-                      onKeyEvent: _handleKey,
-                      child: TextField(
-                        controller: _controller,
-                        onChanged: (v) => provider?.setDraft(v),
-                        onSubmitted: (_) => _submit(),
-                        textInputAction: TextInputAction.newline,
-                        style: TextStyle(
-                            fontSize: SizeConfig.adaptiveFontSize(14)),
-                        decoration: InputDecoration(
-                          hintText: 'Posez votre question…',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: null,
-                          filled: true,
-                          fillColor: scheme.surface.withValues(alpha: 0.35),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: AdaptiveSpacing.large,
+              vertical: AdaptiveSpacing.medium,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.showTemplates) ...[
+                  _TemplateChips(
+                    selected: _selectedTemplate ?? provider?.lastTemplate,
+                    onSelected: (id) {
+                      setState(() => _selectedTemplate = id);
+                      provider?.setLastTemplate(id);
+                      if (id != null) {
+                        final transformed =
+                            provider?.applyTemplateText(id, _controller.text) ??
+                                _controller.text;
+                        setState(() {
+                          _controller.text = transformed;
+                          _controller.selection = TextSelection.collapsed(
+                              offset: transformed.length);
+                        });
+                      }
+                      _focusNode.requestFocus();
+                    },
+                  ),
+                  SizedBox(height: AdaptiveSpacing.small),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: KeyboardListener(
+                        focusNode: _focusNode,
+                        onKeyEvent: _handleKey,
+                        child: TextField(
+                          controller: _controller,
+                          onChanged: (v) => provider?.setDraft(v),
+                          onSubmitted: (_) => _submit(),
+                          textInputAction: TextInputAction.newline,
+                          style: TextStyle(
+                              fontSize: SizeConfig.adaptiveFontSize(15)),
+                          decoration: InputDecoration(
+                            hintText: 'Posez votre question…',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            suffixIcon: null,
+                            filled: true,
+                            fillColor: scheme.surface.withValues(alpha: 0.45),
+                            contentPadding: EdgeInsets.symmetric(vertical: 16),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: widget.disabled ? null : _submit,
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.play_arrow_rounded),
-                        SizedBox(width: 8),
-                        Text('Rechercher'),
-                      ],
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: scheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 2,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 12),
+                      ),
+                      onPressed: widget.disabled ? null : _submit,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.send_rounded, size: 22),
+                          SizedBox(width: 8),
+                          Text('Envoyer',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

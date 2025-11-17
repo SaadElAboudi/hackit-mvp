@@ -164,9 +164,15 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
     }
 
     final children = <Widget>[];
-    for (int i = 0; i < messages.length; i++) {
-      final m = messages[i];
-      if (m.role.name == 'user') {
+    // Affiche toutes les bulles utilisateur, mais seulement la dernière bulle assistant
+    ChatMessage? lastAssistant;
+    for (final m in messages) {
+      if (m.role == ChatRole.assistant) {
+        lastAssistant = m;
+      }
+    }
+    for (final m in messages) {
+      if (m.role == ChatRole.user) {
         final text = (m.content['text'] ?? '') as String;
         if (text.isNotEmpty) {
           children.add(
@@ -178,52 +184,28 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
               disabled: provider.loading,
             ),
           );
-        }
-      } else {
-        // Prefer cohesive lesson rendering when steps already include a videoUrl.
-        if (m.kind == ChatKind.steps &&
-            (m.content['videoUrl'] ?? '').toString().isNotEmpty) {
-          final steps =
-              List<String>.from(m.content['steps'] ?? const <String>[]);
-          final title = (m.content['title'] ?? '') as String;
-          final videoUrl = (m.content['videoUrl'] ?? '') as String;
-          children.add(
-            AssistantContainer(
-              child: LessonView(
-                title: title,
-                steps: steps,
-                videoUrl: videoUrl,
-              ),
-            ),
-          );
           children.add(SizedBox(height: AdaptiveSpacing.small));
-          continue;
-        } else {
-          // Backward-compatible merge: steps followed by video with same title.
-          final next = i + 1 < messages.length ? messages[i + 1] : null;
-          final canMerge = m.kind == ChatKind.steps &&
-              next != null &&
-              next.kind == ChatKind.video &&
-              (m.content['title'] ?? '') == (next.content['title'] ?? '');
-          if (canMerge) {
-            final steps =
-                List<String>.from(m.content['steps'] ?? const <String>[]);
-            final title = (m.content['title'] ?? '') as String;
-            final videoUrl = (next.content['videoUrl'] ?? '') as String;
-            children.add(
-              AssistantContainer(
-                child: LessonView(
-                  title: title,
-                  steps: steps,
-                  videoUrl: videoUrl,
-                ),
-              ),
-            );
-            i++; // skip next since merged
-            children.add(SizedBox(height: AdaptiveSpacing.small));
-            continue;
-          }
         }
+      }
+    }
+    if (lastAssistant != null) {
+      // Affiche la dernière bulle assistant selon son type
+      final m = lastAssistant;
+      if (m.kind == ChatKind.steps &&
+          (m.content['videoUrl'] ?? '').toString().isNotEmpty) {
+        final steps = List<String>.from(m.content['steps'] ?? const <String>[]);
+        final title = (m.content['title'] ?? '') as String;
+        final videoUrl = (m.content['videoUrl'] ?? '') as String;
+        children.add(
+          AssistantContainer(
+            child: LessonView(
+              title: title,
+              steps: steps,
+              videoUrl: videoUrl,
+            ),
+          ),
+        );
+      } else {
         switch (m.kind) {
           case ChatKind.steps:
             children.add(
@@ -235,56 +217,6 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
                 ),
               ),
             );
-            final source = m.content['source'] as String?;
-            if (source != null && source.isNotEmpty) {
-              children.add(_SourceChip(source: source));
-            }
-            break;
-          case ChatKind.video:
-            children.add(
-              AssistantContainer(
-                child: VideoCard(
-                  title: (m.content['title'] ?? '') as String,
-                  videoUrl: (m.content['videoUrl'] ?? '') as String,
-                ),
-              ),
-            );
-            final sourceV = m.content['source'] as String?;
-            if (sourceV != null && sourceV.isNotEmpty) {
-              children.add(_SourceChip(source: sourceV));
-            }
-            break;
-          case ChatKind.citations:
-            final raw = List<Map<String, dynamic>>.from(
-                m.content['citations'] ?? const <Map<String, dynamic>>[]);
-            final citations = raw
-                .map((e) => Citation.fromMap(Map<String, dynamic>.from(e)))
-                .toList();
-            if (citations.isNotEmpty) {
-              children.add(
-                AssistantContainer(
-                  child: CitationsView(citations: citations),
-                ),
-              );
-            }
-            break;
-          case ChatKind.chapters:
-            final raw = List<Map<String, dynamic>>.from(
-                m.content['chapters'] ?? const <Map<String, dynamic>>[]);
-            final chapters = raw
-                .map((e) => Chapter.fromMap(Map<String, dynamic>.from(e)))
-                .toList();
-            final videoUrl = (m.content['videoUrl'] ?? '') as String;
-            if (chapters.isNotEmpty) {
-              children.add(
-                AssistantContainer(
-                  child: ChaptersView(
-                    chapters: chapters,
-                    videoUrl: videoUrl,
-                  ),
-                ),
-              );
-            }
             break;
           case ChatKind.text:
             children.add(
@@ -330,6 +262,8 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
                 ),
               ),
             );
+            break;
+          default:
             break;
         }
       }

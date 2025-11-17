@@ -19,27 +19,32 @@ class UserBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
     final scheme = Theme.of(context).colorScheme;
-    final bubble = DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(16).copyWith(
-          bottomRight: const Radius.circular(4),
+    final bubble = Material(
+      elevation: 3,
+      borderRadius: BorderRadius.circular(18),
+      color: scheme.primary.withOpacity(0.85), // Couleur plus foncée
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18)
+              .copyWith(bottomRight: const Radius.circular(6)),
+          border: Border.all(
+            color: scheme.primary.withOpacity(0.5),
+            width: 1,
+          ),
         ),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.25),
-          width: 1,
-        ),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: AdaptiveSpacing.medium,
-          vertical: AdaptiveSpacing.small + 2,
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: SizeConfig.adaptiveFontSize(14),
-            height: 1.32,
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: AdaptiveSpacing.large,
+            vertical: AdaptiveSpacing.medium,
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: SizeConfig.adaptiveFontSize(15),
+              height: 1.32,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+            ),
           ),
         ),
       ),
@@ -110,25 +115,32 @@ class AssistantContainer extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: SizeConfig.screenWidth * 0.95,
         ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(16).copyWith(
-              bottomLeft: const Radius.circular(4),
+        child: Material(
+          elevation: 2,
+          borderRadius: BorderRadius.circular(18),
+          color: scheme.surfaceContainerHighest
+              .withOpacity(0.90), // Couleur plus foncée
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18)
+                  .copyWith(bottomLeft: const Radius.circular(6)),
+              border: Border.all(
+                color: scheme.surfaceContainerHighest.withOpacity(0.5),
+                width: 1,
+              ),
             ),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.25),
-              width: 1,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                AdaptiveSpacing.large,
+                AdaptiveSpacing.medium,
+                AdaptiveSpacing.large,
+                AdaptiveSpacing.medium + 2,
+              ),
+              child: DefaultTextStyle(
+                style: TextStyle(color: Colors.white),
+                child: child,
+              ),
             ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              AdaptiveSpacing.small,
-              AdaptiveSpacing.small + 2,
-              AdaptiveSpacing.small,
-              AdaptiveSpacing.small + 3,
-            ),
-            child: child,
           ),
         ),
       ),

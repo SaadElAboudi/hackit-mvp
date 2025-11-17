@@ -10,11 +10,15 @@ class LessonView extends StatelessWidget {
   final String title;
   final List<String> steps;
   final String videoUrl;
+  final List<String>? transcript;
+  final List<String>? chapters;
   const LessonView({
     super.key,
     required this.title,
     required this.steps,
     required this.videoUrl,
+    this.transcript,
+    this.chapters,
   });
 
   @override
@@ -31,6 +35,30 @@ class LessonView extends StatelessWidget {
         SizedBox(height: AdaptiveSpacing.small),
         VideoCard(title: title, videoUrl: videoUrl),
         SizedBox(height: AdaptiveSpacing.small),
+        if (transcript != null && transcript!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Transcript',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                ...transcript!.map((t) => Text(t)).toList(),
+              ],
+            ),
+          ),
+        if (chapters != null && chapters!.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Chapitres',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                ...chapters!.map((c) => Text(c)).toList(),
+              ],
+            ),
+          ),
         if (!alreadySaved)
           Align(
             alignment: Alignment.centerLeft,

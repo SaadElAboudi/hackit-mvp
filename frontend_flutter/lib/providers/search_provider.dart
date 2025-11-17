@@ -591,7 +591,7 @@ class SearchProvider extends ChangeNotifier {
   }
 
   void _appendAssistantFromResult(BaseSearchResult r) {
-    // Prefer a single cohesive lesson-like message: steps + videoUrl together
+    // Ajoute une seule bulle assistant avec toutes les infos principales
     final stepsMsg = ChatMessage.assistantSteps(
       _newId(),
       r.title,
@@ -603,18 +603,13 @@ class SearchProvider extends ChangeNotifier {
         "steps": r.steps,
         if (r.source.isNotEmpty) "source": r.source,
         "videoUrl": r.videoUrl,
+        if (r.citations.isNotEmpty)
+          "citations": r.citations.map((c) => c.toMap()).toList(),
+        if (r.chapters.isNotEmpty)
+          "chapters": r.chapters.map((c) => c.toMap()).toList(),
       },
     );
     _push(stepsMsg);
-    if (r.citations.isNotEmpty) {
-      _push(ChatMessage.assistantCitations(
-          _newId(), r.citations.map((c) => c.toMap()).toList()));
-    }
-    if (r.chapters.isNotEmpty) {
-      _push(ChatMessage.assistantChapters(
-          _newId(), r.chapters.map((c) => c.toMap()).toList(),
-          videoUrl: r.videoUrl));
-    }
   }
 
   void _appendError(String message) {
