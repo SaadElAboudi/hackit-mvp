@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/lessons_provider.dart';
-import '../core/responsive/adaptive_spacing.dart';
+// ...existing code...
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
 import '../widgets/youtube_embed.dart';

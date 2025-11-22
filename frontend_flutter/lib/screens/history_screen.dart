@@ -4,7 +4,7 @@ import '../providers/history_favorites_provider.dart';
 import '../providers/lessons_provider.dart';
 import '../widgets/empty_state.dart';
 // ...existing code...
-import '../core/responsive/adaptive_spacing.dart';
+// ...existing code...
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});

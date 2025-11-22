@@ -4,7 +4,7 @@ import '../providers/history_favorites_provider.dart';
 import '../providers/lessons_provider.dart';
 // ...existing code...
 import '../widgets/empty_state.dart';
-import '../core/responsive/adaptive_spacing.dart';
+// ...existing code...
 
 class FavoritesScreen extends StatelessWidget {
   const FavoritesScreen({super.key});
