@@ -896,15 +896,16 @@ app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async 
 });
 
 // PATCH /api/lessons/:id/favorite { favorite: true|false }
+import { updateFavorite } from './controllers/lessonsController.js';
 app.patch("/api/lessons/:id/favorite", requireJwtAuthOrGoogle, async (req, res) => {
   console.log('[PATCH /api/lessons/:id/favorite] Authorization:', req.headers.authorization, 'userId:', req.userId);
   const id = String(req.params.id || '').trim();
   const favorite = !!req.body?.favorite;
   if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id is required' });
   try {
-    const updated = await setFavorite(id, favorite);
+    const updated = await updateFavorite(id, favorite);
     if (!updated) return res.status(404).json({ error: 'Not found' });
-    return res.json(updated);
+    return res.json({ ok: true, lesson: updated });
   } catch (e) {
     console.error('[PATCH /api/lessons/:id/favorite] Internal error:', e?.message || e);
     return res.status(500).json({ error: 'Failed to update favorite', detail: e?.message || 'Unknown error' });

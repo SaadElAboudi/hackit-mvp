@@ -163,66 +163,47 @@ class _LessonTile extends StatelessWidget {
                     ),
                 ],
               ),
-              trailing: Wrap(
-                spacing: 0,
-                children: [
-                  IconButton(
-                    tooltip: lesson.favorite
-                        ? 'Retirer des favoris'
-                        : 'Ajouter aux favoris',
-                    icon: Icon(
-                      lesson.favorite
-                          ? Icons.star_rounded
-                          : Icons.star_border_rounded,
-                      color: lesson.favorite ? Colors.amber : Colors.grey,
-                      size: 28,
+              trailing: IconButton(
+                tooltip: 'Supprimer la leçon',
+                icon: const Icon(Icons.delete_outline,
+                    color: Colors.redAccent, size: 26),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Supprimer la leçon ?'),
+                      content: const Text('Cette action est irréversible.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Annuler'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('Supprimer'),
+                        ),
+                      ],
                     ),
-                    onPressed: () => lp.toggleFavorite(lesson.id),
-                  ),
-                  IconButton(
-                    tooltip: 'Supprimer la leçon',
-                    icon: const Icon(Icons.delete_outline,
-                        color: Colors.redAccent, size: 26),
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Supprimer la leçon ?'),
-                          content: const Text('Cette action est irréversible.'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Annuler'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text('Supprimer'),
-                            ),
-                          ],
+                  );
+                  if (confirm == true) {
+                    try {
+                      await lp.deleteLesson(lesson.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Leçon supprimée avec succès.'),
+                          backgroundColor: Colors.green,
                         ),
                       );
-                      if (confirm == true) {
-                        try {
-                          await lp.deleteLesson(lesson.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Leçon supprimée avec succès.'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text('Erreur lors de la suppression : $e'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                  ),
-                ],
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Erreur lors de la suppression : $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
               ),
               onTap: () async {
                 WidgetsBinding.instance.addPostFrameCallback((_) async {

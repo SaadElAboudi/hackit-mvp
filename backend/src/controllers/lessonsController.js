@@ -2,6 +2,16 @@
 import Lesson from '../models/lesson.js';
 import User from '../models/User.js';
 
+// Fonction utilitaire pour mettre à jour le favoris
+export async function updateFavorite(id, favorite) {
+    const mongoose = require('mongoose');
+    let lesson = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+        lesson = await Lesson.findByIdAndUpdate(id, { favorite }, { new: true });
+    }
+    return lesson;
+}
+
 /**
  * Create a lesson from chat data
  */
