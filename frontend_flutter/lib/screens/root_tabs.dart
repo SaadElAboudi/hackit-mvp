@@ -57,7 +57,7 @@ class _RootTabsState extends State<RootTabs> {
               page = const HomeScreen();
               break;
             case 1:
-              page = const LessonsScreen();
+              page = LessonsScreen();
               break;
             case 2:
               page = const FavoritesScreen();
@@ -75,7 +75,7 @@ class _RootTabsState extends State<RootTabs> {
               page = const HomeScreen();
               break;
             case 1:
-              page = const LessonsScreen();
+              page = LessonsScreen();
               break;
             case 2:
               page = const FavoritesScreen();

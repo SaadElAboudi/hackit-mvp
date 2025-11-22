@@ -10,7 +10,7 @@ import '../models/chat_message.dart';
 import '../widgets/citations_view.dart';
 import '../widgets/chapters_view.dart';
 import '../models/base_search_result.dart';
-import '../widgets/app_scaffold.dart';
+// ...existing code...
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
 
@@ -19,25 +19,72 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      title: 'Hackit',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.logout),
-          tooltip: 'Déconnexion',
-          onPressed: () async {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.remove('auth_token');
-            await prefs.remove('userId');
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (route) => false,
-            );
-          },
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(70),
+        child: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 3,
+          centerTitle: true,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.chat_bubble_rounded,
+                  color: Color(0xFF00C48C), size: 28),
+              const SizedBox(width: 10),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Hackit',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24,
+                      color: Color(0xFF222B45),
+                      letterSpacing: 0.5,
+                      shadows: [
+                        Shadow(
+                          color: Color(0x22000000),
+                          offset: Offset(0, 2),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 38,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: Color(0xFF00C48C),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Déconnexion',
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove('auth_token');
+                await prefs.remove('userId');
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              },
+            ),
+            IconButton(icon: Icon(Icons.help_outline), onPressed: () {}),
+          ],
         ),
-        IconButton(icon: Icon(Icons.help_outline), onPressed: () {}),
-      ],
-      child: Column(
+      ),
+      body: Column(
         children: [
           Expanded(child: _ChatMessagesList()),
           ChatInput(
@@ -90,13 +137,13 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         final title = (m.content['title'] ?? '') as String;
         final videoUrl = (m.content['videoUrl'] ?? '') as String;
         return Card(
-          elevation: 2,
+          elevation: 5,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           child: Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.all(20.0),
             child: LessonView(
               title: title,
               steps: steps,
@@ -106,30 +153,33 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         );
       case ChatKind.text:
         return Card(
-          elevation: 2,
+          elevation: 5,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           child: Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.all(20.0),
             child: AssistantContainer(
               child: Text(
                 (m.content['text'] ?? '') as String,
-                style: const TextStyle(fontSize: 16, color: Colors.black),
+                style: const TextStyle(
+                    fontSize: 17,
+                    color: Colors.black,
+                    fontWeight: FontWeight.w500),
               ),
             ),
           ),
         );
       case ChatKind.citations:
         return Card(
-          elevation: 2,
+          elevation: 5,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           child: Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.all(20.0),
             child: CitationsView(
               citations: ((m.content['citations'] as List?) ?? [])
                   .map((c) {
@@ -144,13 +194,13 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         );
       case ChatKind.chapters:
         return Card(
-          elevation: 2,
+          elevation: 5,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           child: Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.all(20.0),
             child: ChaptersView(
               chapters:
                   chaptersFromAny(m.content['chapters'] ?? const <dynamic>[]),
@@ -160,20 +210,21 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         );
       case ChatKind.error:
         return Card(
-          elevation: 2,
+          elevation: 5,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           child: Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.all(20.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
                     (m.content['message'] ?? 'Erreur') as String,
-                    style: const TextStyle(color: Colors.red),
+                    style: const TextStyle(
+                        color: Colors.red, fontWeight: FontWeight.bold),
                   ),
                 ),
                 SizedBox(width: 12),
@@ -185,7 +236,8 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
                           (provider.loading || lastQ == null || lastQ.isEmpty)
                               ? null
                               : () => provider.search(lastQ),
-                      icon: const Icon(Icons.refresh_rounded),
+                      icon: const Icon(Icons.refresh_rounded,
+                          color: Colors.blueAccent),
                       label: const Text('Réessayer'),
                     );
                   },
@@ -195,7 +247,7 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
           ),
         );
       default:
-        return SizedBox.shrink();
+        return const SizedBox.shrink();
     }
   }
 

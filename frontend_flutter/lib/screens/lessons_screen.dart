@@ -1,260 +1,156 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../providers/lessons_provider.dart';
 import '../models/lesson.dart';
-import '../core/responsive/adaptive_spacing.dart';
 import '../widgets/empty_state.dart';
-import '../widgets/app_scaffold.dart';
 import 'lesson_detail_screen.dart';
 
 class LessonsScreen extends StatelessWidget {
-  const LessonsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return AppScaffold(
-      title: 'Leçons',
-      actions: [IconButton(icon: Icon(Icons.school), onPressed: () {})],
-      child: const _LessonsBody(),
-    );
-  }
-}
-
-class _LessonsBody extends StatelessWidget {
-  const _LessonsBody();
-
-  @override
-  Widget build(BuildContext context) {
-    // Removed unused googleAuth variable
-    return Consumer<LessonsProvider>(
-      builder: (context, lp, _) {
-        // Removed unused debugUserId/debugUser
-        return Column(
-          children: [
-            // DEBUG: Affichage du userId et du token Google
-            // Removed all debug info for professional UI
-            Expanded(
-              child: Builder(
-                builder: (context) {
-                  if (lp.loading && lp.lessons.isEmpty) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (lp.error != null && lp.lessons.isEmpty) {
-                    return EmptyState(
-                      icon: Icons.error_outline_rounded,
-                      title: 'Impossible de charger les leçons.',
-                      subtitle:
-                          'Veuillez réessayer plus tard ou demander de l\'aide.',
-                      actionLabel: 'Réessayer',
-                      onAction: () {
-                        // Retry callback: reload lessons
-                        lp.fetchLessons(force: true);
-                      },
-                    );
-                  }
-                  if (lp.lessons.isEmpty) {
-                    return EmptyState(
-                      icon: Icons.school_outlined,
-                      title: 'Aucune leçon pour le moment',
-                      subtitle:
-                          'Générez une leçon depuis le chat, elle apparaîtra ici.',
-                      actionLabel: 'Demander de l\'aide',
-                      onAction: () {
-                        // Request help callback: open support or help page
-                        Navigator.of(context).pushNamed('/support');
-                      },
-                    );
-                  }
-                  // Removed RefreshIndicator, use plain ListView
-                  return Padding(
-                    padding: AdaptiveSpacing.screenPadding,
-                    child: ListView.separated(
-                      itemBuilder: (context, index) {
-                        final l = lp.lessons[index];
-                        return Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18)),
-                          margin:
-                              EdgeInsets.symmetric(vertical: 2, horizontal: 2),
-                          child: _LessonTile(lesson: l),
-                        );
-                      },
-                      separatorBuilder: (_, __) =>
-                          SizedBox(height: AdaptiveSpacing.small),
-                      itemCount: lp.lessons.length,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _LessonTile extends StatelessWidget {
-  final Lesson lesson;
-  const _LessonTile({required this.lesson});
-
-  @override
-  Widget build(BuildContext context) {
-    final lp = context.read<LessonsProvider>();
-    return Card(
-      elevation: 4,
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      shadowColor: Colors.black12,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: AdaptiveSpacing.large,
-                vertical: AdaptiveSpacing.medium,
-              ),
-              title: Text(
-                lesson.title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.3,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _subtitle(lesson),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  if (lesson.progress > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2.0),
-                      child: LinearProgressIndicator(
-                        value: lesson.progress / 100.0,
-                        minHeight: 6,
-                        backgroundColor: Colors.grey.shade200,
-                        color: Colors.blueAccent,
-                      ),
-                    ),
-                  if (lesson.reminder != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(
-                        'Rappel: ${lesson.reminder}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.orange,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              trailing: IconButton(
-                tooltip: 'Supprimer la leçon',
-                icon: const Icon(Icons.delete_outline,
-                    color: Colors.redAccent, size: 26),
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Supprimer la leçon ?'),
-                      content: const Text('Cette action est irréversible.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: const Text('Annuler'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: const Text('Supprimer'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirm == true) {
-                    try {
-                      await lp.deleteLesson(lesson.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Leçon supprimée avec succès.'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Erreur lors de la suppression : $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-              ),
-              onTap: () async {
-                WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => LessonDetailScreen(lesson: lesson),
-                    ),
-                  );
-                  await lp.recordView(lesson.id);
-                });
-              },
-            ),
-            if (lesson.guestPrompt != null)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.yellow.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.lock_outline, color: Colors.orange),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          lesson.guestPrompt!,
-                          style: const TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+  const LessonsScreen({Key? key}) : super(key: key);
 
   String _subtitle(Lesson l) {
     final created = l.createdAt;
     final views = l.views;
-    final steps = l.steps.length;
-    final date =
-        '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year}';
-    return '$steps étapes • $views vues • $date';
+    final createdStr =
+        'Créé le ${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year}';
+    final viewsStr = ' • $views vues';
+    return '$createdStr$viewsStr';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(70),
+        child: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 3,
+          centerTitle: true,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.menu_book_rounded,
+                  color: Color(0xFF00C48C), size: 28),
+              const SizedBox(width: 10),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Leçons',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24,
+                      color: Color(0xFF222B45),
+                      letterSpacing: 0.5,
+                      shadows: [
+                        Shadow(
+                          color: Color(0x22000000),
+                          offset: Offset(0, 2),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 38,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: Color(0xFF00C48C),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: Consumer<LessonsProvider>(
+        builder: (context, lp, _) {
+          final lessons = lp.lessons;
+          if (lessons.isEmpty) {
+            return const EmptyState(
+              icon: Icons.menu_book,
+              title: 'Aucune leçon',
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: lessons.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final lesson = lessons[index];
+              return Card(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                elevation: 2,
+                child: ListTile(
+                  title: Text(
+                    lesson.title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  subtitle: Text(_subtitle(lesson)),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    tooltip: 'Supprimer',
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Supprimer la leçon'),
+                          content: const Text(
+                              'Voulez-vous vraiment supprimer cette leçon ?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Annuler'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              child: const Text('Supprimer',
+                                  style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        try {
+                          await Provider.of<LessonsProvider>(context,
+                                  listen: false)
+                              .deleteLesson(lesson.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Leçon supprimée'),
+                                backgroundColor: Colors.green),
+                          );
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                                content:
+                                    Text('Erreur lors de la suppression : $e'),
+                                backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => LessonDetailScreen(lesson: lesson),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }

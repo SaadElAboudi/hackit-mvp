@@ -5,6 +5,12 @@ import '../services/history_favorites_repository.dart';
 import 'lessons_provider.dart';
 
 class HistoryFavoritesProvider extends ChangeNotifier {
+  Future<void> removeHistory(String id) async {
+    await _repo.removeHistory(id);
+    _history = _repo.loadHistory();
+    notifyListeners();
+  }
+
   final HistoryFavoritesRepository _repo;
   List<SearchEntry> _history = [];
   List<FavoriteItem> _favorites = [];

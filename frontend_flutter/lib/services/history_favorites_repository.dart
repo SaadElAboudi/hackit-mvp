@@ -4,6 +4,11 @@ import '../models/history_favorites.dart';
 /// Repository handling local-first storage for search history & favorites.
 /// Uses SharedPreferences across mobile/web; keys are prefixed with hackit:v1.
 class HistoryFavoritesRepository {
+  Future<void> removeHistory(String id) async {
+    final current = loadHistory().where((h) => h.id != id).toList();
+    await saveHistory(current);
+  }
+
   static const _historyKey = 'hackit:v1:history';
   static const _favoritesKey = 'hackit:v1:favorites';
   static const maxHistory = 50;
