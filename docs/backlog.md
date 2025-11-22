@@ -1,3 +1,8 @@
+# Ajouts UX/UI & Fonctionnalités 2025
+- [x] Refonte visuelle premium (headers, cards, navigation)
+- [x] Favoris & historique local-first (SharedPreferences, badge, suppression)
+- [x] Mode invité et démo (userId anonyme, JWT)
+- [x] Nettoyage du code, conventions et process contribution
 # Hackit MVP Backlog
 
 Status legend: [ ] not-started · [~] in-progress · [x] completed

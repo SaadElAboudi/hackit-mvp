@@ -9,12 +9,30 @@
 ## Description
 Hackit MVP is a project designed to provide users with quick and clear answers to their questions through a chat interface. The application leverages AI to summarize information and find relevant video content from platforms like YouTube and TikTok.
 
+
 ## Features
-- Streaming chat UI (SSE) with structured kinds: steps, video, citations, chapters, text, error
-- Citations & chapters with timestamp seek support via a lightweight `VideoSeekService`
-- Local-first History & Favorites in Flutter (SharedPreferences, LRU 50)
-   - History & Favorites screens, routes `/history` and `/favorites`
-   - AppBar badge with favorite count; star toggle on VideoCard with SnackBar
+- **UX/UI premium et moderne** : headers cohérents (icône, titre premium, ligne décorative), cards arrondies, typographie bold, couleurs modernes.
+- **Streaming chat UI (SSE)** : réponses structurées (étapes, vidéo, citations, chapitres, texte, erreur).
+- **Favoris & Historique local** : gestion locale (SharedPreferences, LRU 50), badge AppBar, suppression rapide, SnackBar feedback.
+- **Navigation simplifiée** : accès direct aux écrans Home, Leçons, Favoris, Historique.
+- **Mode invité et démo** : userId anonyme, sauvegarde locale, JWT pour le user demo.
+- **Citations & chapitres** : timestamp seek via `VideoSeekService`.
+- **API Gemini fallback** : gestion des erreurs et bascule automatique.
+## Nouveautés UX/UI
+- Refonte complète des headers sur tous les écrans (icône, titre premium, ligne verte).
+- Cards arrondies, ombrées, avec typographie bold et couleurs premium.
+- Feedback utilisateur amélioré (SnackBar, suppression, favoris).
+- Navigation fluide et cohérente.
+## Mode invité & démo
+- L’application gère un userId anonyme pour le mode invité (stocké localement).
+- Le user demo utilise un JWT pour tester toutes les fonctionnalités sans inscription.
+## Conventions & contribution
+- Respecter la structure du projet (frontend_flutter, backend, shared, docs).
+- Utiliser des noms explicites pour les commits et les branches.
+- Suivre les conventions de code Dart/Flutter et Node.js.
+- Pour contribuer : fork, pull request, description claire, tests si possible.
+## Screenshots & démo
+Vous pouvez ajouter des captures d’écran dans le dossier `docs/` ou en README pour illustrer la nouvelle interface.
 
 ## Tech Stack
 

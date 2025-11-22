@@ -1,3 +1,10 @@
+# Nouveautés 2025
+- Refonte UX/UI premium sur tous les écrans (headers cohérents, cards arrondies, typographie bold, couleurs modernes)
+- Navigation simplifiée et fluide (Home, Leçons, Favoris, Historique)
+- Gestion locale des favoris et historique (SharedPreferences, badge AppBar, suppression rapide)
+- Feedback utilisateur amélioré (SnackBar, suppression, favoris)
+- Mode invité (userId anonyme, sauvegarde locale) et user demo (JWT)
+- Conventions de code et process de contribution mis à jour
 # Hackit MVP — Liste des fonctionnalités
 
 Ce document regroupe les fonctionnalités pertinentes et intéressantes pour Hackit (présentes, MVP à finir, et idées d'évolution).
