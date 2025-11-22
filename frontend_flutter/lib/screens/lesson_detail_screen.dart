@@ -60,118 +60,14 @@ class LessonDetailScreen extends StatelessWidget {
               ),
             ],
           ),
-          actions: [
-            IconButton(
-              icon: Icon(
-                lesson.favorite
-                    ? Icons.star_rounded
-                    : Icons.star_border_rounded,
-                color: lesson.favorite ? Colors.amber : Color(0xFF8F9BB3),
-                size: 28,
-              ),
-              tooltip: lesson.favorite
-                  ? 'Retirer des favoris'
-                  : 'Ajouter aux favoris',
-              onPressed: () async {
-                await Provider.of<LessonsProvider>(context, listen: false)
-                    .toggleFavorite(lesson.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(lesson.favorite
-                        ? 'Retiré des favoris'
-                        : 'Ajouté aux favoris'),
-                    backgroundColor:
-                        lesson.favorite ? Colors.red : Colors.green,
-                  ),
-                );
-              },
-            ),
-            IconButton(
-              icon:
-                  const Icon(Icons.delete, color: Color(0xFFEB5757), size: 28),
-              tooltip: 'Supprimer',
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Supprimer la leçon'),
-                    content: const Text(
-                        'Voulez-vous vraiment supprimer cette leçon ?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        child: const Text('Annuler'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        child: const Text('Supprimer',
-                            style: TextStyle(color: Color(0xFFEB5757))),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirm == true) {
-                  await Provider.of<LessonsProvider>(context, listen: false)
-                      .deleteLesson(lesson.id);
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Leçon supprimée'),
-                        backgroundColor: Colors.green),
-                  );
-                }
-              },
-            ),
-          ],
         ),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Card(
-            elevation: 8,
-            color: Colors.white,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
-            child: Padding(
-              padding: const EdgeInsets.all(28.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (lesson.videoUrl.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 18.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.play_circle_fill,
-                              color: Colors.blueAccent, size: 22),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'Vidéo : ${lesson.videoUrl}',
-                              style: const TextStyle(
-                                  color: Colors.blueAccent,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 15),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  LessonView(
-                    title: lesson.title,
-                    steps: lesson.steps,
-                    videoUrl: lesson.videoUrl,
-                    transcript:
-                        lesson.summary.isNotEmpty ? [lesson.summary] : null,
-                    chapters: lesson.steps.isNotEmpty ? lesson.steps : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      body: LessonView(
+        title: lesson.title,
+        steps: lesson.steps,
+        videoUrl: lesson.videoUrl,
+        transcript: null,
+        chapters: null,
       ),
     );
   }
