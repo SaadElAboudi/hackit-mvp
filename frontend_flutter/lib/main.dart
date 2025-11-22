@@ -44,6 +44,22 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   // bool _guestMode = false; // Removed unused field
 
+  bool _hasToken = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkToken();
+  }
+
+  Future<void> _checkToken() async {
+    final prefs = getIt<SharedPreferences>();
+    final token = prefs.getString('auth_token');
+    setState(() {
+      _hasToken = token != null && token.isNotEmpty;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
@@ -66,72 +82,63 @@ class _MyAppState extends State<MyApp> {
           ),
         ),
       ],
-      child: Consumer<GoogleAuthProvider>(
-        builder: (context, googleAuth, _) {
-          if (googleAuth.user == null) {
-            return MaterialApp(
-              title: 'Hackit MVP',
-              theme: AppTheme.lightTheme,
-              darkTheme: AppTheme.darkTheme,
-              home: LoginScreen(),
-            );
-          }
-          return Consumer<ThemeProvider>(
-            builder: (context, themeProvider, _) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                try {
-                  final hist = context.read<HistoryFavoritesProvider>();
-                  final lessons = context.read<LessonsProvider>();
-                  // Ajoute l'interceptor d'auth Google sur l'ApiService
-                  lessons.service.api.addAuthInterceptor(
-                      Provider.of<GoogleAuthProvider>(context, listen: false));
-                  hist.linkLessons(lessons);
-                  if (!widget.skipLessonsInit) {
-                    lessons.initIfNeeded();
-                  }
-                } catch (_) {}
-              });
-              return MaterialApp(
-                title: 'Hackit MVP',
-                theme: AppTheme.lightTheme,
-                darkTheme: AppTheme.darkTheme,
-                themeMode: themeProvider.themeMode,
-                initialRoute: '/',
-                onGenerateRoute: (settings) {
-                  switch (settings.name) {
-                    case '/':
-                      return PageTransitions.fadeTransition(
-                        page: const RootTabs(),
-                        settings: settings,
-                      );
-                    case '/lessons':
-                      return PageTransitions.slideTransition(
-                        page: const RootTabs(),
-                        settings: settings,
-                      );
-                    case '/favorites':
-                      return PageTransitions.slideTransition(
-                        page: const RootTabs(),
-                        settings: settings,
-                      );
-                    case '/history':
-                      return PageTransitions.slideTransition(
-                        page: const RootTabs(),
-                        settings: settings,
-                      );
-                    case '/result':
-                      return PageTransitions.slideTransition(
-                        page: const ResultScreen(),
-                        settings: settings,
-                      );
-                    default:
-                      return PageTransitions.fadeTransition(
-                        page: const RootTabs(),
-                        settings: settings,
-                      );
-                  }
-                },
-              );
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            try {
+              final hist = context.read<HistoryFavoritesProvider>();
+              final lessons = context.read<LessonsProvider>();
+              lessons.service.api.addAuthInterceptor(
+                  Provider.of<GoogleAuthProvider>(context, listen: false));
+              hist.linkLessons(lessons);
+              if (!(context
+                      .findAncestorWidgetOfExactType<MyApp>()
+                      ?.skipLessonsInit ??
+                  false)) {
+                lessons.initIfNeeded();
+              }
+            } catch (_) {}
+          });
+          return MaterialApp(
+            title: 'Hackit MVP',
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            initialRoute: '/',
+            home: _hasToken ? const RootTabs() : const LoginScreen(),
+            onGenerateRoute: (settings) {
+              switch (settings.name) {
+                case '/':
+                  return PageTransitions.fadeTransition(
+                    page: const RootTabs(),
+                    settings: settings,
+                  );
+                case '/lessons':
+                  return PageTransitions.slideTransition(
+                    page: const RootTabs(),
+                    settings: settings,
+                  );
+                case '/favorites':
+                  return PageTransitions.slideTransition(
+                    page: const RootTabs(),
+                    settings: settings,
+                  );
+                case '/history':
+                  return PageTransitions.slideTransition(
+                    page: const RootTabs(),
+                    settings: settings,
+                  );
+                case '/result':
+                  return PageTransitions.slideTransition(
+                    page: const ResultScreen(),
+                    settings: settings,
+                  );
+                default:
+                  return PageTransitions.fadeTransition(
+                    page: const RootTabs(),
+                    settings: settings,
+                  );
+              }
             },
           );
         },

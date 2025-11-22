@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import '../models/demo_user.dart';
 
 class GoogleAuthProvider with ChangeNotifier {
+  DemoUser? demoUser;
   GoogleSignInAccount? _user;
-  GoogleSignInAccount? get user => _user;
+
+  // Retourne l'utilisateur courant (Google ou démo)
+  dynamic get user => demoUser ?? _user;
+  bool get isDemo => demoUser != null;
 
   // TODO: Replace with your actual Google web client ID
   static const String _webClientId =
@@ -33,11 +38,26 @@ class GoogleAuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> signInDemo() async {
+    demoUser = DemoUser(
+      id: 'demo_user',
+      name: 'Démo',
+      email: 'demo@hackit.app',
+      avatarUrl: null,
+      isDemo: true,
+    );
+    notifyListeners();
+  }
+
   // Utilitaire pour appeler le backend avec la session Google
   Future<http.Response> callBackend(String endpoint,
       {String method = 'GET', Map<String, dynamic>? body}) async {
     final headers = <String, String>{};
-    if (_user != null) {
+    if (isDemo && demoUser != null) {
+      headers['x-user-id'] = demoUser!.id;
+      // Optionally set a dummy token for demo users
+      headers['Authorization'] = 'Bearer DEMO_TOKEN';
+    } else if (_user != null) {
       headers['x-user-id'] = _user!.id;
       final auth = await _user!.authentication;
       // Toujours envoyer le token Google si présent

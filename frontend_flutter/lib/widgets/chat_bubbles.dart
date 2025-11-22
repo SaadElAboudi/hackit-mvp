@@ -7,45 +7,38 @@ class UserBubble extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onRegenerate;
   final bool disabled;
+  final Color textColor;
   const UserBubble({
     super.key,
     required this.text,
     this.onEdit,
     this.onRegenerate,
     this.disabled = false,
+    this.textColor = Colors.white,
   });
 
   @override
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
-    final scheme = Theme.of(context).colorScheme;
-    final bubble = Material(
-      elevation: 3,
-      borderRadius: BorderRadius.circular(18),
-      color: scheme.primary.withOpacity(0.85), // Couleur plus foncée
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18)
-              .copyWith(bottomRight: const Radius.circular(6)),
-          border: Border.all(
-            color: scheme.primary.withOpacity(0.5),
-            width: 1,
-          ),
+    // ...existing code...
+    final bubble = Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey.shade300,
+          width: 1,
         ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: AdaptiveSpacing.large,
-            vertical: AdaptiveSpacing.medium,
-          ),
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: SizeConfig.adaptiveFontSize(15),
-              height: 1.32,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-            ),
-          ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: SizeConfig.adaptiveFontSize(15),
+          height: 1.32,
+          fontWeight: FontWeight.w500,
+          color: Colors.black,
         ),
       ),
     );
@@ -108,40 +101,23 @@ class AssistantContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
-    final scheme = Theme.of(context).colorScheme;
+    // ...existing code...
     return Align(
       alignment: Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: SizeConfig.screenWidth * 0.95,
-        ),
-        child: Material(
-          elevation: 2,
-          borderRadius: BorderRadius.circular(18),
-          color: scheme.surfaceContainerHighest
-              .withOpacity(0.90), // Couleur plus foncée
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18)
-                  .copyWith(bottomLeft: const Radius.circular(6)),
-              border: Border.all(
-                color: scheme.surfaceContainerHighest.withOpacity(0.5),
-                width: 1,
-              ),
-            ),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                AdaptiveSpacing.large,
-                AdaptiveSpacing.medium,
-                AdaptiveSpacing.large,
-                AdaptiveSpacing.medium + 2,
-              ),
-              child: DefaultTextStyle(
-                style: TextStyle(color: Colors.white),
-                child: child,
-              ),
-            ),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.grey.shade300,
+            width: 1,
           ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: DefaultTextStyle(
+          style: const TextStyle(color: Colors.black),
+          child: child,
         ),
       ),
     );

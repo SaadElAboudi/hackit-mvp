@@ -5,6 +5,7 @@ import '../providers/lessons_provider.dart';
 import '../models/lesson.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/app_scaffold.dart';
 import 'lesson_detail_screen.dart';
 
 class LessonsScreen extends StatelessWidget {
@@ -12,11 +13,10 @@ class LessonsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Leçons'),
-      ),
-      body: const _LessonsBody(),
+    return AppScaffold(
+      title: 'Leçons',
+      actions: [IconButton(icon: Icon(Icons.school), onPressed: () {})],
+      child: const _LessonsBody(),
     );
   }
 }
@@ -67,18 +67,24 @@ class _LessonsBody extends StatelessWidget {
                     );
                   }
                   // Removed RefreshIndicator, use plain ListView
-                  return ListView.separated(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AdaptiveSpacing.medium,
-                      vertical: AdaptiveSpacing.small,
+                  return Padding(
+                    padding: AdaptiveSpacing.screenPadding,
+                    child: ListView.separated(
+                      itemBuilder: (context, index) {
+                        final l = lp.lessons[index];
+                        return Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18)),
+                          margin:
+                              EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                          child: _LessonTile(lesson: l),
+                        );
+                      },
+                      separatorBuilder: (_, __) =>
+                          SizedBox(height: AdaptiveSpacing.small),
+                      itemCount: lp.lessons.length,
                     ),
-                    itemBuilder: (context, index) {
-                      final l = lp.lessons[index];
-                      return _LessonTile(lesson: l);
-                    },
-                    separatorBuilder: (_, __) =>
-                        SizedBox(height: AdaptiveSpacing.tiny),
-                    itemCount: lp.lessons.length,
                   );
                 },
               ),
@@ -196,7 +202,23 @@ class _LessonTile extends StatelessWidget {
                         ),
                       );
                       if (confirm == true) {
-                        await lp.deleteLesson(lesson.id);
+                        try {
+                          await lp.deleteLesson(lesson.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Leçon supprimée avec succès.'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content:
+                                  Text('Erreur lors de la suppression : $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
                       }
                     },
                   ),

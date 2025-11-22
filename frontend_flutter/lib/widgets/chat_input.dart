@@ -142,8 +142,7 @@ class _ChatInputState extends State<ChatInput> {
         shadowColor: Colors.black12,
         child: Container(
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest.withValues(
-                alpha: scheme.brightness == Brightness.dark ? 0.18 : 0.75),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: scheme.outlineVariant.withValues(alpha: 0.25),
@@ -192,13 +191,14 @@ class _ChatInputState extends State<ChatInput> {
                           onSubmitted: (_) => _submit(),
                           textInputAction: TextInputAction.newline,
                           style: TextStyle(
-                              fontSize: SizeConfig.adaptiveFontSize(15)),
+                              fontSize: SizeConfig.adaptiveFontSize(15),
+                              color: Colors.black),
                           decoration: InputDecoration(
                             hintText: 'Posez votre question…',
                             prefixIcon: const Icon(Icons.search_rounded),
                             suffixIcon: null,
                             filled: true,
-                            fillColor: scheme.surface.withValues(alpha: 0.45),
+                            fillColor: Colors.white,
                             contentPadding: EdgeInsets.symmetric(vertical: 16),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),

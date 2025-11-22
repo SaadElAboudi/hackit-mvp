@@ -1,5 +1,5 @@
-import { deleteLesson } from "./utils/persistence.js";
-import { initPersistence, listLessons, saveLesson, setFavorite, recordView } from "./utils/persistence.js";
+// import { deleteLesson } from "./utils/persistence.js";
+// Deprecated persistence import removed. Use Mongoose models instead.
 import { OAuth2Client } from 'google-auth-library';
 import { pathToFileURL } from "url";
 
@@ -17,7 +17,12 @@ import { getChapters, extractDesiredChapters } from "./services/chapters.js";
 
 import { userIdMiddleware } from "./utils/userIdMiddleware.js";
 import passport from "./utils/passportGoogle.js";
+import { requireJwtAuth, requireJwtAuthOrGoogle } from "./utils/jwtAuth.js";
+// Import requireAuth middleware from this file
+// (already defined above)
 import session from "express-session";
+import userRouter from './routes/user.js';
+import mongoose from 'mongoose';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -40,9 +45,23 @@ async function requireAuth(req, res, next) {
       });
       const payload = ticket.getPayload();
       if (payload && payload.sub) {
+        // Vérifie si l'utilisateur existe dans la BDD
+        const User = (await import('./models/User.js')).default;
+        let user = await User.findOne({ email: payload.email });
+        if (!user) {
+          // Crée automatiquement un compte utilisateur Google
+          user = new User({
+            email: payload.email,
+            password: '', // pas de mot de passe pour Google
+            favorites: [],
+            history: [],
+            savedLessons: []
+          });
+          await user.save();
+        }
         req.user = {
-          id: payload.sub,
-          email: payload.email,
+          id: user._id,
+          email: user.email,
           displayName: payload.name,
           photo: payload.picture,
           provider: 'google',
@@ -84,7 +103,6 @@ function simpleRateLimit(key, maxPerMinute = 30) {
   rateLimit[key].push(now);
   return true;
 }
-// ...existing code...
 // Route GET /api/lessons accessible sans requireAuth
 // Removed duplicate /api/lessons route. Only the protected version remains below.
 // Session pour Passport
@@ -114,7 +132,7 @@ app.get('/auth/google/callback',
   }
 );
 // DELETE /api/lessons/:id
-app.delete("/api/lessons/:id", userIdMiddleware, async (req, res) => {
+app.delete("/api/lessons/:id", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
   const id = String(req.params.id || '').trim();
   if (!id) return res.status(400).json({ error: 'id is required' });
   try {
@@ -156,7 +174,6 @@ function makeMockResponse() {
       "Ajoute 1 tasse de vinaigre blanc.",
       "Laisse agir 10 minutes.",
       "Verse de l’eau bouillante.",
-      "Rince à l’eau chaude."
     ],
     videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     source: "mock"
@@ -406,14 +423,12 @@ app.post("/api/search", async (req, res) => {
   try {
     let searchTerm = query;
     const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
-    // Allow attempts even if GEMINI_OPERATIONAL became false so failures can accumulate and open breaker.
     const useGemini = USE_GEMINI_ENV && !breakerActive && (req.body?.useGemini !== false);
     let reformulationTimedOut = false;
     if (useGemini && USE_GEMINI_REFORMULATION) {
       const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
       try {
         let reform = await generateWithGemini(reformPrompt, 32);
-        // Sanitize: take first line, strip bullets/quotes/markdown, limit length
         reform = String(reform)
           .split(/\r?\n/)[0]
           .replace(/^[-*•\s>"]+/, "")
@@ -426,15 +441,13 @@ app.post("/api/search", async (req, res) => {
         }
       } catch (e) {
         console.warn("Gemini reformulation failed:", e.message);
-        // If timeout occurred, mark and skip summary attempt to avoid doubling latency.
         if (/timeout/i.test(e.message || "")) {
           reformulationTimedOut = true;
         }
-        searchTerm = query; // degrade gracefully
+        searchTerm = query;
       }
     }
 
-    // Unified YouTube search with internal API->fallback handling
     let videoTitle, videoUrl, source, videoId;
     try {
       const video = await searchYouTube(searchTerm);
@@ -444,7 +457,6 @@ app.post("/api/search", async (req, res) => {
       source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
     } catch (videoErr) {
       console.warn("Video search failed:", videoErr.message);
-      // If reformulated query failed, retry once with original user query before degrading
       if (videoErr.code === "YOUTUBE_NO_RESULTS" && searchTerm !== query) {
         console.log("Retrying YouTube search with original query after no results for reformulated term.");
         try {
@@ -462,22 +474,33 @@ app.post("/api/search", async (req, res) => {
           throw retryErr;
         }
       } else {
-        // Graceful degrade: provide mock fallback if allowed instead of hard error
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
           return res.json({ ...makeMockResponse(), source: "mock-fallback" });
         }
-        throw videoErr; // propagate to error handler
+        throw videoErr;
       }
     }
 
     let summaryText = "";
-    // Skip summary Gemini call if the reformulation already timed out to keep total latency low.
     const attemptGeminiSummary = useGemini && !reformulationTimedOut;
     const desiredSteps = extractDesiredSteps(query);
     if (attemptGeminiSummary) {
-      const summaryPrompt = desiredSteps
-        ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
-        : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`;
+      // Récupère le transcript YouTube
+      let transcriptText = "";
+      try {
+        const { transcript } = await getTranscript(videoId, videoTitle);
+        transcriptText = Array.isArray(transcript) ? transcript.map(seg => seg.text).join(" ") : "";
+      } catch (e) {
+        console.warn("Transcript fetch failed, fallback to title only:", e.message);
+      }
+      // Utilise le transcript comme input Gemini si disponible
+      const summaryPrompt = transcriptText
+        ? (desiredSteps
+          ? `Résume ce texte en ${desiredSteps} étapes claires:\n${transcriptText}`
+          : `Résume ce texte en étapes claires:\n${transcriptText}`)
+        : (desiredSteps
+          ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
+          : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`);
       try {
         summaryText = await generateWithGemini(summaryPrompt, 300);
       } catch (e) {
@@ -699,8 +722,8 @@ export function createApp() {
 // Use URL-safe comparison to handle paths with spaces (e.g., "app howto")
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const PORT = process.env.PORT || 3000;
-  const info = initPersistence();
-  console.log(`Persistence: ${info.mode}`);
+  // Persistence initialization removed; handled by Mongoose.
+  // Persistence mode logging removed; handled by Mongoose.
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
@@ -710,9 +733,22 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   });
 }
 
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/hackit', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+mongoose.connection.on('connected', () => {
+  console.log('MongoDB connected');
+});
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+});
+
 // ============ LESSON GENERATION & PERSISTENCE ============
 // POST /api/lessons { title, steps[], videoUrl, summary? } (userId via middleware)
-app.post("/api/lessons", userIdMiddleware, async (req, res) => {
+app.post("/api/lessons", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
   // Only log userId, not full headers
   console.log('[POST /api/lessons] userId:', req.userId);
   try {
@@ -738,15 +774,35 @@ app.post("/api/lessons", userIdMiddleware, async (req, res) => {
     if (!Array.isArray(steps) || steps.length === 0 || steps.length > 20 || !steps.every(s => typeof s === 'string' && s.length > 1 && s.length < 200)) {
       return res.status(400).json({ error: "steps[] must be 1-20 non-empty strings, each 2-200 chars" });
     }
-    const saved = await saveLesson({ userId, title, summary: summary || "", steps, videoUrl });
-    return res.json(saved);
+    // Use Mongoose Lesson model directly
+    const Lesson = (await import('./models/lesson.js')).default;
+    const User = (await import('./models/User.js')).default;
+    const lesson = await Lesson.create({ userId, title, steps, videoUrl, summary });
+    // Only link lesson to user if userId is a valid ObjectId
+    const mongoose = (await import('mongoose')).default;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      await User.findByIdAndUpdate(userId, { $push: { savedLessons: lesson._id } });
+    }
+    // Ensure all fields are non-null strings/arrays for frontend
+    return res.json({
+      id: lesson._id?.toString() ?? '',
+      userId: lesson.userId?.toString() ?? '',
+      title: lesson.title?.toString() ?? '',
+      summary: lesson.summary?.toString() ?? '',
+      steps: Array.isArray(lesson.steps) ? lesson.steps.map(s => s?.toString() ?? '') : [],
+      videoUrl: lesson.videoUrl?.toString() ?? '',
+      favorite: !!lesson.favorite,
+      views: typeof lesson.views === 'number' ? lesson.views : 0,
+      createdAt: lesson.createdAt?.toISOString?.() ?? new Date().toISOString(),
+      updatedAt: lesson.updatedAt?.toISOString?.() ?? new Date().toISOString(),
+    });
   } catch (e) {
     console.error('[POST /api/lessons] Internal error:', e?.message || e);
     return res.status(500).json({ error: 'Failed to save lesson', detail: 'Internal error' });
   }
 });
 // POST /api/generateLesson { query } (userId via middleware)
-app.post("/api/generateLesson", userIdMiddleware, async (req, res) => {
+app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
   console.log('[POST /api/generateLesson] Authorization:', req.headers.authorization, 'userId:', req.userId);
   const { query } = req.body || {};
   const userId = req.userId;
@@ -810,10 +866,27 @@ app.post("/api/generateLesson", userIdMiddleware, async (req, res) => {
     const steps = String(summaryText).split("\n").map(s => s.trim()).filter(Boolean);
 
     // 3) Persist lesson
-    const saved = await saveLesson({ userId, title: videoTitle, summary: summaryText, steps, videoUrl });
-
+    // Use Mongoose Lesson model directly
+    const Lesson = (await import('./models/lesson.js')).default;
+    const User = (await import('./models/User.js')).default;
+    const mongoose = (await import('mongoose')).default;
+    const lesson = await Lesson.create({ userId, title: videoTitle, steps, videoUrl, summary: summaryText });
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      await User.findByIdAndUpdate(userId, { $push: { savedLessons: lesson._id } });
+    }
     // 4) Shape response
-    return res.json({ id: saved.id, title: saved.title, summary: saved.summary, steps: saved.steps, videoUrl: saved.videoUrl, createdAt: saved.createdAt });
+    return res.json({
+      id: lesson._id?.toString() ?? '',
+      userId: lesson.userId?.toString() ?? '',
+      title: lesson.title?.toString() ?? '',
+      summary: lesson.summary?.toString() ?? '',
+      steps: Array.isArray(lesson.steps) ? lesson.steps.map(s => s?.toString() ?? '') : [],
+      videoUrl: lesson.videoUrl?.toString() ?? '',
+      favorite: !!lesson.favorite,
+      views: typeof lesson.views === 'number' ? lesson.views : 0,
+      createdAt: lesson.createdAt?.toISOString?.() ?? new Date().toISOString(),
+      updatedAt: lesson.updatedAt?.toISOString?.() ?? new Date().toISOString(),
+    });
   } catch (err) {
     console.error("generateLesson error:", err?.response?.data || err.message || err);
     const statusCode = err?.status || err?.response?.status || 500;
@@ -823,7 +896,7 @@ app.post("/api/generateLesson", userIdMiddleware, async (req, res) => {
 });
 
 // PATCH /api/lessons/:id/favorite { favorite: true|false }
-app.patch("/api/lessons/:id/favorite", async (req, res) => {
+app.patch("/api/lessons/:id/favorite", requireJwtAuthOrGoogle, async (req, res) => {
   console.log('[PATCH /api/lessons/:id/favorite] Authorization:', req.headers.authorization, 'userId:', req.userId);
   const id = String(req.params.id || '').trim();
   const favorite = !!req.body?.favorite;
@@ -839,7 +912,7 @@ app.patch("/api/lessons/:id/favorite", async (req, res) => {
 });
 
 // POST /api/lessons/:id/view -> record history entry (views++, lastViewedAt=now)
-app.post("/api/lessons/:id/view", async (req, res) => {
+app.post("/api/lessons/:id/view", requireJwtAuthOrGoogle, async (req, res) => {
   console.log('[POST /api/lessons/:id/view] Authorization:', req.headers.authorization, 'userId:', req.userId);
   const id = String(req.params.id || '').trim();
   if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id is required' });
@@ -854,7 +927,24 @@ app.post("/api/lessons/:id/view", async (req, res) => {
 });
 
 // GET /api/lessons?favorite=true|false&sort=createdAt|lastViewedAt&order=desc|asc (userId via middleware)
-app.get("/api/lessons", userIdMiddleware, async (req, res) => {
+app.get("/api/lessons", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
+  // Middleware to accept either JWT (login/password) or Google OAuth
+  function requireJwtAuthOrGoogle(req, res, next) {
+    // Try JWT first
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const { verifyToken } = require('./utils/jwtAuth.js');
+      const payload = verifyToken(token);
+      if (payload && payload.userId) {
+        req.userId = payload.userId;
+        req.jwtUser = payload;
+        return next();
+      }
+    }
+    // Fallback to Google OAuth
+    return requireAuth(req, res, next);
+  }
   const userId = req.userId;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   const favorite = req.query.favorite === undefined ? undefined : String(req.query.favorite).toLowerCase() === 'true';
@@ -887,3 +977,6 @@ app.get("/api/lessons", userIdMiddleware, async (req, res) => {
     });
   }
 });
+
+// Import and mount the user router on /api/users to expose /api/users/all endpoint.
+app.use('/api/users', userRouter);

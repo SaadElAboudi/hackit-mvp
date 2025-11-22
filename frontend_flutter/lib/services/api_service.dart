@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform; // guarded below for non-web only
 import 'package:injectable/injectable.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/base_search_result.dart';
 import '../models/stream_event.dart';
 
@@ -50,13 +51,26 @@ class ApiService {
     int attempts = 0;
     late dynamic lastError;
 
+    // Récupérer userId et token
+    String? userId;
+    String? token;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      userId = prefs.getString('user_id');
+      token = prefs.getString('auth_token');
+    } catch (_) {}
+
     while (attempts < maxRetries) {
       try {
         final uri = Uri.parse('$baseUrl/api/search');
+        final headers = {
+          'Content-Type': 'application/json',
+          if (userId != null && userId.isNotEmpty) 'x-user-id': userId,
+          if (token != null && token.isNotEmpty)
+            'Authorization': 'Bearer $token',
+        };
         final response = await _client
-            .post(uri,
-                headers: {'Content-Type': 'application/json'},
-                body: jsonEncode({'query': query}))
+            .post(uri, headers: headers, body: jsonEncode({'query': query}))
             .timeout(const Duration(seconds: timeoutSeconds));
 
         final body = _parseResponse(response);

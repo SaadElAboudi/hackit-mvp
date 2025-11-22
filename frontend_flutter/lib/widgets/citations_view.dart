@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/app_extensions.dart';
+// ...existing code...
 import '../models/base_search_result.dart';
 import '../services/video_seek_service.dart';
 
@@ -10,8 +10,7 @@ class CitationsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (citations.isEmpty) return const SizedBox.shrink();
-    final scheme = Theme.of(context).colorScheme;
-    final palette = Theme.of(context).extension<AppPalette>();
+    // ...existing code...
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -19,16 +18,26 @@ class CitationsView extends StatelessWidget {
         final label = _formatTs(c.startSec);
         return Tooltip(
           message: 'Aller à $label',
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: palette?.accentInfo ?? scheme.primary,
-              side: BorderSide(
-                  color: palette?.accentInfo ?? scheme.primary, width: 1.2),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300, width: 1),
             ),
-            onPressed: () => VideoSeekService.instance
-                .seekOrQueue(c.startSec, sourceUrl: c.url),
-            icon: const Icon(Icons.access_time, size: 16),
-            label: Text(label),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: InkWell(
+              onTap: () => VideoSeekService.instance
+                  .seekOrQueue(c.startSec, sourceUrl: c.url),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.access_time,
+                      size: 16, color: Colors.blueGrey),
+                  const SizedBox(width: 6),
+                  Text(label, style: const TextStyle(color: Colors.black)),
+                ],
+              ),
+            ),
           ),
         );
       }).toList(),

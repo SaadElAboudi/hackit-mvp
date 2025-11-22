@@ -5,6 +5,8 @@ import '../screens/home_screen.dart';
 import '../screens/lessons_screen.dart';
 import '../screens/favorites_screen.dart';
 import '../screens/history_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../screens/login_screen.dart';
 
 class RootTabs extends StatefulWidget {
   const RootTabs({super.key});
@@ -107,7 +109,9 @@ class _RootTabsState extends State<RootTabs> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
+        backgroundColor: Colors.white,
         appBar: AppBar(
+          backgroundColor: Colors.white,
           automaticallyImplyLeading: false,
           actions: [
             Builder(
@@ -139,8 +143,15 @@ class _RootTabsState extends State<RootTabs> {
                         Provider.of<GoogleAuthProvider>(context, listen: false);
                     if (value == 'logout') {
                       await googleAuth.signOut();
+                      // Clear JWT token and userId from SharedPreferences
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('auth_token');
+                      await prefs.remove('userId');
                       // Retour à l'écran de login
-                      Navigator.of(context).pushReplacementNamed('/');
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                      );
                     } else if (value == 'login') {
                       await googleAuth.signIn();
                     }

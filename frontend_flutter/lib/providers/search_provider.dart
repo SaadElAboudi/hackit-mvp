@@ -232,6 +232,15 @@ class SearchProvider extends ChangeNotifier {
 
   // Streaming variant: progressively updates steps, then appends video at the end.
   Future<void> searchStreaming(String query) async {
+    // Supprimer tous les messages sauf la bulle de bienvenue (assistantText)
+    if (messages.isNotEmpty &&
+        messages.first.kind == ChatKind.text &&
+        messages.first.role == ChatRole.assistant) {
+      messages = [messages.first];
+    } else {
+      messages = [];
+    }
+    notifyListeners();
     final analytics = AnalyticsManager();
     final stopwatch = Stopwatch()..start();
 
@@ -582,6 +591,25 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
+  String applyTemplateText(String? id, String current) {
+    final base = current.trim();
+    if (base.isEmpty) return '';
+    switch (id) {
+      case 'resume':
+        return 'Résume: $base';
+      case 'tutoriel':
+        return 'Explique-moi étape par étape: $base';
+      case 'eli5':
+        return 'Explique-moi comme si j\'avais 5 ans: $base';
+      case 'fr2en':
+        return 'Traduis en anglais: $base';
+      case 'en2fr':
+        return 'Traduis en français: $base';
+      default:
+        return base;
+    }
+  }
+
   // --- Messages helpers & persistence ---
   static const _messagesKey = 'chat_messages';
 
@@ -607,13 +635,59 @@ class SearchProvider extends ChangeNotifier {
           "citations": r.citations.map((c) => c.toMap()).toList(),
         if (r.chapters.isNotEmpty)
           "chapters": r.chapters.map((c) => c.toMap()).toList(),
+        if (r.keyTakeaways.isNotEmpty) "keyTakeaways": r.keyTakeaways,
+        if (r.quiz.isNotEmpty) "quiz": r.quiz,
       },
     );
     _push(stepsMsg);
   }
 
   void _appendError(String message) {
-    final err = ChatMessage.assistantError(_newId(), message);
+    // Ajoute une bulle d'erreur avec mock keyTakeaways, quiz et chapitres
+    final err = ChatMessage.assistantError(_newId(), message).copyWith(
+      content: {
+        'message': message,
+        'keyTakeaways': [
+          'Regardez la vidéo pour comprendre le concept.',
+          'Préparez le matériel nécessaire avant de commencer.',
+          'Suivez chaque étape attentivement pour réussir.',
+        ],
+        'quiz': [
+          {
+            'question':
+                'Quel est le premier réflexe à avoir avant de démarrer ?',
+            'answer': 'Préparer le matériel nécessaire.',
+          },
+          {
+            'question': 'Pourquoi suivre les étapes dans l’ordre ?',
+            'answer': 'Pour garantir le bon déroulement et la sécurité.',
+          },
+        ],
+        'chapters': [
+          {
+            'index': 0,
+            'startSec': 0,
+            'title': 'Ouvre la vidéo',
+          },
+          {
+            'index': 1,
+            'startSec': 45,
+            'title': 'Prépare le matériel nécessaire',
+          },
+          {
+            'index': 2,
+            'startSec': 120,
+            'title': 'Suis les étapes une à une',
+          },
+          {
+            'index': 3,
+            'startSec': 210,
+            'title': 'Vérifie le résultat final',
+          },
+        ],
+        'videoUrl': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      },
+    );
     _push(err);
   }
 
@@ -643,8 +717,14 @@ class SearchProvider extends ChangeNotifier {
         _draftText = d;
         _draftRestored = true;
       }
+      // Ne plus ajouter de message de bienvenue assistant
     } catch (_) {
-      messages = [];
+      messages = [
+        ChatMessage.assistantText(
+          _newId(),
+          "Bienvenue sur Hackit ! Posez votre question ou lancez une recherche pour commencer.",
+        )
+      ];
     }
   }
 
@@ -658,39 +738,8 @@ class SearchProvider extends ChangeNotifier {
   static const _draftKey = 'draft_text';
   Future<void> setLastTemplate(String? id) async {
     _lastTemplate = id;
-    if (id == null) {
-      await _prefs?.remove(_lastTemplateKey);
-    } else {
+    if (id != null) {
       await _prefs?.setString(_lastTemplateKey, id);
-    }
-    notifyListeners();
-  }
-
-  // Apply a prompt template to the provided text.
-  // Supported ids: 'resume', 'tutoriel', 'eli5', 'fr2en', 'en2fr'
-  String applyTemplateText(String id, String current) {
-    final base = current.trim();
-    switch (id) {
-      case 'resume':
-        return base.isEmpty ? 'Résume ce contenu:' : 'Résume: $base';
-      case 'tutoriel':
-        return base.isEmpty
-            ? 'Fais un tutoriel étape par étape sur …'
-            : 'Fais un tutoriel étape par étape sur: $base';
-      case 'eli5':
-        return base.isEmpty
-            ? "Explique comme si j'avais 5 ans:"
-            : "Explique comme si j'avais 5 ans: $base";
-      case 'fr2en':
-        return base.isEmpty
-            ? 'Translate to English:'
-            : 'Translate to English: $base';
-      case 'en2fr':
-        return base.isEmpty
-            ? 'Traduire en français:'
-            : 'Traduire en français: $base';
-      default:
-        return current;
     }
   }
 }

@@ -22,45 +22,79 @@ class _ChaptersViewState extends State<ChaptersView> {
     final chapters = widget.chapters;
     if (chapters.isEmpty) return const SizedBox.shrink();
     return ExpansionTile(
-      title: Text('Chapitres (${chapters.length})'),
+      title: Text('Chapitres (${chapters.length})',
+          style: TextStyle(fontWeight: FontWeight.bold)),
       children: [
-        for (final ch in chapters)
-          ListTile(
-            dense: true,
-            title: Text(ch.title),
-            leading: const Icon(Icons.play_arrow, size: 20),
-            subtitle: Text(_formatTs(ch.startSec)),
-            onTap: () {
-              if (_debouncing) return;
-              _debouncing = true;
-              Future.delayed(const Duration(milliseconds: 400), () {
-                _debouncing = false;
-              });
-              if (kIsWeb) {
-                // Attempt inline seek; fallback to service queue if not available.
-                seekYouTube(ch.startSec);
-              } else {
-                VideoSeekService.instance
-                    .seekOrQueue(ch.startSec, sourceUrl: widget.videoUrl);
-              }
-              final messenger = ScaffoldMessenger.of(context);
-              messenger.hideCurrentSnackBar();
-              final ts = _formatTs(ch.startSec);
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Text('Lecture à $ts'),
-                  duration: const Duration(milliseconds: 900),
-                  behavior: SnackBarBehavior.floating,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Column(
+            children: [
+              for (final ch in chapters)
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300, width: 1),
+                  ),
+                  child: ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.cyan,
+                      child: Icon(Icons.play_arrow, color: Colors.white),
+                    ),
+                    title: Text(ch.title,
+                        style: TextStyle(
+                            color: Colors.black, fontWeight: FontWeight.w600)),
+                    subtitle: Row(
+                      children: [
+                        Chip(
+                          label: Text(_formatTs(ch.startSec),
+                              style: TextStyle(color: Colors.white)),
+                          backgroundColor: Colors.indigo,
+                        ),
+                        SizedBox(width: 8),
+                        Text('Cliquez pour lire',
+                            style:
+                                TextStyle(color: Colors.black54, fontSize: 12)),
+                      ],
+                    ),
+                    onTap: () {
+                      if (_debouncing) return;
+                      _debouncing = true;
+                      Future.delayed(const Duration(milliseconds: 400), () {
+                        _debouncing = false;
+                      });
+                      if (kIsWeb) {
+                        seekYouTube(ch.startSec);
+                      } else {
+                        VideoSeekService.instance.seekOrQueue(ch.startSec,
+                            sourceUrl: widget.videoUrl);
+                      }
+                      final messenger = ScaffoldMessenger.of(context);
+                      messenger.hideCurrentSnackBar();
+                      final ts = _formatTs(ch.startSec);
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Lecture à $ts'),
+                          duration: const Duration(milliseconds: 900),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    trailing: IconButton(
+                      tooltip: 'Ouvrir dans une nouvelle fenêtre',
+                      icon: const Icon(Icons.open_in_new,
+                          color: Colors.cyanAccent, size: 22),
+                      onPressed: () => _openExternal(context,
+                          _withTimestamp(widget.videoUrl, ch.startSec)),
+                    ),
+                  ),
                 ),
-              );
-            },
-            trailing: IconButton(
-              tooltip: 'Ouvrir dans une nouvelle fenêtre',
-              icon: const Icon(Icons.open_in_new, size: 18),
-              onPressed: () => _openExternal(
-                  context, _withTimestamp(widget.videoUrl, ch.startSec)),
-            ),
-          )
+            ],
+          ),
+        ),
       ],
     );
   }

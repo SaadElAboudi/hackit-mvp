@@ -1,6 +1,7 @@
 import '../../providers/google_auth_provider.dart';
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../analytics/analytics_manager.dart';
 
 class ApiService {
@@ -24,10 +25,18 @@ class ApiService {
             options.headers['Authorization'] = 'Bearer ${auth?.accessToken}';
           }
           options.headers['x-user-id'] = user?.id;
-          if (user == null) {
-            // Mode invité : injecte seulement le userId local (géré par LessonsService)
-            // Le userId est ajouté dans les query/body par LessonsService
-          }
+          // Ajout du token JWT local si présent (connexion email/password)
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final jwt = prefs.getString('auth_token');
+            final userIdLocal = prefs.getString('user_id');
+            if (jwt != null && jwt.isNotEmpty) {
+              options.headers['Authorization'] = 'Bearer $jwt';
+            }
+            if (userIdLocal != null && userIdLocal.isNotEmpty) {
+              options.headers['x-user-id'] = userIdLocal;
+            }
+          } catch (_) {}
           handler.next(options);
         },
       ),

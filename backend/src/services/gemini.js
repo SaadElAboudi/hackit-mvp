@@ -12,7 +12,7 @@ import axios from "axios";
  */
 export const generateWithGemini = async (prompt, maxOutputTokens = 256) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const CONFIG_MODEL = process.env.GEMINI_MODEL || "models/gemini-1.5-flash";
+  const CONFIG_MODEL = "models/gemini-1.5-flash";
 
   if (!GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY manquante dans les variables d'environnement");
@@ -151,6 +151,6 @@ export const generateSummary = async (videoTitle) => {
     return "Résumé non disponible: activez USE_GEMINI=true dans votre fichier .env";
   }
 
-  const summaryPrompt = `Résume cette vidéo YouTube en étapes claires et structurées: ${videoTitle}`;
-  return await generateWithGemini(summaryPrompt, 300);
+  const summaryPrompt = `Donne uniquement les étapes principales de la vidéo YouTube: ${videoTitle}`;
+  return await generateWithGemini(summaryPrompt, 80);
 };

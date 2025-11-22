@@ -9,8 +9,12 @@ class LessonsProvider extends ChangeNotifier {
   Future<void> deleteLesson(String lessonId) async {
     final idx = lessons.indexWhere((l) => l.id == lessonId);
     if (idx == -1) return;
+    // Only send delete to backend if lessonId is a valid ObjectId
+    final isObjectId = RegExp(r'^[a-fA-F0-9]{24}\$').hasMatch(lessonId);
     try {
-      await _service.deleteLesson(lessonId: lessonId);
+      if (isObjectId) {
+        await _service.deleteLesson(lessonId: lessonId);
+      }
       lessons.removeAt(idx);
       notifyListeners();
     } catch (e) {
@@ -114,10 +118,30 @@ class LessonsProvider extends ChangeNotifier {
     final idx = lessons.indexWhere((l) => l.id == lessonId);
     if (idx == -1) return;
     final current = lessons[idx];
+    final newFav = !current.favorite;
+    final isObjectId = RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(lessonId);
     try {
-      final updated = await _service.setFavorite(
-          lessonId: lessonId, favorite: !current.favorite);
-      lessons[idx] = updated;
+      if (isObjectId) {
+        final updated =
+            await _service.setFavorite(lessonId: lessonId, favorite: newFav);
+        lessons[idx] = updated;
+      } else {
+        lessons[idx] = Lesson(
+          id: current.id,
+          userId: current.userId,
+          title: current.title,
+          summary: current.summary,
+          steps: current.steps,
+          videoUrl: current.videoUrl,
+          favorite: newFav,
+          views: current.views,
+          lastViewedAt: current.lastViewedAt,
+          createdAt: current.createdAt,
+          progress: current.progress,
+          reminder: current.reminder,
+          guestPrompt: current.guestPrompt,
+        );
+      }
       notifyListeners();
     } catch (e) {
       error = e.toString();

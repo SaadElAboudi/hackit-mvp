@@ -16,11 +16,39 @@ class ResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    SizeConfig.init(context);
-    return const ResponsiveLayout(
-      mobile: _ResultMobileLayout(),
-      tablet: _ResultTabletLayout(),
-      desktop: _ResultDesktopLayout(),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text('Résultats',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        child: ListView.separated(
+          itemCount: 10, // exemple
+          separatorBuilder: (_, __) => SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            return Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18)),
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                leading: Icon(Icons.search, color: Colors.blue, size: 28),
+                title: Text('Résultat ${index + 1}',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text('Détail du résultat',
+                    style: TextStyle(color: Colors.grey[600])),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -37,7 +65,11 @@ class _ResultMobileLayout extends StatelessWidget {
         result.citations.isEmpty &&
         result.chapters.isEmpty;
     return Scaffold(
-      appBar: AppBar(title: const Text('Résultats')),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        title: const Text('Résultats'),
+      ),
       body: isEmpty
           ? EmptyState(
               icon: Icons.search_off_rounded,
@@ -138,7 +170,11 @@ class _ResultTabletLayout extends StatelessWidget {
     final result = _getResult(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Résultats')),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        title: const Text('Résultats'),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints:
@@ -220,7 +256,11 @@ class _ResultDesktopLayout extends StatelessWidget {
     final result = _getResult(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Résultats')),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        title: const Text('Résultats'),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints:
