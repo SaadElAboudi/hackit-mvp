@@ -1,234 +1,136 @@
+import {
+  createLessonForUser,
+  deleteLessonForUser,
+  listLessonsForUser,
+  recordLessonViewForUser,
+  setFavoriteForUser,
+} from '../services/lessonsService.js';
 
-import Lesson from '../models/lesson.js';
-import User from '../models/User.js';
-
-// Fonction utilitaire pour mettre à jour le favoris
-export async function updateFavorite(id, favorite) {
-    const mongoose = require('mongoose');
-    let lesson = null;
-    if (mongoose.Types.ObjectId.isValid(id)) {
-        lesson = await Lesson.findByIdAndUpdate(id, { favorite }, { new: true });
-    }
-    return lesson;
+function shapeLesson(lesson) {
+  return {
+    id: lesson._id?.toString?.() ?? lesson.id ?? '',
+    userId: lesson.userId?.toString?.() ?? '',
+    title: lesson.title?.toString?.() ?? '',
+    summary: lesson.summary?.toString?.() ?? '',
+    steps: Array.isArray(lesson.steps) ? lesson.steps.map((s) => s?.toString?.() ?? '') : [],
+    videoUrl: lesson.videoUrl?.toString?.() ?? '',
+    favorite: Boolean(lesson.favorite),
+    views: typeof lesson.views === 'number' ? lesson.views : 0,
+    createdAt: lesson.createdAt?.toISOString?.() ?? new Date().toISOString(),
+    updatedAt: lesson.updatedAt?.toISOString?.() ?? new Date().toISOString(),
+  };
 }
 
-/**
- * Create a lesson from chat data
- */
-export const createLesson = async (req, res) => {
-    try {
-        const { userId, title, steps, videoUrl, summary } = req.body;
-        if (!userId || !title || !steps || !videoUrl) {
-            return res.status(400).json({
-                error: "Missing required fields: userId, title, steps, videoUrl"
-            });
-        }
-        // Create lesson in MongoDB
-        const lesson = await Lesson.create({ userId, title, steps, videoUrl, summary });
-        // Link lesson to user's savedLessons
-        await User.findByIdAndUpdate(userId, { $push: { savedLessons: lesson._id } });
-        res.status(201).json(lesson);
-    } catch (error) {
-        console.error("Create lesson error:", error);
-        // Log full error object for debugging
-        try {
-            console.error("Full error:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
-        } catch (e) {
-            console.error("Error stringification failed:", e);
-        }
-        res.status(500).json({
-            error: "Internal server error",
-            detail: error.message,
-            stack: error.stack,
-            name: error.name
-        });
+export async function createLesson(req, res) {
+  try {
+    const { title, steps, videoUrl, summary } = req.body || {};
+    const userId = req.userId;
+
+    if (!userId || typeof userId !== 'string' || userId.length < 3 || userId.length > 128) {
+      return res.status(400).json({ error: 'Invalid userId' });
     }
-};
 
-/**
- * Generate a lesson from a query
- */
-export const generateLesson = async (req, res) => {
-    try {
-        const { query, userId } = req.body;
-
-        if (!query || !userId) {
-            return res.status(400).json({
-                error: "Missing required fields: query, userId"
-            });
-        }
-
-        // Check for mock mode
-        const MOCK_MODE = (process.env.MOCK_MODE || "true") === "true";
-        if (MOCK_MODE) {
-            const lesson = {
-                id: generateId(),
-                userId,
-                title: `Leçon: ${query}`,
-                steps: [
-                    "Étape 1: Préparez vos matériaux",
-                    "Étape 2: Suivez les instructions",
-                    "Étape 3: Vérifiez votre travail",
-                    "Étape 4: Nettoyez l'espace de travail"
-                ],
-                videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                summary: "Cette leçon vous guide à travers les étapes de base.",
-                favorite: false,
-                views: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-
-            lessons.push(lesson);
-            return res.status(201).json(lesson);
-        }
-
-        // Real implementation would:
-        // 1. Reformulate query
-        // 2. Search YouTube
-        // 3. Generate summary with Gemini
-        // 4. Create lesson
-
-        // For now, return mock data
-        const lesson = {
-            id: generateId(),
-            userId,
-            title: `Leçon générée: ${query}`,
-            steps: ["Contenu en cours de génération..."],
-            videoUrl: "https://example.com/video",
-            summary: null,
-            favorite: false,
-            views: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-
-        lessons.push(lesson);
-        res.status(201).json(lesson);
-    } catch (error) {
-        console.error("Generate lesson error:", error);
-        res.status(500).json({
-            error: "Internal server error",
-            detail: error.message
-        });
+    const isAnon = userId.startsWith('anon_');
+    const isNumeric = /^[0-9]+$/.test(userId);
+    const isAlphaNum = /^[a-zA-Z0-9_-]+$/.test(userId);
+    if (!(isAnon || isNumeric || isAlphaNum)) {
+      return res.status(400).json({ error: 'userId must be anon_, numeric, or alphanum' });
     }
-};
 
-/**
- * List lessons for a user
- */
-export const listLessons = async (req, res) => {
-    try {
-        const { userId, favorite, sort = 'createdAt', order = 'desc', limit = 50, offset = 0 } = req.query;
-        if (!userId) {
-            return res.status(400).json({
-                error: "Missing required parameter: userId"
-            });
-        }
-        const mongoose = require('mongoose');
-        let lessons = [];
-        if (mongoose.Types.ObjectId.isValid(userId)) {
-            // Registered user: get savedLessons
-            const user = await User.findById(userId).populate({
-                path: 'savedLessons',
-                match: favorite !== undefined ? { favorite: favorite === 'true' } : {},
-                options: {
-                    sort: { [sort]: order === 'asc' ? 1 : -1 },
-                    limit: parseInt(limit) || 50,
-                    skip: parseInt(offset) || 0
-                }
-            });
-            if (!user) {
-                return res.status(404).json({ error: 'Utilisateur non trouvé.' });
-            }
-            lessons = user.savedLessons || [];
-        } else {
-            // Guest/anonymous: get lessons by userId field
-            lessons = await Lesson.find({ userId }).sort({ [sort]: order === 'asc' ? 1 : -1 }).limit(parseInt(limit) || 50).skip(parseInt(offset) || 0);
-            if (favorite !== undefined) {
-                lessons = lessons.filter(l => !!l.favorite === (favorite === 'true'));
-            }
-        }
-        res.json({
-            items: lessons,
-            total: lessons.length,
-            limit: parseInt(limit) || 50,
-            offset: parseInt(offset) || 0
-        });
-    } catch (error) {
-        console.error("List lessons error:", error);
-        res.status(500).json({
-            error: "Internal server error",
-            detail: error.message
-        });
+    if (!title || typeof title !== 'string' || title.length < 2 || title.length > 120) {
+      return res.status(400).json({ error: 'Title must be 2-120 chars' });
     }
-};
 
-/**
- * Set favorite status for a lesson
- */
-export const setFavorite = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { favorite } = req.body;
-        if (favorite === undefined) {
-            return res.status(400).json({
-                error: "Missing required field: favorite"
-            });
-        }
-        const mongoose = require('mongoose');
-        let lesson = null;
-        if (mongoose.Types.ObjectId.isValid(id)) {
-            lesson = await Lesson.findByIdAndUpdate(id, { favorite }, { new: true });
-        }
-        // Always return success, even for guest/invalid ids
-        res.json({ ok: true, lesson });
-    } catch (error) {
-        console.error("Set favorite error:", error);
-        res.json({ ok: true });
+    if (!videoUrl || typeof videoUrl !== 'string' || !/^https?:\/\/.{8,}/.test(videoUrl)) {
+      return res.status(400).json({ error: 'Invalid videoUrl' });
     }
-};
 
-/**
- * Record a view for a lesson
- */
-export const recordView = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const lesson = await Lesson.findByIdAndUpdate(id, {
-            $inc: { views: 1 },
-            lastViewedAt: new Date(),
-            updatedAt: new Date()
-        }, { new: true });
-        if (!lesson) {
-            return res.status(404).json({ error: "Lesson not found" });
-        }
-        res.json(lesson);
-    } catch (error) {
-        console.error("Record view error:", error);
-        res.status(500).json({
-            error: "Internal server error",
-            detail: error.message
-        });
+    if (!Array.isArray(steps) || steps.length === 0 || steps.length > 20 || !steps.every((s) => typeof s === 'string' && s.length > 1 && s.length < 200)) {
+      return res.status(400).json({ error: 'steps[] must be 1-20 non-empty strings, each 2-200 chars' });
     }
-};
 
-/**
- * Delete a lesson
- */
-export const deleteLesson = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const mongoose = require('mongoose');
-        // Only delete from MongoDB if id is a valid ObjectId
-        if (mongoose.Types.ObjectId.isValid(id)) {
-            await Lesson.findByIdAndDelete(id);
-            await User.updateMany({}, { $pull: { savedLessons: id } });
-        }
-        // Always return success, even for guest/invalid ids
-        res.json({ ok: true });
-    } catch (error) {
-        console.error("Delete lesson error:", error);
-        res.json({ ok: true });
-    }
-};
+    const lesson = await createLessonForUser({ userId, title, steps, videoUrl, summary });
+    return res.json(shapeLesson(lesson));
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to save lesson', detail: 'Internal error' });
+  }
+}
+
+export async function deleteLesson(req, res) {
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  try {
+    const result = await deleteLessonForUser({ lessonId: id, userId: req.userId });
+    if (result.invalidId) return res.status(400).json({ error: 'Invalid lesson id' });
+    if (result.deletedCount === 0) return res.status(404).json({ error: 'Lesson not found' });
+
+    return res.json({ deleted: true, id });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to delete lesson', detail: e?.message || 'Unknown error' });
+  }
+}
+
+export async function setFavorite(req, res) {
+  const id = String(req.params.id || '').trim();
+  const favorite = !!req.body?.favorite;
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  try {
+    const updated = await setFavoriteForUser({ lessonId: id, userId: req.userId, favorite });
+    if (!updated) return res.status(404).json({ error: 'Not found' });
+    return res.json({ ok: true, lesson: shapeLesson(updated) });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to update favorite', detail: e?.message || 'Unknown error' });
+  }
+}
+
+export async function recordView(req, res) {
+  const id = String(req.params.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  try {
+    const updated = await recordLessonViewForUser({ lessonId: id, userId: req.userId });
+    if (!updated) return res.status(404).json({ error: 'Not found' });
+    return res.json(shapeLesson(updated));
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to record view', detail: e?.message || 'Unknown error' });
+  }
+}
+
+export async function listLessons(req, res) {
+  const userId = req.userId;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  const favorite = req.query.favorite === undefined ? undefined : String(req.query.favorite).toLowerCase() === 'true';
+  const sortBy = ['createdAt', 'lastViewedAt', 'views'].includes(String(req.query.sort || '')) ? String(req.query.sort) : 'createdAt';
+  const order = String(req.query.order || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10)));
+  const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10));
+
+  try {
+    const items = await listLessonsForUser({ userId, favorite, sortBy, order, limit, offset });
+    const shapedItems = items.map((lesson) => ({
+      ...shapeLesson(lesson),
+      progress: lesson.progress || 0,
+      reminder: lesson.reminder || null,
+      guestPrompt: (!req.isAuthenticated?.() && !req.user)
+        ? 'Save progress or unlock premium features by signing in.'
+        : undefined,
+    }));
+
+    const suggestedActions = shapedItems.length === 0 ? [
+      { label: 'Search for a lesson', action: '/api/search' },
+      { label: 'Request help', action: '/support' },
+    ] : undefined;
+
+    return res.json({ items: shapedItems, total: shapedItems.length, suggestedActions });
+  } catch (e) {
+    return res.status(500).json({
+      error: 'Failed to list lessons', detail: e?.message || 'Unknown error', suggestedActions: [
+        { label: 'Retry', action: '/api/lessons' },
+        { label: 'Request help', action: '/support' },
+      ],
+    });
+  }
+}
