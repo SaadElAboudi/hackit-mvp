@@ -18,7 +18,7 @@ import { getTranscript } from './services/transcript.js';
 import { searchYouTube as originalSearchYouTube } from './services/youtube.js';
 import { requireJwtAuthOrGoogle } from './utils/jwtAuth.js';
 import { buildObservabilitySnapshot, evaluateAlerts, observeExternal, observeHttp, observeQualityEvent, observeTtvEvent } from './utils/observability.js';
-import passport from './utils/passportGoogle.js';
+import passport, { isGoogleOAuthEnabled } from './utils/passportGoogle.js';
 import { userIdMiddleware } from './utils/userIdMiddleware.js';
 
 // Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
@@ -137,8 +137,23 @@ if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 // ============ AUTHENTIFICATION GOOGLE ============
+app.get('/auth/google/status', (_req, res) => {
+  return res.json({
+    enabled: isGoogleOAuthEnabled(),
+    hasClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
+    hasCallbackUrl: Boolean(process.env.GOOGLE_CALLBACK_URL),
+  });
+});
+
 // Lance le flow OAuth Google (CSRF state token)
 app.get('/auth/google', (req, res, next) => {
+  if (!isGoogleOAuthEnabled()) {
+    return res.status(503).json({
+      error: 'Google OAuth is not configured',
+      detail: 'Missing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, or GOOGLE_CALLBACK_URL',
+    });
+  }
+
   const state = randomBytes(24).toString('hex');
   req.session.oauthState = state;
   return passport.authenticate('google', { scope: ['profile', 'email'], state })(req, res, next);
@@ -147,6 +162,9 @@ app.get('/auth/google', (req, res, next) => {
 // Callback Google OAuth + state validation + session rotation
 app.get('/auth/google/callback',
   (req, res, next) => {
+    if (!isGoogleOAuthEnabled()) {
+      return res.status(503).json({ error: 'Google OAuth is not configured' });
+    }
     const expectedState = req.session?.oauthState;
     if (req.session) delete req.session.oauthState;
     if (!expectedState || req.query.state !== expectedState) {
@@ -162,6 +180,10 @@ app.get('/auth/google/callback',
       req.login(authenticatedUser, (loginErr) => {
         if (loginErr) return next(loginErr);
         const userId = authenticatedUser?.id;
+        const frontendOrigin = process.env.FRONTEND_ORIGIN || '';
+        if (frontendOrigin) {
+          return res.redirect(`${frontendOrigin.replace(/\/$/, '')}/auth-success?userId=${userId}`);
+        }
         return res.redirect(`/auth-success?userId=${userId}`);
       });
     });

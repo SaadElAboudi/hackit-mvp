@@ -41,4 +41,8 @@ if (hasGoogleOAuthConfig) {
     console.warn('Google OAuth désactivé: variables GOOGLE_CLIENT_ID/SECRET/CALLBACK_URL manquantes.');
 }
 
+export function isGoogleOAuthEnabled() {
+    return hasGoogleOAuthConfig;
+}
+
 export default passport;
