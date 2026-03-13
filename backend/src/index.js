@@ -1,6 +1,7 @@
 // import { deleteLesson } from "./utils/persistence.js";
 // Deprecated persistence import removed. Use Mongoose models instead.
 import { OAuth2Client } from 'google-auth-library';
+import { randomBytes } from 'crypto';
 import { pathToFileURL } from "url";
 
 import axios from "axios";
@@ -25,6 +26,8 @@ import userRouter from './routes/user.js';
 import mongoose from 'mongoose';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const dynamicImport = (moduleName) => Function('m', 'return import(m)')(moduleName);
 
 // Middleware pour exiger une authentification Google ou un token Google
 async function requireAuth(req, res, next) {
@@ -93,12 +96,53 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-// Simple rate limiter for expensive endpoints
+// Rate limiter with Redis support (distributed) and in-memory fallback
 const rateLimit = {};
-function simpleRateLimit(key, maxPerMinute = 30) {
+const REDIS_URL = process.env.REDIS_URL;
+let redisClient = null;
+let redisReady = false;
+
+async function initRedisRateLimiter() {
+  if (!REDIS_URL || process.env.NODE_ENV === 'test' || redisReady || redisClient) return;
+  try {
+    const { createClient } = await dynamicImport('redis');
+    redisClient = createClient({ url: REDIS_URL });
+    redisClient.on('error', (err) => {
+      redisReady = false;
+      console.warn('Redis rate limiter unavailable:', err?.message || err);
+    });
+    await redisClient.connect();
+    redisReady = true;
+  } catch (err) {
+    redisClient = null;
+    redisReady = false;
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Redis rate limiter disabled, fallback to memory:', err?.message || err);
+    }
+  }
+}
+
+await initRedisRateLimiter();
+
+async function simpleRateLimit(key, maxPerMinute = 30) {
+  if (redisReady && redisClient) {
+    try {
+      const bucket = Math.floor(Date.now() / 60000);
+      const redisKey = `ratelimit:${key}:${bucket}`;
+      const current = await redisClient.incr(redisKey);
+      if (current === 1) {
+        await redisClient.expire(redisKey, 60);
+      }
+      return current <= maxPerMinute;
+    } catch (err) {
+      redisReady = false;
+      console.warn('Redis rate limiting failed, using memory fallback:', err?.message || err);
+    }
+  }
+
   const now = Date.now();
   if (!rateLimit[key]) rateLimit[key] = [];
-  rateLimit[key] = rateLimit[key].filter(ts => now - ts < 60000);
+  rateLimit[key] = rateLimit[key].filter((ts) => now - ts < 60000);
   if (rateLimit[key].length >= maxPerMinute) return false;
   rateLimit[key].push(now);
   return true;
@@ -106,12 +150,36 @@ function simpleRateLimit(key, maxPerMinute = 30) {
 // Route GET /api/lessons accessible sans requireAuth
 // Removed duplicate /api/lessons route. Only the protected version remains below.
 // Session pour Passport
-app.use(session({
+const sessionConfig = {
+  name: 'hackit.sid',
   secret: process.env.SESSION_SECRET || "dev_secret",
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 3600 * 24 * 365 }
-}));
+  rolling: process.env.NODE_ENV === 'production',
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 3600 * 24 * 30,
+  },
+};
+
+const sessionStoreMongoUrl = process.env.SESSION_STORE_MONGO_URL || process.env.MONGODB_URI;
+if (process.env.NODE_ENV === 'production' && sessionStoreMongoUrl) {
+  try {
+    const mongoStoreModule = await dynamicImport('connect-mongo');
+    const MongoStore = mongoStoreModule.default;
+    sessionConfig.store = MongoStore.create({
+      mongoUrl: sessionStoreMongoUrl,
+      ttl: 60 * 60 * 24 * 30,
+      autoRemove: 'native',
+    });
+  } catch (err) {
+    console.warn('External session store unavailable, falling back to memory store:', err?.message || err);
+  }
+}
+
+app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 // Enable concise logging in all non-test environments
@@ -119,16 +187,34 @@ if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 // ============ AUTHENTIFICATION GOOGLE ============
-// Lance le flow OAuth Google
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+// Lance le flow OAuth Google (CSRF state token)
+app.get('/auth/google', (req, res, next) => {
+  const state = randomBytes(24).toString('hex');
+  req.session.oauthState = state;
+  return passport.authenticate('google', { scope: ['profile', 'email'], state })(req, res, next);
+});
 
-// Callback Google OAuth
+// Callback Google OAuth + state validation + session rotation
 app.get('/auth/google/callback',
+  (req, res, next) => {
+    const expectedState = req.session?.oauthState;
+    if (req.session) delete req.session.oauthState;
+    if (!expectedState || req.query.state !== expectedState) {
+      return res.status(403).json({ error: 'Invalid OAuth state' });
+    }
+    return next();
+  },
   passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => {
-    // Redirige vers le frontend avec le userId en paramètre (à adapter selon l'URL du frontend)
-    const userId = req.user?.id;
-    res.redirect(`/auth-success?userId=${userId}`);
+  (req, res, next) => {
+    const authenticatedUser = req.user;
+    req.session.regenerate((sessionErr) => {
+      if (sessionErr) return next(sessionErr);
+      req.login(authenticatedUser, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        const userId = authenticatedUser?.id;
+        return res.redirect(`/auth-success?userId=${userId}`);
+      });
+    });
   }
 );
 // DELETE /api/lessons/:id
@@ -136,7 +222,17 @@ app.delete("/api/lessons/:id", requireJwtAuthOrGoogle, userIdMiddleware, async (
   const id = String(req.params.id || '').trim();
   if (!id) return res.status(400).json({ error: 'id is required' });
   try {
-    await deleteLesson(id);
+    const Lesson = (await import('./models/lesson.js')).default;
+    const mongooseModule = (await import('mongoose')).default;
+    if (!mongooseModule.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid lesson id' });
+    }
+
+    const result = await Lesson.deleteOne({ _id: id, userId: req.userId });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+
     return res.json({ deleted: true, id });
   } catch (e) {
     return res.status(500).json({ error: 'Failed to delete lesson', detail: e?.message || 'Unknown error' });
@@ -405,7 +501,7 @@ app.get("/health/extended", (_req, res) => {
 app.post("/api/search", async (req, res) => {
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  if (!simpleRateLimit(`search:${ip}`, 20)) {
+  if (!(await simpleRateLimit(`search:${ip}`, 20))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   const { query } = req.body;
@@ -532,7 +628,7 @@ app.post("/api/search", async (req, res) => {
 app.get("/api/search/stream", async (req, res) => {
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  if (!simpleRateLimit(`stream:${ip}`, 10)) {
+  if (!(await simpleRateLimit(`stream:${ip}`, 10))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   const query = String(req.query.query || "").trim();
