@@ -417,7 +417,9 @@ app.post("/api/search", async (req, res) => {
     const mock = makeMockResponse();
     const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
-    return res.json({ ...mock, citations });
+    const desiredChapters = extractDesiredChapters(query);
+    const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
+    return res.json({ ...mock, citations, chapters });
   }
 
   try {
@@ -733,18 +735,18 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   });
 }
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/hackit', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-mongoose.connection.on('connected', () => {
-  console.log('MongoDB connected');
-});
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
-});
+// Connect to MongoDB (skip in tests to avoid external dependency requirement)
+const shouldConnectMongo = process.env.NODE_ENV !== 'test';
+if (shouldConnectMongo) {
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/hackit';
+  mongoose.connect(mongoUri)
+    .then(() => {
+      console.log('MongoDB connected');
+    })
+    .catch((err) => {
+      console.error('MongoDB connection error:', err);
+    });
+}
 
 // ============ LESSON GENERATION & PERSISTENCE ============
 // POST /api/lessons { title, steps[], videoUrl, summary? } (userId via middleware)
