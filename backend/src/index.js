@@ -1,83 +1,27 @@
 // import { deleteLesson } from "./utils/persistence.js";
 // Deprecated persistence import removed. Use Mongoose models instead.
-import { OAuth2Client } from 'google-auth-library';
-import { pathToFileURL } from "url";
+import { randomBytes } from 'crypto';
+import { pathToFileURL } from 'url';
 
-import axios from "axios";
-import cors from "cors";
-import dotenv from "dotenv";
-import express from "express";
-import morgan from "morgan";
-// Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
-
-import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
-import { getTranscript } from "./services/transcript.js";
-import { getChapters, extractDesiredChapters } from "./services/chapters.js";
-
-
-import { userIdMiddleware } from "./utils/userIdMiddleware.js";
-import passport from "./utils/passportGoogle.js";
-import { requireJwtAuth, requireJwtAuthOrGoogle } from "./utils/jwtAuth.js";
-// Import requireAuth middleware from this file
-// (already defined above)
-import session from "express-session";
-import userRouter from './routes/user.js';
+import axios from 'axios';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import express from 'express';
+import session from 'express-session';
 import mongoose from 'mongoose';
+import morgan from 'morgan';
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+import lessonsRouter from './routes/lessons.js';
+import userRouter from './routes/user.js';
+import { getChapters, extractDesiredChapters } from './services/chapters.js';
+import { getTranscript } from './services/transcript.js';
+import { searchYouTube as originalSearchYouTube } from './services/youtube.js';
+import { requireJwtAuthOrGoogle } from './utils/jwtAuth.js';
+import passport from './utils/passportGoogle.js';
+import { userIdMiddleware } from './utils/userIdMiddleware.js';
 
-// Middleware pour exiger une authentification Google ou un token Google
-async function requireAuth(req, res, next) {
-  // Logging of authorization header removed for security.
-  // Vérifie d'abord la session Passport
-  if (req.isAuthenticated?.() && req.user) {
-    return next();
-  }
-
-  // Vérifie le token Google envoyé en header
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: token,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      if (payload && payload.sub) {
-        // Vérifie si l'utilisateur existe dans la BDD
-        const User = (await import('./models/User.js')).default;
-        let user = await User.findOne({ email: payload.email });
-        if (!user) {
-          // Crée automatiquement un compte utilisateur Google
-          user = new User({
-            email: payload.email,
-            password: '', // pas de mot de passe pour Google
-            favorites: [],
-            history: [],
-            savedLessons: []
-          });
-          await user.save();
-        }
-        req.user = {
-          id: user._id,
-          email: user.email,
-          displayName: payload.name,
-          photo: payload.picture,
-          provider: 'google',
-        };
-        return next();
-      }
-    } catch (err) {
-      // Token invalide
-      return res.status(401).json({ error: 'Invalid Google token', detail: err.message });
-    }
-  }
-
-  // Sinon, refuse
-  res.status(401).json({ error: 'Authentication required' });
-}
-
+// Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
+const dynamicImport = (moduleName) => Function('m', 'return import(m)')(moduleName);
 
 dotenv.config({ quiet: true });
 
@@ -93,12 +37,53 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-// Simple rate limiter for expensive endpoints
+// Rate limiter with Redis support (distributed) and in-memory fallback
 const rateLimit = {};
-function simpleRateLimit(key, maxPerMinute = 30) {
+const REDIS_URL = process.env.REDIS_URL;
+let redisClient = null;
+let redisReady = false;
+
+async function initRedisRateLimiter() {
+  if (!REDIS_URL || process.env.NODE_ENV === 'test' || redisReady || redisClient) return;
+  try {
+    const { createClient } = await dynamicImport('redis');
+    redisClient = createClient({ url: REDIS_URL });
+    redisClient.on('error', (err) => {
+      redisReady = false;
+      console.warn('Redis rate limiter unavailable:', err?.message || err);
+    });
+    await redisClient.connect();
+    redisReady = true;
+  } catch (err) {
+    redisClient = null;
+    redisReady = false;
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Redis rate limiter disabled, fallback to memory:', err?.message || err);
+    }
+  }
+}
+
+await initRedisRateLimiter();
+
+async function simpleRateLimit(key, maxPerMinute = 30) {
+  if (redisReady && redisClient) {
+    try {
+      const bucket = Math.floor(Date.now() / 60000);
+      const redisKey = `ratelimit:${key}:${bucket}`;
+      const current = await redisClient.incr(redisKey);
+      if (current === 1) {
+        await redisClient.expire(redisKey, 60);
+      }
+      return current <= maxPerMinute;
+    } catch (err) {
+      redisReady = false;
+      console.warn('Redis rate limiting failed, using memory fallback:', err?.message || err);
+    }
+  }
+
   const now = Date.now();
   if (!rateLimit[key]) rateLimit[key] = [];
-  rateLimit[key] = rateLimit[key].filter(ts => now - ts < 60000);
+  rateLimit[key] = rateLimit[key].filter((ts) => now - ts < 60000);
   if (rateLimit[key].length >= maxPerMinute) return false;
   rateLimit[key].push(now);
   return true;
@@ -106,12 +91,36 @@ function simpleRateLimit(key, maxPerMinute = 30) {
 // Route GET /api/lessons accessible sans requireAuth
 // Removed duplicate /api/lessons route. Only the protected version remains below.
 // Session pour Passport
-app.use(session({
+const sessionConfig = {
+  name: 'hackit.sid',
   secret: process.env.SESSION_SECRET || "dev_secret",
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 3600 * 24 * 365 }
-}));
+  rolling: process.env.NODE_ENV === 'production',
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 3600 * 24 * 30,
+  },
+};
+
+const sessionStoreMongoUrl = process.env.SESSION_STORE_MONGO_URL || process.env.MONGODB_URI;
+if (process.env.NODE_ENV === 'production' && sessionStoreMongoUrl) {
+  try {
+    const mongoStoreModule = await dynamicImport('connect-mongo');
+    const MongoStore = mongoStoreModule.default;
+    sessionConfig.store = MongoStore.create({
+      mongoUrl: sessionStoreMongoUrl,
+      ttl: 60 * 60 * 24 * 30,
+      autoRemove: 'native',
+    });
+  } catch (err) {
+    console.warn('External session store unavailable, falling back to memory store:', err?.message || err);
+  }
+}
+
+app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 // Enable concise logging in all non-test environments
@@ -119,30 +128,36 @@ if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 // ============ AUTHENTIFICATION GOOGLE ============
-// Lance le flow OAuth Google
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-
-// Callback Google OAuth
-app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => {
-    // Redirige vers le frontend avec le userId en paramètre (à adapter selon l'URL du frontend)
-    const userId = req.user?.id;
-    res.redirect(`/auth-success?userId=${userId}`);
-  }
-);
-// DELETE /api/lessons/:id
-app.delete("/api/lessons/:id", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
-  const id = String(req.params.id || '').trim();
-  if (!id) return res.status(400).json({ error: 'id is required' });
-  try {
-    await deleteLesson(id);
-    return res.json({ deleted: true, id });
-  } catch (e) {
-    return res.status(500).json({ error: 'Failed to delete lesson', detail: e?.message || 'Unknown error' });
-  }
+// Lance le flow OAuth Google (CSRF state token)
+app.get('/auth/google', (req, res, next) => {
+  const state = randomBytes(24).toString('hex');
+  req.session.oauthState = state;
+  return passport.authenticate('google', { scope: ['profile', 'email'], state })(req, res, next);
 });
 
+// Callback Google OAuth + state validation + session rotation
+app.get('/auth/google/callback',
+  (req, res, next) => {
+    const expectedState = req.session?.oauthState;
+    if (req.session) delete req.session.oauthState;
+    if (!expectedState || req.query.state !== expectedState) {
+      return res.status(403).json({ error: 'Invalid OAuth state' });
+    }
+    return next();
+  },
+  passport.authenticate('google', { failureRedirect: '/' }),
+  (req, res, next) => {
+    const authenticatedUser = req.user;
+    req.session.regenerate((sessionErr) => {
+      if (sessionErr) return next(sessionErr);
+      req.login(authenticatedUser, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        const userId = authenticatedUser?.id;
+        return res.redirect(`/auth-success?userId=${userId}`);
+      });
+    });
+  }
+);
 // Endpoint pour récupérer l'utilisateur authentifié
 app.get('/api/me', (req, res) => {
   if (req.isAuthenticated?.() && req.user) {
@@ -405,7 +420,7 @@ app.get("/health/extended", (_req, res) => {
 app.post("/api/search", async (req, res) => {
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  if (!simpleRateLimit(`search:${ip}`, 20)) {
+  if (!(await simpleRateLimit(`search:${ip}`, 20))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   const { query } = req.body;
@@ -417,7 +432,9 @@ app.post("/api/search", async (req, res) => {
     const mock = makeMockResponse();
     const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
-    return res.json({ ...mock, citations });
+    const desiredChapters = extractDesiredChapters(query);
+    const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
+    return res.json({ ...mock, citations, chapters });
   }
 
   try {
@@ -453,7 +470,6 @@ app.post("/api/search", async (req, res) => {
       const video = await searchYouTube(searchTerm);
       videoTitle = video.title;
       videoUrl = video.url;
-      videoId = video.videoId || extractYouTubeVideoId(video.url);
       source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
     } catch (videoErr) {
       console.warn("Video search failed:", videoErr.message);
@@ -530,7 +546,7 @@ app.post("/api/search", async (req, res) => {
 app.get("/api/search/stream", async (req, res) => {
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  if (!simpleRateLimit(`stream:${ip}`, 10)) {
+  if (!(await simpleRateLimit(`stream:${ip}`, 10))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   const query = String(req.query.query || "").trim();
@@ -612,8 +628,7 @@ app.get("/api/search/stream", async (req, res) => {
         const video = await searchYouTube(searchTerm);
         videoTitle = video.title;
         videoUrl = video.url;
-        videoId = video.videoId || extractYouTubeVideoId(video.url);
-        source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+          source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
       } catch (videoErr) {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
           const mock = makeMockResponse();
@@ -733,74 +748,20 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   });
 }
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/hackit', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-mongoose.connection.on('connected', () => {
-  console.log('MongoDB connected');
-});
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
-});
+// Connect to MongoDB (skip in tests to avoid external dependency requirement)
+const shouldConnectMongo = process.env.NODE_ENV !== 'test';
+if (shouldConnectMongo) {
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/hackit';
+  mongoose.connect(mongoUri)
+    .then(() => {
+      console.log('MongoDB connected');
+    })
+    .catch((err) => {
+      console.error('MongoDB connection error:', err);
+    });
+}
 
 // ============ LESSON GENERATION & PERSISTENCE ============
-// POST /api/lessons { title, steps[], videoUrl, summary? } (userId via middleware)
-app.post("/api/lessons", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
-  // Only log userId, not full headers
-  console.log('[POST /api/lessons] userId:', req.userId);
-  try {
-    const { title, steps, videoUrl, summary } = req.body || {};
-    const userId = req.userId;
-    // Advanced validation
-    if (!userId || typeof userId !== 'string' || userId.length < 3 || userId.length > 128) {
-      return res.status(400).json({ error: "Invalid userId" });
-    }
-    // Autoriser les userId anonymes ou numériques
-    const isAnon = userId.startsWith('anon_');
-    const isNumeric = /^[0-9]+$/.test(userId);
-    const isAlphaNum = /^[a-zA-Z0-9_\-]+$/.test(userId);
-    if (!(isAnon || isNumeric || isAlphaNum)) {
-      return res.status(400).json({ error: "userId must be anon_, numeric, or alphanum" });
-    }
-    if (!title || typeof title !== 'string' || title.length < 2 || title.length > 120) {
-      return res.status(400).json({ error: "Title must be 2-120 chars" });
-    }
-    if (!videoUrl || typeof videoUrl !== 'string' || !/^https?:\/\/.{8,}/.test(videoUrl)) {
-      return res.status(400).json({ error: "Invalid videoUrl" });
-    }
-    if (!Array.isArray(steps) || steps.length === 0 || steps.length > 20 || !steps.every(s => typeof s === 'string' && s.length > 1 && s.length < 200)) {
-      return res.status(400).json({ error: "steps[] must be 1-20 non-empty strings, each 2-200 chars" });
-    }
-    // Use Mongoose Lesson model directly
-    const Lesson = (await import('./models/lesson.js')).default;
-    const User = (await import('./models/User.js')).default;
-    const lesson = await Lesson.create({ userId, title, steps, videoUrl, summary });
-    // Only link lesson to user if userId is a valid ObjectId
-    const mongoose = (await import('mongoose')).default;
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      await User.findByIdAndUpdate(userId, { $push: { savedLessons: lesson._id } });
-    }
-    // Ensure all fields are non-null strings/arrays for frontend
-    return res.json({
-      id: lesson._id?.toString() ?? '',
-      userId: lesson.userId?.toString() ?? '',
-      title: lesson.title?.toString() ?? '',
-      summary: lesson.summary?.toString() ?? '',
-      steps: Array.isArray(lesson.steps) ? lesson.steps.map(s => s?.toString() ?? '') : [],
-      videoUrl: lesson.videoUrl?.toString() ?? '',
-      favorite: !!lesson.favorite,
-      views: typeof lesson.views === 'number' ? lesson.views : 0,
-      createdAt: lesson.createdAt?.toISOString?.() ?? new Date().toISOString(),
-      updatedAt: lesson.updatedAt?.toISOString?.() ?? new Date().toISOString(),
-    });
-  } catch (e) {
-    console.error('[POST /api/lessons] Internal error:', e?.message || e);
-    return res.status(500).json({ error: 'Failed to save lesson', detail: 'Internal error' });
-  }
-});
 // POST /api/generateLesson { query } (userId via middleware)
 app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
   console.log('[POST /api/generateLesson] Authorization:', req.headers.authorization, 'userId:', req.userId);
@@ -830,17 +791,16 @@ app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async 
       }
     }
 
-    let videoTitle, videoUrl, videoId;
+    let videoTitle, videoUrl;
     try {
       const video = await searchYouTube(searchTerm);
       videoTitle = video.title;
       videoUrl = video.url;
-      videoId = video.videoId || extractYouTubeVideoId(video.url);
     } catch (e) {
       console.warn("Video search (generateLesson) failed:", e.message);
       if ((process.env.ALLOW_FALLBACK || "true") === "true") {
         const mock = makeMockResponse();
-        videoTitle = mock.title; videoUrl = mock.videoUrl; videoId = extractYouTubeVideoId(videoUrl);
+        videoTitle = mock.title; videoUrl = mock.videoUrl;
       } else {
         throw e;
       }
@@ -895,89 +855,6 @@ app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async 
   }
 });
 
-// PATCH /api/lessons/:id/favorite { favorite: true|false }
-import { updateFavorite } from './controllers/lessonsController.js';
-app.patch("/api/lessons/:id/favorite", requireJwtAuthOrGoogle, async (req, res) => {
-  console.log('[PATCH /api/lessons/:id/favorite] Authorization:', req.headers.authorization, 'userId:', req.userId);
-  const id = String(req.params.id || '').trim();
-  const favorite = !!req.body?.favorite;
-  if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id is required' });
-  try {
-    const updated = await updateFavorite(id, favorite);
-    if (!updated) return res.status(404).json({ error: 'Not found' });
-    return res.json({ ok: true, lesson: updated });
-  } catch (e) {
-    console.error('[PATCH /api/lessons/:id/favorite] Internal error:', e?.message || e);
-    return res.status(500).json({ error: 'Failed to update favorite', detail: e?.message || 'Unknown error' });
-  }
-});
-
-// POST /api/lessons/:id/view -> record history entry (views++, lastViewedAt=now)
-app.post("/api/lessons/:id/view", requireJwtAuthOrGoogle, async (req, res) => {
-  console.log('[POST /api/lessons/:id/view] Authorization:', req.headers.authorization, 'userId:', req.userId);
-  const id = String(req.params.id || '').trim();
-  if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id is required' });
-  try {
-    const updated = await recordView(id);
-    if (!updated) return res.status(404).json({ error: 'Not found' });
-    return res.json(updated);
-  } catch (e) {
-    console.error('[POST /api/lessons/:id/view] Internal error:', e?.message || e);
-    return res.status(500).json({ error: 'Failed to record view', detail: e?.message || 'Unknown error' });
-  }
-});
-
-// GET /api/lessons?favorite=true|false&sort=createdAt|lastViewedAt&order=desc|asc (userId via middleware)
-app.get("/api/lessons", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
-  // Middleware to accept either JWT (login/password) or Google OAuth
-  function requireJwtAuthOrGoogle(req, res, next) {
-    // Try JWT first
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      const { verifyToken } = require('./utils/jwtAuth.js');
-      const payload = verifyToken(token);
-      if (payload && payload.userId) {
-        req.userId = payload.userId;
-        req.jwtUser = payload;
-        return next();
-      }
-    }
-    // Fallback to Google OAuth
-    return requireAuth(req, res, next);
-  }
-  const userId = req.userId;
-  if (!userId) return res.status(400).json({ error: 'userId is required' });
-  const favorite = req.query.favorite === undefined ? undefined : String(req.query.favorite).toLowerCase() === 'true';
-  const sortBy = ['createdAt', 'lastViewedAt', 'views'].includes(String(req.query.sort || '')) ? String(req.query.sort) : 'createdAt';
-  const order = String(req.query.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10)));
-  const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10));
-  try {
-    let items = await listLessons({ userId, favorite, sortBy, order, limit, offset });
-    // Add progress/reminder fields for My Learning Journey pivot
-    items = items.map(lesson => ({
-      ...lesson,
-      progress: lesson.progress || 0, // Placeholder, to be implemented
-      reminder: lesson.reminder || null, // Placeholder, to be implemented
-      // Guest mode prompt
-      guestPrompt: (!req.isAuthenticated?.() && !req.user) ? 'Save progress or unlock premium features by signing in.' : undefined
-    }));
-    // Suggested actions for empty/error states
-    const suggestedActions = items.length === 0 ? [
-      { label: 'Search for a lesson', action: '/api/search' },
-      { label: 'Request help', action: '/support' }
-    ] : undefined;
-    return res.json({ items, total: items.length, suggestedActions });
-  } catch (e) {
-    return res.status(500).json({
-      error: 'Failed to list lessons', detail: e?.message || 'Unknown error', suggestedActions: [
-        { label: 'Retry', action: '/api/lessons' },
-        { label: 'Request help', action: '/support' }
-      ]
-    });
-  }
-});
-
-// Import and mount the user router on /api/users to expose /api/users/all endpoint.
+// Mount lessons and users routers.
+app.use('/api/lessons', lessonsRouter);
 app.use('/api/users', userRouter);
