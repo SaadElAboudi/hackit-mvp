@@ -17,6 +17,7 @@ import { getChapters, extractDesiredChapters } from './services/chapters.js';
 import { getTranscript } from './services/transcript.js';
 import { searchYouTube as originalSearchYouTube } from './services/youtube.js';
 import { requireJwtAuthOrGoogle } from './utils/jwtAuth.js';
+import { buildObservabilitySnapshot, evaluateAlerts, observeExternal, observeHttp, observeQualityEvent, observeTtvEvent } from './utils/observability.js';
 import passport from './utils/passportGoogle.js';
 import { userIdMiddleware } from './utils/userIdMiddleware.js';
 
@@ -37,6 +38,14 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    const routeKey = `${req.method} ${req.route?.path || req.path}`;
+    observeHttp({ key: routeKey, durationMs: Date.now() - startedAt, statusCode: res.statusCode });
+  });
+  next();
+});
 // Rate limiter with Redis support (distributed) and in-memory fallback
 const rateLimit = {};
 const REDIS_URL = process.env.REDIS_URL;
@@ -333,6 +342,7 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       GEMINI_OPERATIONAL = true;
       GEMINI_FAILURE_TIMESTAMPS = [];
       GEMINI_BREAKER_UNTIL = 0;
+      observeExternal('gemini', 'success');
       return txt;
     }
   } catch (error) {
@@ -348,6 +358,7 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       if (GEMINI_FAILURE_TIMESTAMPS.length >= 3) {
         GEMINI_BREAKER_UNTIL = Math.max(GEMINI_BREAKER_UNTIL, now + BREAKER_OPEN_MS);
       }
+      observeExternal('gemini', 'timeout');
       throw new Error(`Gemini timeout after ${GEMINI_TIMEOUT_MS}ms`);
     }
     // If NOT_FOUND: try a known accessible lite model explicitly
@@ -355,6 +366,7 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       process.env.GEMINI_MODEL = "models/gemini-2.0-flash-lite";
       return await generateWithGemini(prompt, maxOutputTokens);
     }
+    observeExternal('gemini', 'error');
     if (status === 404) {
       // mark non-operational and record failure
       GEMINI_OPERATIONAL = false;
@@ -416,6 +428,45 @@ app.get("/health/extended", (_req, res) => {
     }
   });
 });
+app.get("/health/observability", (_req, res) => {
+  const snapshot = buildObservabilitySnapshot();
+  const alerts = evaluateAlerts(snapshot);
+  res.json({ ok: true, snapshot, alerts });
+});
+
+app.post('/api/search/feedback', async (req, res) => {
+  const { requestId, clicked, completed, rating } = req.body || {};
+  observeQualityEvent({ requestId, clicked, completed, rating });
+  return res.json({ ok: true });
+});
+
+app.post('/api/analytics/ttv', async (req, res) => {
+  const { requestId, ttvMs } = req.body || {};
+  if (!Number.isFinite(Number(ttvMs))) return res.status(400).json({ error: 'ttvMs is required' });
+  observeTtvEvent({ requestId, ttvMs: Number(ttvMs) });
+  return res.json({ ok: true });
+});
+
+app.get('/api/recommendations', requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
+  try {
+    const Lesson = (await import('./models/lesson.js')).default;
+    const userId = req.userId;
+    const history = await Lesson.find({ userId }).sort({ lastViewedAt: -1, updatedAt: -1 }).limit(20).lean();
+    const seedWords = new Set();
+    history.forEach((l) => String(l.title || '').toLowerCase().split(/\W+/).filter((w) => w.length > 3).forEach((w) => seedWords.add(w)));
+    const candidates = await Lesson.find({ userId: { $ne: userId } }).sort({ favorite: -1, views: -1, createdAt: -1 }).limit(100).lean();
+    const scored = candidates.map((l) => {
+      const words = String(l.title || '').toLowerCase().split(/\W+/);
+      const overlap = words.filter((w) => seedWords.has(w)).length;
+      const score = overlap * 3 + (l.favorite ? 2 : 0) + Math.min(5, Math.floor((l.views || 0) / 10));
+      return { ...l, score };
+    }).sort((a, b) => b.score - a.score).slice(0, 10);
+    return res.json({ items: scored });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to build recommendations', detail: e?.message || 'Unknown error' });
+  }
+});
+
 
 app.post("/api/search", async (req, res) => {
   // Rate limit by IP
@@ -424,6 +475,7 @@ app.post("/api/search", async (req, res) => {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   const { query } = req.body;
+  const requestId = randomBytes(8).toString('hex');
   if (!query) return res.status(400).json({ error: "query is required" });
 
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
@@ -434,7 +486,7 @@ app.post("/api/search", async (req, res) => {
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
     const desiredChapters = extractDesiredChapters(query);
     const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
-    return res.json({ ...mock, citations, chapters });
+    return res.json({ ...mock, citations, chapters, requestId });
   }
 
   try {
@@ -471,6 +523,7 @@ app.post("/api/search", async (req, res) => {
       videoTitle = video.title;
       videoUrl = video.url;
       source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+      observeExternal('youtube', 'success');
     } catch (videoErr) {
       console.warn("Video search failed:", videoErr.message);
       if (videoErr.code === "YOUTUBE_NO_RESULTS" && searchTerm !== query) {
@@ -485,12 +538,14 @@ app.post("/api/search", async (req, res) => {
         } catch (retryErr) {
           console.warn("Retry with original query also failed:", retryErr.message);
           if ((process.env.ALLOW_FALLBACK || "true") === "true") {
+            observeExternal('youtube', 'fallback');
             return res.json({ ...makeMockResponse(), source: "mock-fallback" });
           }
           throw retryErr;
         }
       } else {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
+          observeExternal('youtube', 'fallback');
           return res.json({ ...makeMockResponse(), source: "mock-fallback" });
         }
         throw videoErr;
@@ -532,7 +587,7 @@ app.post("/api/search", async (req, res) => {
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
     const desiredChapters = extractDesiredChapters(query);
     const chapters = vid ? (await getChapters(vid, videoTitle, { desired: desiredChapters })).chapters : [];
-    return res.json({ title: videoTitle, steps, videoUrl, source, citations, chapters });
+    return res.json({ title: videoTitle, steps, videoUrl, source, citations, chapters, requestId });
   } catch (err) {
     console.error("Search error:", err?.response?.data || err.message || err);
     const statusCode = err?.status || err?.response?.status || 500;
@@ -629,9 +684,11 @@ app.get("/api/search/stream", async (req, res) => {
         videoTitle = video.title;
         videoUrl = video.url;
           source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+        observeExternal('youtube', 'success');
       } catch (videoErr) {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
           const mock = makeMockResponse();
+          observeExternal('youtube', 'fallback');
           writeEvent({ type: "meta", title: mock.title, videoUrl: mock.videoUrl, source: "mock-fallback" });
           for (const s of mock.steps) {
             writeEvent({ type: "partial", step: s });
