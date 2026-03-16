@@ -191,12 +191,19 @@ app.get('/auth/google/callback',
   }
 );
 // Endpoint pour récupérer l'utilisateur authentifié
-app.get('/api/me', (req, res) => {
+app.get('/api/me', userIdMiddleware, (req, res) => {
   if (req.isAuthenticated?.() && req.user) {
-    res.json({ ok: true, user: req.user });
-  } else {
-    res.status(401).json({ ok: false, error: 'Not authenticated' });
+    return res.json({ ok: true, user: req.user, auth: 'google-session' });
   }
+
+  return res.json({
+    ok: true,
+    auth: 'anonymous',
+    user: {
+      id: req.userId,
+      isAnonymous: Boolean(req.isAnonymous),
+    },
+  });
 });
 
 const USE_GEMINI_ENV = (process.env.USE_GEMINI || "false") === "true";

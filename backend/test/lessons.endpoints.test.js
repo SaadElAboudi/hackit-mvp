@@ -205,3 +205,33 @@ await test('GET /api/lessons supports pagination and sorting', async (t) => {
   assert.equal(res.data.items[0].title, 'Newest');
   assert.equal(res.data.items[0].favorite, true);
 });
+
+
+await test('GET /api/lessons works without authentication headers', async (t) => {
+  const originalFind = Lesson.find;
+  Lesson.find = () => ({
+    sort: () => ({
+      skip: () => ({
+        limit: () => ({
+          lean: async () => ([]),
+        }),
+      }),
+    }),
+  });
+  t.after(() => {
+    Lesson.find = originalFind;
+  });
+
+  const app = createApp();
+  const { server, port } = await startServer(app);
+  t.after(() => server.close());
+
+  const res = await requestJson({
+    port,
+    path: '/api/lessons',
+    method: 'GET',
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(Array.isArray(res.data.items), true);
+});
