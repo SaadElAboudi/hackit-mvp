@@ -41,7 +41,8 @@ app.use(express.json());
 app.use((req, res, next) => {
   const startedAt = Date.now();
   res.on('finish', () => {
-    const routeKey = `${req.method} ${req.route?.path || req.path}`;
+    const resolvedPath = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : req.path;
+    const routeKey = `${req.method} ${resolvedPath}`;
     observeHttp({ key: routeKey, durationMs: Date.now() - startedAt, statusCode: res.statusCode });
   });
   next();
