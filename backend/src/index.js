@@ -17,6 +17,7 @@ import { getChapters, extractDesiredChapters } from './services/chapters.js';
 import { getTranscript } from './services/transcript.js';
 import { searchYouTube as originalSearchYouTube } from './services/youtube.js';
 import { requireJwtAuthOrGoogle } from './utils/jwtAuth.js';
+import { validateBody, validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
 import { buildObservabilitySnapshot, evaluateAlerts, observeExternal, observeHttp, observeQualityEvent, observeTtvEvent } from './utils/observability.js';
 import passport, { isGoogleOAuthEnabled } from './utils/passportGoogle.js';
 import { userIdMiddleware } from './utils/userIdMiddleware.js';
@@ -464,16 +465,15 @@ app.get("/health/observability", (_req, res) => {
   res.json({ ok: true, snapshot, alerts });
 });
 
-app.post('/api/search/feedback', async (req, res) => {
-  const { requestId, clicked, completed, rating } = req.body || {};
+app.post('/api/search/feedback', validateBody(validateFeedbackPayload), async (req, res) => {
+  const { requestId, clicked, completed, rating } = req.validatedBody;
   observeQualityEvent({ requestId, clicked, completed, rating });
   return res.json({ ok: true });
 });
 
-app.post('/api/analytics/ttv', async (req, res) => {
-  const { requestId, ttvMs } = req.body || {};
-  if (!Number.isFinite(Number(ttvMs))) return res.status(400).json({ error: 'ttvMs is required' });
-  observeTtvEvent({ requestId, ttvMs: Number(ttvMs) });
+app.post('/api/analytics/ttv', validateBody(validateTtvPayload), async (req, res) => {
+  const { requestId, ttvMs } = req.validatedBody;
+  observeTtvEvent({ requestId, ttvMs });
   return res.json({ ok: true });
 });
 
@@ -504,9 +504,13 @@ app.post("/api/search", async (req, res) => {
   if (!(await simpleRateLimit(`search:${ip}`, 20))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
-  const { query } = req.body;
+  let query;
+  try {
+    ({ query } = validateSearchPayload(req.body || {}));
+  } catch (e) {
+    return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload', detail: e?.details || null });
+  }
   const requestId = randomBytes(8).toString('hex');
-  if (!query) return res.status(400).json({ error: "query is required" });
 
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
@@ -814,6 +818,16 @@ app.get("/api/chapters", async (req, res) => {
       ]
     });
   }
+});
+
+
+
+app.use((err, _req, res, _next) => {
+  const status = err?.status || 500;
+  const code = err?.code || (status === 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR');
+  const message = err?.message || 'Internal server error';
+  const detail = err?.details || null;
+  return res.status(status).json({ error: message, code, detail });
 });
 
 export function createApp() {

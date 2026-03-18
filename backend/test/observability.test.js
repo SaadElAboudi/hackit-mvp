@@ -61,3 +61,28 @@ await test('observability endpoints expose snapshot and accept quality/ttv event
   assert.ok(obsRes.data.snapshot?.timeToValueMs);
   assert.ok(Array.isArray(obsRes.data.alerts));
 });
+
+
+await test('observability payload validation rejects invalid rating and ttv', async (t) => {
+  const app = createApp();
+  const { server, port } = await startServer(app);
+  t.after(() => server.close());
+
+  const badFeedback = await requestJson({
+    port,
+    path: '/api/search/feedback',
+    method: 'POST',
+    body: { requestId: 'req-invalid', rating: 9 },
+  });
+  assert.equal(badFeedback.status, 400);
+  assert.equal(badFeedback.data.error, 'rating must be between 1 and 5');
+
+  const badTtv = await requestJson({
+    port,
+    path: '/api/analytics/ttv',
+    method: 'POST',
+    body: { requestId: 'req-invalid', ttvMs: -1 },
+  });
+  assert.equal(badTtv.status, 400);
+  assert.equal(badTtv.data.error, 'ttvMs is required and must be >= 0');
+});
