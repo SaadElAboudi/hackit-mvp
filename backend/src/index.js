@@ -594,7 +594,6 @@ app.post("/api/search", async (req, res) => {
       const video = await searchYouTube(searchTerm);
       videoTitle = video.title;
       videoUrl = video.url;
-      videoId = video.videoId || extractYouTubeVideoId(video.url);
       source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
       observeExternal('youtube', 'success');
     } catch (videoErr) {
