@@ -44,3 +44,15 @@ await test('POST /api/search without query returns 400', async (t) => {
     const json = JSON.parse(res.data);
     assert.equal(json.error, 'query is required');
 });
+
+
+await test('POST /api/search with invalid summaryLength returns 400', async (t) => {
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await postJson({ port, path: '/api/search', body: { query: 'ok', summaryLength: 'ultra' } });
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.error, 'summaryLength must be one of: tldr, standard, deep');
+});
