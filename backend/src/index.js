@@ -11,6 +11,7 @@ import session from 'express-session';
 import mongoose from 'mongoose';
 import morgan from 'morgan';
 
+import { getFeatureFlags } from './config/featureFlags.js';
 import lessonsRouter from './routes/lessons.js';
 import userRouter from './routes/user.js';
 import { getChapters, extractDesiredChapters } from './services/chapters.js';
@@ -27,7 +28,7 @@ const dynamicImport = (moduleName) => Function('m', 'return import(m)')(moduleNa
 
 dotenv.config({ quiet: true });
 
-
+const featureFlags = getFeatureFlags();
 
 const app = express();
 // CORS middleware at the very top
@@ -147,6 +148,10 @@ app.get('/auth/google/status', (_req, res) => {
   });
 });
 
+app.get('/api/feature-flags', (_req, res) => {
+  return res.json({ ok: true, flags: featureFlags });
+});
+
 // Lance le flow OAuth Google (CSRF state token)
 app.get('/auth/google', (req, res, next) => {
   if (!isGoogleOAuthEnabled()) {
@@ -264,6 +269,26 @@ function heuristicSummary({ desiredSteps } = {}) {
     return out.join("\n");
   }
   return base.join("\n");
+}
+
+
+function getSummaryConfig(summaryLength = 'standard') {
+  switch (summaryLength) {
+    case 'tldr':
+      return { stepsTarget: 3, maxOutputTokens: 140 };
+    case 'deep':
+      return { stepsTarget: 8, maxOutputTokens: 420 };
+    default:
+      return { stepsTarget: 5, maxOutputTokens: 300 };
+  }
+}
+
+function annotateSource(source, mode = 'real') {
+  return {
+    source,
+    resultMode: mode,
+    badges: [mode.toUpperCase()],
+  };
 }
 
 function extractDesiredSteps(text) {
@@ -460,12 +485,18 @@ app.get("/health/extended", (_req, res) => {
   });
 });
 app.get("/health/observability", (_req, res) => {
+  if (!featureFlags.observability) {
+    return res.status(503).json({ error: 'Observability is disabled by feature flag' });
+  }
   const snapshot = buildObservabilitySnapshot();
   const alerts = evaluateAlerts(snapshot);
   res.json({ ok: true, snapshot, alerts });
 });
 
 app.post('/api/search/feedback', validateBody(validateFeedbackPayload), async (req, res) => {
+  if (!featureFlags.searchFeedback) {
+    return res.status(503).json({ error: 'Search feedback is disabled by feature flag' });
+  }
   const { requestId, clicked, completed, rating } = req.validatedBody;
   observeQualityEvent({ requestId, clicked, completed, rating });
   return res.json({ ok: true });
@@ -478,6 +509,9 @@ app.post('/api/analytics/ttv', validateBody(validateTtvPayload), async (req, res
 });
 
 app.get('/api/recommendations', requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
+  if (!featureFlags.recommendations) {
+    return res.status(503).json({ error: 'Recommendations are disabled by feature flag' });
+  }
   try {
     const Lesson = (await import('./models/lesson.js')).default;
     const userId = req.userId;
@@ -505,12 +539,15 @@ app.post("/api/search", async (req, res) => {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   let query;
+  let useGeminiOverride;
+  let summaryLength;
   try {
-    ({ query } = validateSearchPayload(req.body || {}));
+    ({ query, useGemini: useGeminiOverride, summaryLength } = validateSearchPayload(req.body || {}));
   } catch (e) {
     return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload', detail: e?.details || null });
   }
   const requestId = randomBytes(8).toString('hex');
+  const summaryConfig = getSummaryConfig(featureFlags.multiLengthSummary ? summaryLength : 'standard');
 
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
@@ -520,13 +557,14 @@ app.post("/api/search", async (req, res) => {
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
     const desiredChapters = extractDesiredChapters(query);
     const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
-    return res.json({ ...mock, citations, chapters, requestId });
+    const sourceMeta = annotateSource(mock.source, 'mock');
+    return res.json({ ...mock, ...sourceMeta, citations, chapters, requestId, summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
   }
 
   try {
     let searchTerm = query;
     const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
-    const useGemini = USE_GEMINI_ENV && !breakerActive && (req.body?.useGemini !== false);
+    const useGemini = USE_GEMINI_ENV && !breakerActive && (useGeminiOverride !== false);
     let reformulationTimedOut = false;
     if (useGemini && USE_GEMINI_REFORMULATION) {
       const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
@@ -573,14 +611,14 @@ app.post("/api/search", async (req, res) => {
           console.warn("Retry with original query also failed:", retryErr.message);
           if ((process.env.ALLOW_FALLBACK || "true") === "true") {
             observeExternal('youtube', 'fallback');
-            return res.json({ ...makeMockResponse(), source: "mock-fallback" });
+            return res.json({ ...makeMockResponse(), ...annotateSource('mock-fallback', 'fallback'), summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
           }
           throw retryErr;
         }
       } else {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
           observeExternal('youtube', 'fallback');
-          return res.json({ ...makeMockResponse(), source: "mock-fallback" });
+          return res.json({ ...makeMockResponse(), ...annotateSource('mock-fallback', 'fallback'), summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
         }
         throw videoErr;
       }
@@ -588,7 +626,7 @@ app.post("/api/search", async (req, res) => {
 
     let summaryText = "";
     const attemptGeminiSummary = useGemini && !reformulationTimedOut;
-    const desiredSteps = extractDesiredSteps(query);
+    const desiredSteps = extractDesiredSteps(query) || summaryConfig.stepsTarget;
     if (attemptGeminiSummary) {
       // Récupère le transcript YouTube
       let transcriptText = "";
@@ -607,7 +645,7 @@ app.post("/api/search", async (req, res) => {
           ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
           : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`);
       try {
-        summaryText = await generateWithGemini(summaryPrompt, 300);
+        summaryText = await generateWithGemini(summaryPrompt, summaryConfig.maxOutputTokens);
       } catch (e) {
         console.warn("Gemini summary failed:", e.message);
         summaryText = heuristicSummary({ desiredSteps });
@@ -621,7 +659,8 @@ app.post("/api/search", async (req, res) => {
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
     const desiredChapters = extractDesiredChapters(query);
     const chapters = vid ? (await getChapters(vid, videoTitle, { desired: desiredChapters })).chapters : [];
-    return res.json({ title: videoTitle, steps, videoUrl, source, citations, chapters, requestId });
+    const sourceMeta = annotateSource(source, 'real');
+    return res.json({ title: videoTitle, steps, videoUrl, ...sourceMeta, citations, chapters, requestId, summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
   } catch (err) {
     console.error("Search error:", err?.response?.data || err.message || err);
     const statusCode = err?.status || err?.response?.status || 500;
@@ -633,6 +672,9 @@ app.post("/api/search", async (req, res) => {
 // Server-Sent Events streaming endpoint for progressive UI updates
 // Usage: GET /api/search/stream?query=...
 app.get("/api/search/stream", async (req, res) => {
+  if (!featureFlags.searchStreaming) {
+    return res.status(503).json({ error: 'Search streaming is disabled by feature flag' });
+  }
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
   if (!(await simpleRateLimit(`stream:${ip}`, 10))) {
@@ -717,7 +759,8 @@ app.get("/api/search/stream", async (req, res) => {
         const video = await searchYouTube(searchTerm);
         videoTitle = video.title;
         videoUrl = video.url;
-          source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+        videoId = video.videoId || extractYouTubeVideoId(video.url);
+        source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
         observeExternal('youtube', 'success');
       } catch (videoErr) {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {

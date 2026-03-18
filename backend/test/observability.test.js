@@ -86,3 +86,15 @@ await test('observability payload validation rejects invalid rating and ttv', as
   assert.equal(badTtv.status, 400);
   assert.equal(badTtv.data.error, 'ttvMs is required and must be >= 0');
 });
+
+
+await test('GET /api/feature-flags exposes runtime flags', async (t) => {
+  const app = createApp();
+  const { server, port } = await startServer(app);
+  t.after(() => server.close());
+
+  const res = await requestJson({ port, path: '/api/feature-flags', method: 'GET' });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.ok, true);
+  assert.equal(typeof res.data.flags.multiLengthSummary, 'boolean');
+});

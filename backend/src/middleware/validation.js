@@ -31,7 +31,12 @@ export function validateSearchPayload(body) {
     throw badRequest('useGemini must be a boolean', { field: 'useGemini' });
   }
 
-  return { query, useGemini };
+  const summaryLength = body.summaryLength === undefined ? 'standard' : String(body.summaryLength).trim().toLowerCase();
+  if (!['tldr', 'standard', 'deep'].includes(summaryLength)) {
+    throw badRequest('summaryLength must be one of: tldr, standard, deep', { field: 'summaryLength' });
+  }
+
+  return { query, useGemini, summaryLength };
 }
 
 export function validateFeedbackPayload(body) {
