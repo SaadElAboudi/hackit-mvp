@@ -7,15 +7,14 @@ import {
   recordView,
   setFavorite,
 } from '../controllers/lessonsController.js';
-import { requireJwtAuthOrGoogle } from '../utils/jwtAuth.js';
 import { userIdMiddleware } from '../utils/userIdMiddleware.js';
 
 const router = express.Router();
 
-router.get('/', requireJwtAuthOrGoogle, userIdMiddleware, listLessons);
-router.post('/', requireJwtAuthOrGoogle, userIdMiddleware, createLesson);
-router.delete('/:id', requireJwtAuthOrGoogle, userIdMiddleware, deleteLesson);
-router.patch('/:id/favorite', requireJwtAuthOrGoogle, userIdMiddleware, setFavorite);
-router.post('/:id/view', requireJwtAuthOrGoogle, userIdMiddleware, recordView);
+router.get('/', userIdMiddleware, listLessons);
+router.post('/', userIdMiddleware, createLesson);
+router.delete('/:id', userIdMiddleware, deleteLesson);
+router.patch('/:id/favorite', userIdMiddleware, setFavorite);
+router.post('/:id/view', userIdMiddleware, recordView);
 
 export default router;

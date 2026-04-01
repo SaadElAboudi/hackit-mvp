@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/google_auth_provider.dart';
 import '../screens/home_screen.dart';
 import '../screens/lessons_screen.dart';
 import '../screens/favorites_screen.dart';
 import '../screens/history_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../screens/login_screen.dart';
 
 class RootTabs extends StatefulWidget {
   const RootTabs({super.key});
@@ -24,7 +20,7 @@ class _RootTabsState extends State<RootTabs> {
   ];
 
   int _index = 0;
-  final _navigatorKeys = [
+  final List<GlobalKey<NavigatorState>> _navigatorKeys = [
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
@@ -34,7 +30,6 @@ class _RootTabsState extends State<RootTabs> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Synchronise l'onglet sélectionné avec la route actuelle
     final route = ModalRoute.of(context)?.settings.name;
     if (route != null) {
       final tabIdx = tabRoutes.indexOf(route);
@@ -49,118 +44,45 @@ class _RootTabsState extends State<RootTabs> {
       key: _navigatorKeys[tabIndex],
       initialRoute: '/',
       onGenerateRoute: (settings) {
-        Widget page;
-        // Si settings.name est null ou '/', on affiche la page principale du tab
-        if (settings.name == null || settings.name == '/') {
-          switch (tabIndex) {
-            case 0:
-              page = const HomeScreen();
-              break;
-            case 1:
-              page = LessonsScreen();
-              break;
-            case 2:
-              page = const FavoritesScreen();
-              break;
-            case 3:
-              page = const HistoryScreen();
-              break;
-            default:
-              page = const HomeScreen();
-          }
-        } else {
-          // Pour toute autre route, on affiche la page principale du tab (ou personnaliser si besoin)
-          switch (tabIndex) {
-            case 0:
-              page = const HomeScreen();
-              break;
-            case 1:
-              page = LessonsScreen();
-              break;
-            case 2:
-              page = const FavoritesScreen();
-              break;
-            case 3:
-              page = const HistoryScreen();
-              break;
-            default:
-              page = const HomeScreen();
-          }
+        late final Widget page;
+        switch (tabIndex) {
+          case 0:
+            page = const HomeScreen();
+            break;
+          case 1:
+            page = const LessonsScreen();
+            break;
+          case 2:
+            page = const FavoritesScreen();
+            break;
+          case 3:
+            page = const HistoryScreen();
+            break;
+          default:
+            page = const HomeScreen();
         }
-        return MaterialPageRoute(
-          builder: (_) => page,
-          settings: settings,
-        );
+        return MaterialPageRoute(builder: (_) => page, settings: settings);
       },
     );
   }
 
-  Future<bool> _onWillPop() async {
+  void _onPopInvoked(bool didPop) {
+    if (didPop) return;
     final currentNavigator = _navigatorKeys[_index].currentState;
     if (currentNavigator != null && currentNavigator.canPop()) {
       currentNavigator.pop();
-      return false;
+      return;
     }
-    return true;
+    Navigator.of(context).maybePop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) => _onPopInvoked(didPop),
       child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          automaticallyImplyLeading: false,
-          actions: [
-            Builder(
-              builder: (context) {
-                return PopupMenuButton<String>(
-                  icon: const Icon(Icons.account_circle),
-                  itemBuilder: (context) {
-                    final googleAuth =
-                        Provider.of<GoogleAuthProvider>(context, listen: false);
-                    if (googleAuth.user != null) {
-                      return [
-                        PopupMenuItem<String>(
-                          value: 'logout',
-                          child: Text(
-                              'Déconnexion (${googleAuth.user!.displayName})'),
-                        ),
-                      ];
-                    } else {
-                      return [
-                        PopupMenuItem<String>(
-                          value: 'login',
-                          child: Text('Se connecter avec Google'),
-                        ),
-                      ];
-                    }
-                  },
-                  onSelected: (value) async {
-                    final googleAuth =
-                        Provider.of<GoogleAuthProvider>(context, listen: false);
-                    if (value == 'logout') {
-                      await googleAuth.signOut();
-                      // Clear JWT token and userId from SharedPreferences
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.remove('auth_token');
-                      await prefs.remove('userId');
-                      // Retour à l'écran de login
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
-                      );
-                    } else if (value == 'login') {
-                      await googleAuth.signIn();
-                    }
-                  },
-                );
-              },
-            ),
-          ],
-        ),
+        backgroundColor: Colors.transparent,
         body: IndexedStack(
           index: _index,
           children: List.generate(4, (i) => _buildTabNavigator(i)),
@@ -170,7 +92,6 @@ class _RootTabsState extends State<RootTabs> {
           onDestinationSelected: (i) {
             if (i != _index) {
               setState(() => _index = i);
-              // Met à jour la route pour deep linking
               final routeName = tabRoutes[i];
               if (ModalRoute.of(context)?.settings.name != routeName) {
                 Navigator.of(context).pushReplacementNamed(routeName);
@@ -186,7 +107,7 @@ class _RootTabsState extends State<RootTabs> {
             NavigationDestination(
               icon: Icon(Icons.school_outlined),
               selectedIcon: Icon(Icons.school_rounded),
-              label: 'Leçons',
+              label: 'Lecons',
             ),
             NavigationDestination(
               icon: Icon(Icons.star_border_rounded),

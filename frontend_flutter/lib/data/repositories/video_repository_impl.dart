@@ -5,8 +5,9 @@ import '../models/video_model.dart';
 import '../models/search_result.dart';
 import '../core/failure.dart';
 import '../cache/cache_manager.dart';
-import '../services/api_service.dart';
+import '../../services/api_service.dart';
 import '../core/network_info.dart';
+import '../../shared/domain/models/video.dart' as shared;
 
 @Singleton(as: VideoRepository)
 class VideoRepositoryImpl implements VideoRepository {
@@ -20,35 +21,86 @@ class VideoRepositoryImpl implements VideoRepository {
     this._networkInfo,
   );
 
+  VideoModel _toVideoModel(shared.Video video) {
+    return VideoModel(
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      thumbnailUrl: video.thumbnailUrl,
+      channelTitle: video.channelTitle,
+      publishedAt: video.publishedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
+  shared.Video _toSharedVideo(VideoModel video, {String? videoUrl}) {
+    return shared.Video(
+      id: video.id,
+      title: video.title,
+      description: video.description,
+      thumbnailUrl: video.thumbnailUrl,
+      videoUrl: videoUrl ?? 'https://www.youtube.com/watch?v=${video.id}',
+      channelTitle: video.channelTitle,
+      publishedAt: video.publishedAt,
+    );
+  }
+
+  String _extractVideoId(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return '';
+    if (uri.host.contains('youtu.be')) {
+      return uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+    }
+    return uri.queryParameters['v'] ?? '';
+  }
+
+  SearchResult _toSearchResult(shared.SearchResult result) {
+    final tsRaw = result.metadata['timestamp']?.toString();
+    final timestamp = DateTime.tryParse(tsRaw ?? '') ?? DateTime.now();
+    return SearchResult(
+      query: result.query,
+      videoIds: result.videos.map((v) => v.id).toList(),
+      timestamp: timestamp,
+    );
+  }
+
   @override
   Future<Either<Failure, List<VideoModel>>> searchVideos(String query) async {
     try {
-      // Vérifier d'abord le cache
-      final cachedResult = _cacheManager.getSearchResult(query);
-      final cachedVideos = _cacheManager.getVideos(cachedResult.videoIds);
-      if (cachedVideos.isNotEmpty) {
-        return Right(cachedVideos);
+      final cachedResult = await _cacheManager.getSearchResult(query);
+      if (cachedResult != null && cachedResult.videos.isNotEmpty) {
+        return Right(cachedResult.videos.map(_toVideoModel).toList());
       }
-    
-      // Si pas de cache valide et pas de connexion
+
       if (!await _networkInfo.isConnected) {
         return Left(NetworkFailure());
       }
 
-      // Faire la requête API
-      final videos = await _apiService.searchVideos(query);
-      
-      // Mettre en cache les résultats
-      await _cacheManager.cacheVideos(videos);
-      await _cacheManager.cacheSearchResult(
-        SearchResult(
+      final result = await _apiService.searchVideos(query);
+      final videoId = _extractVideoId(result.videoUrl);
+      final video = VideoModel(
+        id: videoId.isNotEmpty ? videoId : result.videoUrl,
+        title: result.title,
+        description: result.summary ?? result.steps.join('\n'),
+        thumbnailUrl: '',
+        channelTitle: result.source,
+        publishedAt: DateTime.now(),
+      );
+
+      final sharedVideo = _toSharedVideo(video, videoUrl: result.videoUrl);
+      await _cacheManager.saveVideos([sharedVideo]);
+      await _cacheManager.saveSearchResult(
+        shared.SearchResult(
           query: query,
-          videoIds: videos.map((v) => v.id).toList(),
-          timestamp: DateTime.now(),
+          videos: [sharedVideo],
+          steps: result.steps,
+          summary: result.summary,
+          metadata: {'timestamp': DateTime.now().toIso8601String()},
         ),
       );
 
-      return Right(videos);
+      return Right([video]);
+    } on ApiException {
+      return Left(ServerFailure());
     } catch (e) {
       return Left(ServerFailure());
     }
@@ -57,22 +109,33 @@ class VideoRepositoryImpl implements VideoRepository {
   @override
   Future<Either<Failure, VideoModel>> getVideoById(String id) async {
     try {
-      // Vérifier d'abord le cache
-      final cachedVideo = _cacheManager.getVideo(id);
-      return Right(cachedVideo);
-    
-      // Si pas de cache et pas de connexion
+      final cachedVideo = await _cacheManager.getVideo(id);
+      if (cachedVideo != null) {
+        return Right(_toVideoModel(cachedVideo));
+      }
+
       if (!await _networkInfo.isConnected) {
         return Left(NetworkFailure());
       }
 
-      // Faire la requête API
-      final video = await _apiService.getVideoById(id);
-      
-      // Mettre en cache
-      await _cacheManager.cacheVideo(video);
-
+      // No dedicated endpoint in current API. Use search fallback and ensure id match.
+      final result = await _apiService.searchVideos(id);
+      final foundId = _extractVideoId(result.videoUrl);
+      if (foundId.isEmpty || foundId != id) {
+        return Left(ServerFailure());
+      }
+      final video = VideoModel(
+        id: foundId,
+        title: result.title,
+        description: result.summary ?? result.steps.join('\n'),
+        thumbnailUrl: '',
+        channelTitle: result.source,
+        publishedAt: DateTime.now(),
+      );
+      await _cacheManager.saveVideo(_toSharedVideo(video, videoUrl: result.videoUrl));
       return Right(video);
+    } on ApiException {
+      return Left(ServerFailure());
     } catch (e) {
       return Left(ServerFailure());
     }
@@ -83,29 +146,35 @@ class VideoRepositoryImpl implements VideoRepository {
     List<String> ids,
   ) async {
     try {
-      // Vérifier d'abord le cache
       final cachedVideos = _cacheManager.getVideos(ids);
+      final cachedMap = {for (final v in cachedVideos) v.id: v};
       final missingIds = ids
-          .where((id) => !cachedVideos.any((v) => v.id == id))
+          .where((id) => !cachedMap.containsKey(id))
           .toList();
 
       if (missingIds.isEmpty) {
-        return Right(cachedVideos);
+        return Right(cachedVideos.map(_toVideoModel).toList());
       }
 
-      // Si des vidéos manquent et pas de connexion
       if (!await _networkInfo.isConnected) {
         return Left(NetworkFailure());
       }
 
-      // Récupérer les vidéos manquantes
-      final newVideos = await _apiService.getVideosByIds(missingIds);
-      
-      // Mettre en cache
-      await _cacheManager.cacheVideos(newVideos);
+      final fetched = <VideoModel>[];
+      for (final id in missingIds) {
+        final one = await getVideoById(id);
+        one.fold((_) {}, (video) => fetched.add(video));
+      }
 
-      // Combiner les résultats
-      return Right([...cachedVideos, ...newVideos]);
+      await _cacheManager.saveVideos(fetched.map(_toSharedVideo).toList());
+
+      final all = <VideoModel>[
+        ...cachedVideos.map(_toVideoModel),
+        ...fetched,
+      ];
+      return Right(all);
+    } on ApiException {
+      return Left(ServerFailure());
     } catch (e) {
       return Left(ServerFailure());
     }
@@ -115,8 +184,12 @@ class VideoRepositoryImpl implements VideoRepository {
   Future<Either<Failure, List<SearchResult>>> getSearchHistory() async {
     try {
       final results = _cacheManager.searchResultBox.values.toList()
-        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      return Right(results);
+        ..sort((a, b) {
+          final aTs = DateTime.tryParse(a.metadata['timestamp']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bTs = DateTime.tryParse(b.metadata['timestamp']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bTs.compareTo(aTs);
+        });
+      return Right(results.map(_toSearchResult).toList());
     } catch (e) {
       return Left(CacheFailure());
     }
@@ -125,7 +198,7 @@ class VideoRepositoryImpl implements VideoRepository {
   @override
   Future<Either<Failure, void>> clearSearchHistory() async {
     try {
-      await _cacheManager.clearAll();
+      await _cacheManager.clearCache();
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure());

@@ -47,17 +47,26 @@ class ApiService {
     return ApiService(http.Client());
   }
 
+  Map<String, dynamic> _decodeJsonObject(String raw, {Map<String, dynamic>? fallback}) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      // Fallback is used to keep UI stable when backend payload is malformed.
+    }
+    return fallback ?? <String, dynamic>{};
+  }
+
   Future<BaseSearchResult> searchVideos(String query) async {
     int attempts = 0;
     late dynamic lastError;
 
-    // Récupérer userId et token
+    // Récupérer uniquement le userId anonyme local
     String? userId;
-    String? token;
     try {
       final prefs = await SharedPreferences.getInstance();
       userId = prefs.getString('user_id');
-      token = prefs.getString('auth_token');
     } catch (_) {}
 
     while (attempts < maxRetries) {
@@ -66,8 +75,6 @@ class ApiService {
         final headers = {
           'Content-Type': 'application/json',
           if (userId != null && userId.isNotEmpty) 'x-user-id': userId,
-          if (token != null && token.isNotEmpty)
-            'Authorization': 'Bearer $token',
         };
         final response = await _client
             .post(uri, headers: headers, body: jsonEncode({'query': query}))
@@ -172,11 +179,9 @@ class ApiService {
         );
         if (dataLine.isNotEmpty) {
           final jsonStr = dataLine.substring(5).trim();
-          try {
-            final map = json.decode(jsonStr) as Map<String, dynamic>;
+          final map = _decodeJsonObject(jsonStr, fallback: const {'type': 'malformed'});
+          if (map['type'] != 'malformed') {
             yield StreamEvent.fromJson(map);
-          } catch (_) {
-            // ignore malformed chunks
           }
         }
       }
@@ -194,7 +199,7 @@ class ApiService {
     try {
       final resp = await _client.get(uri).timeout(timeout);
       if (resp.statusCode == 200) {
-        final map = json.decode(resp.body) as Map<String, dynamic>;
+        final map = _decodeJsonObject(resp.body, fallback: {'ok': false, 'parseError': true});
         return map;
       }
       return {'ok': false, 'status': resp.statusCode};
@@ -209,7 +214,10 @@ class ApiService {
 
   Map<String, dynamic> _parseResponse(http.Response response) {
     try {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      throw const FormatException('Response is not a JSON object');
     } on FormatException {
       throw ApiException('Réponse invalide du serveur',
           statusCode: response.statusCode);

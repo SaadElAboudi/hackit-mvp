@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:get_it/get_it.dart';
-import 'providers/google_auth_provider.dart';
-import 'screens/login_screen.dart';
 import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/search_provider.dart';
@@ -42,29 +40,10 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // bool _guestMode = false; // Removed unused field
-
-  bool _hasToken = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkToken();
-  }
-
-  Future<void> _checkToken() async {
-    final prefs = getIt<SharedPreferences>();
-    final token = prefs.getString('auth_token');
-    setState(() {
-      _hasToken = token != null && token.isNotEmpty;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => GoogleAuthProvider()),
         ChangeNotifierProvider(
           create: (_) => ThemeProvider(),
         ),
@@ -88,8 +67,6 @@ class _MyAppState extends State<MyApp> {
             try {
               final hist = context.read<HistoryFavoritesProvider>();
               final lessons = context.read<LessonsProvider>();
-              lessons.service.api.addAuthInterceptor(
-                  Provider.of<GoogleAuthProvider>(context, listen: false));
               hist.linkLessons(lessons);
               if (!(context
                       .findAncestorWidgetOfExactType<MyApp>()
@@ -105,7 +82,7 @@ class _MyAppState extends State<MyApp> {
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
             initialRoute: '/',
-            home: _hasToken ? const RootTabs() : const LoginScreen(),
+            home: const RootTabs(),
             onGenerateRoute: (settings) {
               switch (settings.name) {
                 case '/':

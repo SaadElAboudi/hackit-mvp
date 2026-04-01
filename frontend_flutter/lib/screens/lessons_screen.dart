@@ -3,10 +3,11 @@ import 'package:provider/provider.dart';
 import '../providers/lessons_provider.dart';
 import '../models/lesson.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/app_scaffold.dart';
 import 'lesson_detail_screen.dart';
 
 class LessonsScreen extends StatelessWidget {
-  const LessonsScreen({Key? key}) : super(key: key);
+  const LessonsScreen({super.key});
 
   String _subtitle(Lesson l) {
     final created = l.createdAt;
@@ -19,56 +20,11 @@ class LessonsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(70),
-        child: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 3,
-          centerTitle: true,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.menu_book_rounded,
-                  color: Color(0xFF00C48C), size: 28),
-              const SizedBox(width: 10),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Leçons',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                      color: Color(0xFF222B45),
-                      letterSpacing: 0.5,
-                      shadows: [
-                        Shadow(
-                          color: Color(0x22000000),
-                          offset: Offset(0, 2),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    width: 38,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: Color(0xFF00C48C),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-      body: Consumer<LessonsProvider>(
+    return AppScaffold(
+      title: 'Lecons',
+      subtitle: 'Toutes tes lecons sauvegardees',
+      leadingIcon: Icons.menu_book_rounded,
+      child: Consumer<LessonsProvider>(
         builder: (context, lp, _) {
           final lessons = lp.lessons;
           if (lessons.isEmpty) {
@@ -98,6 +54,9 @@ class LessonsScreen extends StatelessWidget {
                     icon: const Icon(Icons.delete, color: Colors.red),
                     tooltip: 'Supprimer',
                     onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final lessonsProvider =
+                          Provider.of<LessonsProvider>(context, listen: false);
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
@@ -119,16 +78,14 @@ class LessonsScreen extends StatelessWidget {
                       );
                       if (confirm == true) {
                         try {
-                          await Provider.of<LessonsProvider>(context,
-                                  listen: false)
-                              .deleteLesson(lesson.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          await lessonsProvider.deleteLesson(lesson.id);
+                          messenger.showSnackBar(
                             const SnackBar(
                                 content: Text('Leçon supprimée'),
                                 backgroundColor: Colors.green),
                           );
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             SnackBar(
                                 content:
                                     Text('Erreur lors de la suppression : $e'),

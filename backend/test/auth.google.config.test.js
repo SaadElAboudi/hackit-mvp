@@ -30,24 +30,22 @@ function request({ host = '127.0.0.1', port, path, method = 'GET' }) {
   });
 }
 
-await test('GET /auth/google/status returns OAuth config status', async (t) => {
+await test('GET /auth/google/status is removed in no-auth mode', async (t) => {
   const app = createApp();
   const { server, port } = await startServer(app);
   t.after(() => server.close());
 
   const res = await request({ port, path: '/auth/google/status' });
-  assert.equal(res.status, 200);
-  assert.equal(typeof res.data.enabled, 'boolean');
-  assert.equal(typeof res.data.hasClientId, 'boolean');
-  assert.equal(typeof res.data.hasCallbackUrl, 'boolean');
+  assert.equal(res.status, 404);
 });
 
-await test('GET /auth/google returns 503 when OAuth config is missing', async (t) => {
+await test('GET /api/me returns no-auth status', async (t) => {
   const app = createApp();
   const { server, port } = await startServer(app);
   t.after(() => server.close());
 
-  const res = await request({ port, path: '/auth/google' });
-  assert.equal(res.status, 503);
-  assert.equal(res.data.error, 'Google OAuth is not configured');
+  const res = await request({ port, path: '/api/me' });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.ok, true);
+  assert.equal(res.data.auth, 'disabled');
 });

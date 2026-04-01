@@ -4,7 +4,7 @@ import 'app_extensions.dart';
 class AppTheme {
   static ThemeData _buildTheme(Brightness brightness) {
     final scheme = ColorScheme.fromSeed(
-      seedColor: Colors.indigo,
+      seedColor: const Color(0xFF0B7285),
       brightness: brightness,
     );
 
@@ -139,6 +139,29 @@ class AppTheme {
             .withValues(alpha: isDark ? 0.25 : 0.6),
       ),
       splashFactory: InkSparkle.splashFactory,
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: scheme.surface.withValues(alpha: 0.92),
+        indicatorColor: scheme.primary.withValues(alpha: 0.16),
+        elevation: 0,
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return IconThemeData(color: scheme.primary);
+          }
+          return IconThemeData(color: scheme.onSurfaceVariant);
+        }),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return TextStyle(
+              color: scheme.primary,
+              fontWeight: FontWeight.w700,
+            );
+          }
+          return TextStyle(
+            color: scheme.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
+          );
+        }),
+      ),
       // withOpacity deprecated; prefer withValues for precise alpha handling
       hoverColor: scheme.primary.withValues(alpha: 0.10),
       splashColor: scheme.primary.withValues(alpha: 0.18),

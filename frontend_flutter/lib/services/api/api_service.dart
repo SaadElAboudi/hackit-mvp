@@ -1,7 +1,5 @@
-import '../../providers/google_auth_provider.dart';
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../analytics/analytics_manager.dart';
 
 class ApiService {
@@ -9,37 +7,6 @@ class ApiService {
     return _trackApiCall(
       endpoint: '/api/lessons/:id',
       apiCall: () => _dio.delete('/api/lessons/$lessonId'),
-    );
-  }
-
-  /// Ajoute un interceptor pour injecter le token Google sur toutes les requêtes
-  void addAuthInterceptor(GoogleAuthProvider googleAuth) {
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final user = googleAuth.user;
-          final auth = await user?.authentication;
-          if (auth?.idToken != null) {
-            options.headers['Authorization'] = 'Bearer ${auth?.idToken}';
-          } else if (auth?.accessToken != null) {
-            options.headers['Authorization'] = 'Bearer ${auth?.accessToken}';
-          }
-          options.headers['x-user-id'] = user?.id;
-          // Ajout du token JWT local si présent (connexion email/password)
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            final jwt = prefs.getString('auth_token');
-            final userIdLocal = prefs.getString('user_id');
-            if (jwt != null && jwt.isNotEmpty) {
-              options.headers['Authorization'] = 'Bearer $jwt';
-            }
-            if (userIdLocal != null && userIdLocal.isNotEmpty) {
-              options.headers['x-user-id'] = userIdLocal;
-            }
-          } catch (_) {}
-          handler.next(options);
-        },
-      ),
     );
   }
 

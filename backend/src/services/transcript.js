@@ -38,6 +38,9 @@ function heuristicTranscript(videoTitle) {
 
 // Fetch real transcript placeholder (future: integrate provider)
 async function fetchRemoteTranscript(videoId, videoTitle) {
+    if (process.env.NODE_ENV === 'test') {
+        return heuristicTranscript(videoTitle);
+    }
     // If we had an API key / caption endpoint we'd call it here.
     // Attempt minimal HEAD request to YouTube watch page to ensure video exists.
     try {

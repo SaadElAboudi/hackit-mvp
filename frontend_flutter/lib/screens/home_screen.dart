@@ -10,81 +10,30 @@ import '../models/chat_message.dart';
 import '../widgets/citations_view.dart';
 import '../widgets/chapters_view.dart';
 import '../models/base_search_result.dart';
+import '../widgets/app_scaffold.dart';
 // ...existing code...
-import 'package:shared_preferences/shared_preferences.dart';
-import 'login_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(70),
-        child: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 3,
-          centerTitle: true,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.chat_bubble_rounded,
-                  color: Color(0xFF00C48C), size: 28),
-              const SizedBox(width: 10),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Hackit',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                      color: Color(0xFF222B45),
-                      letterSpacing: 0.5,
-                      shadows: [
-                        Shadow(
-                          color: Color(0x22000000),
-                          offset: Offset(0, 2),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    width: 38,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: Color(0xFF00C48C),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              tooltip: 'Déconnexion',
-              onPressed: () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove('auth_token');
-                await prefs.remove('userId');
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  (route) => false,
-                );
-              },
-            ),
-            IconButton(icon: Icon(Icons.help_outline), onPressed: () {}),
-          ],
+    return AppScaffold(
+      title: 'Hackit',
+      subtitle: 'Assistant pratique sans friction',
+      leadingIcon: Icons.chat_bubble_rounded,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.tips_and_updates_outlined),
+          tooltip: 'Conseils',
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Astuce: utilise des requetes courtes et precises.')),
+            );
+          },
         ),
-      ),
-      body: Column(
+      ],
+      child: Column(
         children: [
           Expanded(child: _ChatMessagesList()),
           ChatInput(
@@ -227,7 +176,7 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
                         color: Colors.red, fontWeight: FontWeight.bold),
                   ),
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Builder(
                   builder: (context) {
                     final lastQ = provider.lastQuery;

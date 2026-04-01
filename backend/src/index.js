@@ -7,20 +7,14 @@ import axios from 'axios';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
-import session from 'express-session';
 import mongoose from 'mongoose';
 import morgan from 'morgan';
 
-import { getFeatureFlags } from './config/featureFlags.js';
 import lessonsRouter from './routes/lessons.js';
-import userRouter from './routes/user.js';
 import { getChapters, extractDesiredChapters } from './services/chapters.js';
 import { getTranscript } from './services/transcript.js';
 import { searchYouTube as originalSearchYouTube } from './services/youtube.js';
-import { requireJwtAuthOrGoogle } from './utils/jwtAuth.js';
-import { validateBody, validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
 import { buildObservabilitySnapshot, evaluateAlerts, observeExternal, observeHttp, observeQualityEvent, observeTtvEvent } from './utils/observability.js';
-import passport, { isGoogleOAuthEnabled } from './utils/passportGoogle.js';
 import { userIdMiddleware } from './utils/userIdMiddleware.js';
 
 // Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
@@ -28,7 +22,7 @@ const dynamicImport = (moduleName) => Function('m', 'return import(m)')(moduleNa
 
 dotenv.config({ quiet: true });
 
-const featureFlags = getFeatureFlags();
+
 
 const app = express();
 // CORS middleware at the very top
@@ -39,7 +33,7 @@ app.use(cors({
     : true,
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
 app.use((req, res, next) => {
   const startedAt = Date.now();
   res.on('finish', () => {
@@ -100,116 +94,12 @@ async function simpleRateLimit(key, maxPerMinute = 30) {
   rateLimit[key].push(now);
   return true;
 }
-// Route GET /api/lessons accessible sans requireAuth
-// Removed duplicate /api/lessons route. Only the protected version remains below.
-// Session pour Passport
-const sessionConfig = {
-  name: 'hackit.sid',
-  secret: process.env.SESSION_SECRET || "dev_secret",
-  resave: false,
-  saveUninitialized: false,
-  rolling: process.env.NODE_ENV === 'production',
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 1000 * 3600 * 24 * 30,
-  },
-};
-
-const sessionStoreMongoUrl = process.env.SESSION_STORE_MONGO_URL || process.env.MONGODB_URI;
-if (process.env.NODE_ENV === 'production' && sessionStoreMongoUrl) {
-  try {
-    const mongoStoreModule = await dynamicImport('connect-mongo');
-    const MongoStore = mongoStoreModule.default;
-    sessionConfig.store = MongoStore.create({
-      mongoUrl: sessionStoreMongoUrl,
-      ttl: 60 * 60 * 24 * 30,
-      autoRemove: 'native',
-    });
-  } catch (err) {
-    console.warn('External session store unavailable, falling back to memory store:', err?.message || err);
-  }
-}
-
-app.use(session(sessionConfig));
-app.use(passport.initialize());
-app.use(passport.session());
 // Enable concise logging in all non-test environments
 if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
-// ============ AUTHENTIFICATION GOOGLE ============
-app.get('/auth/google/status', (_req, res) => {
-  return res.json({
-    enabled: isGoogleOAuthEnabled(),
-    hasClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
-    hasCallbackUrl: Boolean(process.env.GOOGLE_CALLBACK_URL),
-  });
-});
-
-app.get('/api/feature-flags', (_req, res) => {
-  return res.json({ ok: true, flags: featureFlags });
-});
-
-// Lance le flow OAuth Google (CSRF state token)
-app.get('/auth/google', (req, res, next) => {
-  if (!isGoogleOAuthEnabled()) {
-    return res.status(503).json({
-      error: 'Google OAuth is not configured',
-      detail: 'Missing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, or GOOGLE_CALLBACK_URL',
-    });
-  }
-
-  const state = randomBytes(24).toString('hex');
-  req.session.oauthState = state;
-  return passport.authenticate('google', { scope: ['profile', 'email'], state })(req, res, next);
-});
-
-// Callback Google OAuth + state validation + session rotation
-app.get('/auth/google/callback',
-  (req, res, next) => {
-    if (!isGoogleOAuthEnabled()) {
-      return res.status(503).json({ error: 'Google OAuth is not configured' });
-    }
-    const expectedState = req.session?.oauthState;
-    if (req.session) delete req.session.oauthState;
-    if (!expectedState || req.query.state !== expectedState) {
-      return res.status(403).json({ error: 'Invalid OAuth state' });
-    }
-    return next();
-  },
-  passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res, next) => {
-    const authenticatedUser = req.user;
-    req.session.regenerate((sessionErr) => {
-      if (sessionErr) return next(sessionErr);
-      req.login(authenticatedUser, (loginErr) => {
-        if (loginErr) return next(loginErr);
-        const userId = authenticatedUser?.id;
-        const frontendOrigin = process.env.FRONTEND_ORIGIN || '';
-        if (frontendOrigin) {
-          return res.redirect(`${frontendOrigin.replace(/\/$/, '')}/auth-success?userId=${userId}`);
-        }
-        return res.redirect(`/auth-success?userId=${userId}`);
-      });
-    });
-  }
-);
-// Endpoint pour récupérer l'utilisateur authentifié
-app.get('/api/me', userIdMiddleware, (req, res) => {
-  if (req.isAuthenticated?.() && req.user) {
-    return res.json({ ok: true, user: req.user, auth: 'google-session' });
-  }
-
-  return res.json({
-    ok: true,
-    auth: 'anonymous',
-    user: {
-      id: req.userId,
-      isAnonymous: Boolean(req.isAnonymous),
-    },
-  });
+app.get('/api/me', (req, res) => {
+  return res.json({ ok: true, auth: 'disabled' });
 });
 
 const USE_GEMINI_ENV = (process.env.USE_GEMINI || "false") === "true";
@@ -225,6 +115,8 @@ let GEMINI_FAILURE_TIMESTAMPS = []; // array of ms since epoch
 let GEMINI_BREAKER_UNTIL = 0; // timestamp ms when breaker closes
 const START_TIME = Date.now();
 const APP_VERSION = process.env.APP_VERSION || process.env.npm_package_version || '1.0.0';
+const MAX_QUERY_LEN = Number(process.env.MAX_QUERY_LEN || 500);
+const MAX_STREAM_QUERY_LEN = Number(process.env.MAX_STREAM_QUERY_LEN || 500);
 
 function makeMockResponse() {
   return {
@@ -271,26 +163,6 @@ function heuristicSummary({ desiredSteps } = {}) {
   return base.join("\n");
 }
 
-
-function getSummaryConfig(summaryLength = 'standard') {
-  switch (summaryLength) {
-    case 'tldr':
-      return { stepsTarget: 3, maxOutputTokens: 140 };
-    case 'deep':
-      return { stepsTarget: 8, maxOutputTokens: 420 };
-    default:
-      return { stepsTarget: 5, maxOutputTokens: 300 };
-  }
-}
-
-function annotateSource(source, mode = 'real') {
-  return {
-    source,
-    resultMode: mode,
-    badges: [mode.toUpperCase()],
-  };
-}
-
 function extractDesiredSteps(text) {
   try {
     const s = String(text || '').toLowerCase();
@@ -317,6 +189,15 @@ function extractYouTubeVideoId(url) {
     if (idx !== -1 && parts[idx + 1]) return parts[idx + 1];
   } catch (_) { /* ignore */ }
   return null;
+}
+
+function normalizeQueryInput(raw, maxLen = MAX_QUERY_LEN) {
+  const query = String(raw || '').trim();
+  if (!query) return { ok: false, status: 400, error: 'query is required' };
+  if (query.length > maxLen) {
+    return { ok: false, status: 413, error: `query is too long (max ${maxLen} chars)` };
+  }
+  return { ok: true, value: query };
 }
 
 function withTimestamp(url, startSec) {
@@ -355,13 +236,16 @@ export function setSearchYouTube(fn) {
   }
 }
 
-async function generateWithGemini(prompt, maxOutputTokens = 256) {
+async function generateWithGemini(prompt, maxOutputTokens = 256, options = {}) {
+  const currentModel = options.model || GEMINI_MODEL;
+  const allowModelFallback = options.allowModelFallback !== false;
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
   // Use v1 generateContent endpoint for modern models; fall back to legacy if needed.
-  const isLegacy = /bison|text-bison/i.test(GEMINI_MODEL);
+  const isLegacy = /bison|text-bison/i.test(currentModel);
   const baseUrl = isLegacy
-    ? `https://generativelanguage.googleapis.com/v1beta2/${GEMINI_MODEL}:generateText?key=${GEMINI_API_KEY}`
-    : `https://generativelanguage.googleapis.com/v1/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    ? `https://generativelanguage.googleapis.com/v1beta2/${currentModel}:generateText?key=${GEMINI_API_KEY}`
+    : `https://generativelanguage.googleapis.com/v1/${currentModel}:generateContent?key=${GEMINI_API_KEY}`;
+
 
   const body = isLegacy
     ? { prompt: { text: prompt }, maxOutputTokens, temperature: 0.2 }
@@ -417,10 +301,17 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       observeExternal('gemini', 'timeout');
       throw new Error(`Gemini timeout after ${GEMINI_TIMEOUT_MS}ms`);
     }
-    // If NOT_FOUND: try a known accessible lite model explicitly
-    if (status === 404 && GEMINI_MODEL !== "models/gemini-2.0-flash-lite" && GEMINI_MODEL !== "models/gemini-2.0-flash-lite-001") {
-      process.env.GEMINI_MODEL = "models/gemini-2.0-flash-lite";
-      return await generateWithGemini(prompt, maxOutputTokens);
+    // If NOT_FOUND: try a known accessible lite model explicitly once
+    if (
+      status === 404 &&
+      allowModelFallback &&
+      currentModel !== 'models/gemini-2.0-flash-lite' &&
+      currentModel !== 'models/gemini-2.0-flash-lite-001'
+    ) {
+      return await generateWithGemini(prompt, maxOutputTokens, {
+        model: 'models/gemini-2.0-flash-lite',
+        allowModelFallback: false,
+      });
     }
     observeExternal('gemini', 'error');
     if (status === 404) {
@@ -485,36 +376,29 @@ app.get("/health/extended", (_req, res) => {
   });
 });
 app.get("/health/observability", (_req, res) => {
-  if (!featureFlags.observability) {
-    return res.status(503).json({ error: 'Observability is disabled by feature flag' });
-  }
   const snapshot = buildObservabilitySnapshot();
   const alerts = evaluateAlerts(snapshot);
   res.json({ ok: true, snapshot, alerts });
 });
 
-app.post('/api/search/feedback', validateBody(validateFeedbackPayload), async (req, res) => {
-  if (!featureFlags.searchFeedback) {
-    return res.status(503).json({ error: 'Search feedback is disabled by feature flag' });
-  }
-  const { requestId, clicked, completed, rating } = req.validatedBody;
+app.post('/api/search/feedback', async (req, res) => {
+  const { requestId, clicked, completed, rating } = req.body || {};
   observeQualityEvent({ requestId, clicked, completed, rating });
   return res.json({ ok: true });
 });
 
-app.post('/api/analytics/ttv', validateBody(validateTtvPayload), async (req, res) => {
-  const { requestId, ttvMs } = req.validatedBody;
-  observeTtvEvent({ requestId, ttvMs });
+app.post('/api/analytics/ttv', async (req, res) => {
+  const { requestId, ttvMs } = req.body || {};
+  if (!Number.isFinite(Number(ttvMs))) return res.status(400).json({ error: 'ttvMs is required' });
+  observeTtvEvent({ requestId, ttvMs: Number(ttvMs) });
   return res.json({ ok: true });
 });
 
-app.get('/api/recommendations', requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
-  if (!featureFlags.recommendations) {
-    return res.status(503).json({ error: 'Recommendations are disabled by feature flag' });
-  }
+app.get('/api/recommendations', userIdMiddleware, async (req, res) => {
   try {
     const Lesson = (await import('./models/lesson.js')).default;
     const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized user context' });
     const history = await Lesson.find({ userId }).sort({ lastViewedAt: -1, updatedAt: -1 }).limit(20).lean();
     const seedWords = new Set();
     history.forEach((l) => String(l.title || '').toLowerCase().split(/\W+/).filter((w) => w.length > 3).forEach((w) => seedWords.add(w)));
@@ -538,16 +422,10 @@ app.post("/api/search", async (req, res) => {
   if (!(await simpleRateLimit(`search:${ip}`, 20))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
-  let query;
-  let useGeminiOverride;
-  let summaryLength;
-  try {
-    ({ query, useGemini: useGeminiOverride, summaryLength } = validateSearchPayload(req.body || {}));
-  } catch (e) {
-    return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload', detail: e?.details || null });
-  }
+  const validation = normalizeQueryInput(req.body?.query, MAX_QUERY_LEN);
+  if (!validation.ok) return res.status(validation.status).json({ error: validation.error });
+  const query = validation.value;
   const requestId = randomBytes(8).toString('hex');
-  const summaryConfig = getSummaryConfig(featureFlags.multiLengthSummary ? summaryLength : 'standard');
 
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
@@ -557,14 +435,13 @@ app.post("/api/search", async (req, res) => {
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
     const desiredChapters = extractDesiredChapters(query);
     const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
-    const sourceMeta = annotateSource(mock.source, 'mock');
-    return res.json({ ...mock, ...sourceMeta, citations, chapters, requestId, summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
+    return res.json({ ...mock, citations, chapters, requestId });
   }
 
   try {
     let searchTerm = query;
     const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
-    const useGemini = USE_GEMINI_ENV && !breakerActive && (useGeminiOverride !== false);
+    const useGemini = USE_GEMINI_ENV && !breakerActive && (req.body?.useGemini !== false);
     let reformulationTimedOut = false;
     if (useGemini && USE_GEMINI_REFORMULATION) {
       const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
@@ -611,14 +488,14 @@ app.post("/api/search", async (req, res) => {
           console.warn("Retry with original query also failed:", retryErr.message);
           if ((process.env.ALLOW_FALLBACK || "true") === "true") {
             observeExternal('youtube', 'fallback');
-            return res.json({ ...makeMockResponse(), ...annotateSource('mock-fallback', 'fallback'), summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
+            return res.json({ ...makeMockResponse(), source: "mock-fallback" });
           }
           throw retryErr;
         }
       } else {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
           observeExternal('youtube', 'fallback');
-          return res.json({ ...makeMockResponse(), ...annotateSource('mock-fallback', 'fallback'), summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
+          return res.json({ ...makeMockResponse(), source: "mock-fallback" });
         }
         throw videoErr;
       }
@@ -626,7 +503,7 @@ app.post("/api/search", async (req, res) => {
 
     let summaryText = "";
     const attemptGeminiSummary = useGemini && !reformulationTimedOut;
-    const desiredSteps = extractDesiredSteps(query) || summaryConfig.stepsTarget;
+    const desiredSteps = extractDesiredSteps(query);
     if (attemptGeminiSummary) {
       // Récupère le transcript YouTube
       let transcriptText = "";
@@ -645,7 +522,7 @@ app.post("/api/search", async (req, res) => {
           ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
           : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`);
       try {
-        summaryText = await generateWithGemini(summaryPrompt, summaryConfig.maxOutputTokens);
+        summaryText = await generateWithGemini(summaryPrompt, 300);
       } catch (e) {
         console.warn("Gemini summary failed:", e.message);
         summaryText = heuristicSummary({ desiredSteps });
@@ -659,8 +536,7 @@ app.post("/api/search", async (req, res) => {
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
     const desiredChapters = extractDesiredChapters(query);
     const chapters = vid ? (await getChapters(vid, videoTitle, { desired: desiredChapters })).chapters : [];
-    const sourceMeta = annotateSource(source, 'real');
-    return res.json({ title: videoTitle, steps, videoUrl, ...sourceMeta, citations, chapters, requestId, summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
+    return res.json({ title: videoTitle, steps, videoUrl, source, citations, chapters, requestId });
   } catch (err) {
     console.error("Search error:", err?.response?.data || err.message || err);
     const statusCode = err?.status || err?.response?.status || 500;
@@ -672,16 +548,14 @@ app.post("/api/search", async (req, res) => {
 // Server-Sent Events streaming endpoint for progressive UI updates
 // Usage: GET /api/search/stream?query=...
 app.get("/api/search/stream", async (req, res) => {
-  if (!featureFlags.searchStreaming) {
-    return res.status(503).json({ error: 'Search streaming is disabled by feature flag' });
-  }
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
   if (!(await simpleRateLimit(`stream:${ip}`, 10))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
-  const query = String(req.query.query || "").trim();
-  if (!query) return res.status(400).json({ error: "query is required" });
+  const validation = normalizeQueryInput(req.query.query, MAX_STREAM_QUERY_LEN);
+  if (!validation.ok) return res.status(validation.status).json({ error: validation.error });
+  const query = validation.value;
 
   // Set SSE headers
   res.setHeader("Content-Type", "text/event-stream");
@@ -689,17 +563,29 @@ app.get("/api/search/stream", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders?.();
 
+  const clientState = { closed: false };
+  req.on('close', () => {
+    clientState.closed = true;
+  });
+
   const writeEvent = (obj) => {
+    if (clientState.closed || res.writableEnded || res.destroyed) return;
     try {
       res.write(`data: ${JSON.stringify(obj)}\n\n`);
     } catch (e) {
       // client likely disconnected
-      return; // avoid empty catch block per lint rules
+      clientState.closed = true;
+      return;
     }
   };
 
   const end = () => {
-    try { res.end(); } catch (_) { return; }
+    if (res.writableEnded || res.destroyed) return;
+    try {
+      res.end();
+    } catch (_) {
+      return;
+    }
   };
 
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
@@ -717,13 +603,19 @@ app.get("/api/search/stream", async (req, res) => {
         clearInterval(interval);
         // final event with citations and chapters
         (async () => {
-          const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
-          const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
-          const desiredChapters = extractDesiredChapters(query);
-          const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
-          writeEvent({ type: "final", citations, chapters });
-          writeEvent({ type: "done" });
-          end();
+          try {
+            if (clientState.closed) return;
+            const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
+            const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
+            const desiredChapters = extractDesiredChapters(query);
+            const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
+            writeEvent({ type: 'final', citations, chapters });
+            writeEvent({ type: 'done' });
+          } catch (err) {
+            writeEvent({ type: 'error', error: 'Internal server error', detail: err?.message || 'Unexpected error' });
+          } finally {
+            end();
+          }
         })();
       }
     }, 220);
@@ -759,7 +651,6 @@ app.get("/api/search/stream", async (req, res) => {
         const video = await searchYouTube(searchTerm);
         videoTitle = video.title;
         videoUrl = video.url;
-        videoId = video.videoId || extractYouTubeVideoId(video.url);
         source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
         observeExternal('youtube', 'success');
       } catch (videoErr) {
@@ -799,9 +690,11 @@ app.get("/api/search/stream", async (req, res) => {
 
       const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
       for (const s of steps) {
+        if (clientState.closed) return end();
         writeEvent({ type: "partial", step: s });
         await new Promise(r => setTimeout(r, 160));
       }
+      if (clientState.closed) return end();
       const vid = videoId || extractYouTubeVideoId(videoUrl);
       const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
       const desiredChapters = extractDesiredChapters(query);
@@ -863,32 +756,29 @@ app.get("/api/chapters", async (req, res) => {
   }
 });
 
-
-
-app.use((err, _req, res, _next) => {
-  const status = err?.status || 500;
-  const code = err?.code || (status === 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR');
-  const message = err?.message || 'Internal server error';
-  const detail = err?.details || null;
-  return res.status(status).json({ error: message, code, detail });
-});
-
 export function createApp() {
   return app;
 }
 
 // Only start server if run directly (not when imported for tests)
 // Use URL-safe comparison to handle paths with spaces (e.g., "app howto")
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const isDirectRun = Boolean(process.argv?.[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
+let server = null;
+
+if (isDirectRun) {
   const PORT = process.env.PORT || 3000;
   // Persistence initialization removed; handled by Mongoose.
   // Persistence mode logging removed; handled by Mongoose.
-  app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
     console.log(`Mock mode: ${(process.env.MOCK_MODE || 'true') === 'true' ? 'enabled' : 'disabled'}`);
     console.log(`Gemini: ${USE_GEMINI_ENV ? `enabled (${GEMINI_MODEL}, timeout=${GEMINI_TIMEOUT_MS}ms)` : 'disabled'}`);
     console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
+  });
+
+  server.on('error', (err) => {
+    console.error('Server listen error:', err?.message || err);
   });
 }
 
@@ -907,11 +797,13 @@ if (shouldConnectMongo) {
 
 // ============ LESSON GENERATION & PERSISTENCE ============
 // POST /api/generateLesson { query } (userId via middleware)
-app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
+app.post("/api/generateLesson", userIdMiddleware, async (req, res) => {
   console.log('[POST /api/generateLesson] Authorization:', req.headers.authorization, 'userId:', req.userId);
-  const { query } = req.body || {};
+  const validation = normalizeQueryInput(req.body?.query, MAX_QUERY_LEN);
+  if (!validation.ok) return res.status(validation.status).json({ error: validation.error });
+  const query = validation.value;
   const userId = req.userId;
-  if (!query || !userId) return res.status(400).json({ error: "query and userId are required" });
+  if (!userId) return res.status(400).json({ error: 'query and userId are required' });
 
   try {
     // 1) Find a video for the query (reuse same logic as /api/search)
@@ -1001,4 +893,50 @@ app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async 
 
 // Mount lessons and users routers.
 app.use('/api/lessons', lessonsRouter);
-app.use('/api/users', userRouter);
+
+app.use((req, res) => {
+  return res.status(404).json({ error: 'Not found' });
+});
+
+app.use((err, _req, res, next) => {
+  if (res.headersSent) return next(err);
+  if (err instanceof SyntaxError && Object.prototype.hasOwnProperty.call(err, 'body')) {
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+  const status = Number(err?.status || err?.statusCode) || 500;
+  const detail = err?.message || 'Unexpected error';
+  return res.status(status).json({ error: status >= 500 ? 'Internal server error' : 'Request failed', detail });
+});
+
+if (isDirectRun) {
+  const closeServerGracefully = (signal) => {
+    console.log(`Received ${signal}, shutting down gracefully...`);
+    const timeout = setTimeout(() => {
+      console.error('Graceful shutdown timeout reached, forcing exit');
+      process.exit(1);
+    }, 10000);
+
+    const finalize = () => {
+      clearTimeout(timeout);
+      process.exit(0);
+    };
+
+    Promise.resolve()
+      .then(async () => {
+        if (redisClient && typeof redisClient.quit === 'function') {
+          await redisClient.quit();
+        }
+      })
+      .catch(() => { })
+      .finally(() => {
+        if (!server) return finalize();
+        server.close(() => finalize());
+      });
+  };
+
+  process.on('SIGINT', () => closeServerGracefully('SIGINT'));
+  process.on('SIGTERM', () => closeServerGracefully('SIGTERM'));
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled promise rejection:', reason);
+  });
+}

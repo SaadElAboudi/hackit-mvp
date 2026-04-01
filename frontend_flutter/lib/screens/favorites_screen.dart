@@ -4,6 +4,7 @@ import '../providers/history_favorites_provider.dart';
 import '../providers/lessons_provider.dart';
 // ...existing code...
 import '../widgets/empty_state.dart';
+import '../widgets/app_scaffold.dart';
 // ...existing code...
 
 class FavoritesScreen extends StatelessWidget {
@@ -11,57 +12,11 @@ class FavoritesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(70),
-        child: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 3,
-          centerTitle: true,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.favorite_rounded,
-                  color: Color(0xFF00C48C), size: 28),
-              const SizedBox(width: 10),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Favoris',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                      color: Color(0xFF222B45),
-                      letterSpacing: 0.5,
-                      shadows: [
-                        Shadow(
-                          color: Color(0x22000000),
-                          offset: Offset(0, 2),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    width: 38,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: Color(0xFF00C48C),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [IconButton(icon: Icon(Icons.favorite), onPressed: () {})],
-        ),
-      ),
-      body: _FavoritesList(),
+    return const AppScaffold(
+      title: 'Favoris',
+      subtitle: 'Tes contenus preferes a portee de main',
+      leadingIcon: Icons.favorite_rounded,
+      child: _FavoritesList(),
     );
   }
 }
@@ -108,6 +63,9 @@ class _FavoritesList extends StatelessWidget {
                   icon: const Icon(Icons.delete, color: Colors.redAccent),
                   tooltip: 'Supprimer',
                   onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final lessonsProvider =
+                        Provider.of<LessonsProvider>(context, listen: false);
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
@@ -129,16 +87,14 @@ class _FavoritesList extends StatelessWidget {
                     );
                     if (confirm == true) {
                       try {
-                        await Provider.of<LessonsProvider>(context,
-                                listen: false)
-                            .toggleFavorite(l.id);
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        await lessonsProvider.toggleFavorite(l.id);
+                        messenger.showSnackBar(
                           const SnackBar(
                               content: Text('Retiré des favoris'),
                               backgroundColor: Colors.green),
                         );
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           SnackBar(
                               content: Text('Erreur : $e'),
                               backgroundColor: Colors.red),
@@ -200,6 +156,7 @@ class _FavoritesList extends StatelessWidget {
                 icon: const Icon(Icons.delete, color: Colors.redAccent),
                 tooltip: 'Supprimer',
                 onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
                   final confirm = await showDialog<bool>(
                     context: context,
                     builder: (ctx) => AlertDialog(
@@ -226,13 +183,13 @@ class _FavoritesList extends StatelessWidget {
                         title: e.title,
                         videoUrl: e.videoUrl,
                       );
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      messenger.showSnackBar(
                         const SnackBar(
                             content: Text('Retiré des favoris'),
                             backgroundColor: Colors.green),
                       );
                     } catch (err) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      messenger.showSnackBar(
                         SnackBar(
                             content: Text('Erreur : $err'),
                             backgroundColor: Colors.red),
