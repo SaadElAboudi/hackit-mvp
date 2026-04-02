@@ -1,87 +1,36 @@
 // import { deleteLesson } from "./utils/persistence.js";
 // Deprecated persistence import removed. Use Mongoose models instead.
-import { OAuth2Client } from 'google-auth-library';
-import { pathToFileURL } from "url";
+import { randomBytes } from 'crypto';
+import { pathToFileURL } from 'url';
 
-import axios from "axios";
-import cors from "cors";
-import dotenv from "dotenv";
-import express from "express";
-import morgan from "morgan";
-// Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
-
-import { searchYouTube as originalSearchYouTube } from "./services/youtube.js";
-import { getTranscript } from "./services/transcript.js";
-import { getChapters, extractDesiredChapters } from "./services/chapters.js";
-
-
-import { userIdMiddleware } from "./utils/userIdMiddleware.js";
-import passport from "./utils/passportGoogle.js";
-import { requireJwtAuth, requireJwtAuthOrGoogle } from "./utils/jwtAuth.js";
-// Import requireAuth middleware from this file
-// (already defined above)
-import session from "express-session";
-import userRouter from './routes/user.js';
+import axios from 'axios';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import express from 'express';
+import session from 'express-session';
 import mongoose from 'mongoose';
+import morgan from 'morgan';
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+import { getFeatureFlags } from './config/featureFlags.js';
+import lessonsRouter from './routes/lessons.js';
+import userRouter from './routes/user.js';
+import { getChapters, extractDesiredChapters } from './services/chapters.js';
+import { buildRelatedQueries, buildSearchCacheKey, createSearchCache } from './services/searchExperience.js';
+import { getTranscript } from './services/transcript.js';
+import { searchYouTube as originalSearchYouTube } from './services/youtube.js';
+import { requireJwtAuthOrGoogle } from './utils/jwtAuth.js';
+import { validateBody, validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
+import { buildObservabilitySnapshot, evaluateAlerts, observeExternal, observeHttp, observeQualityEvent, observeTtvEvent } from './utils/observability.js';
+import passport, { isGoogleOAuthEnabled } from './utils/passportGoogle.js';
+import { userIdMiddleware } from './utils/userIdMiddleware.js';
 
-// Middleware pour exiger une authentification Google ou un token Google
-async function requireAuth(req, res, next) {
-  // Logging of authorization header removed for security.
-  // Vérifie d'abord la session Passport
-  if (req.isAuthenticated?.() && req.user) {
-    return next();
-  }
-
-  // Vérifie le token Google envoyé en header
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: token,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      if (payload && payload.sub) {
-        // Vérifie si l'utilisateur existe dans la BDD
-        const User = (await import('./models/User.js')).default;
-        let user = await User.findOne({ email: payload.email });
-        if (!user) {
-          // Crée automatiquement un compte utilisateur Google
-          user = new User({
-            email: payload.email,
-            password: '', // pas de mot de passe pour Google
-            favorites: [],
-            history: [],
-            savedLessons: []
-          });
-          await user.save();
-        }
-        req.user = {
-          id: user._id,
-          email: user.email,
-          displayName: payload.name,
-          photo: payload.picture,
-          provider: 'google',
-        };
-        return next();
-      }
-    } catch (err) {
-      // Token invalide
-      return res.status(401).json({ error: 'Invalid Google token', detail: err.message });
-    }
-  }
-
-  // Sinon, refuse
-  res.status(401).json({ error: 'Authentication required' });
-}
-
+// Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
+const dynamicImport = (moduleName) => Function('m', 'return import(m)')(moduleName);
 
 dotenv.config({ quiet: true });
 
-
+const featureFlags = getFeatureFlags();
+const searchCache = createSearchCache();
 
 const app = express();
 // CORS middleware at the very top
@@ -93,12 +42,62 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-// Simple rate limiter for expensive endpoints
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    const resolvedPath = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : req.path;
+    const routeKey = `${req.method} ${resolvedPath}`;
+    observeHttp({ key: routeKey, durationMs: Date.now() - startedAt, statusCode: res.statusCode });
+  });
+  next();
+});
+// Rate limiter with Redis support (distributed) and in-memory fallback
 const rateLimit = {};
-function simpleRateLimit(key, maxPerMinute = 30) {
+const REDIS_URL = process.env.REDIS_URL;
+let redisClient = null;
+let redisReady = false;
+
+async function initRedisRateLimiter() {
+  if (!REDIS_URL || process.env.NODE_ENV === 'test' || redisReady || redisClient) return;
+  try {
+    const { createClient } = await dynamicImport('redis');
+    redisClient = createClient({ url: REDIS_URL });
+    redisClient.on('error', (err) => {
+      redisReady = false;
+      console.warn('Redis rate limiter unavailable:', err?.message || err);
+    });
+    await redisClient.connect();
+    redisReady = true;
+  } catch (err) {
+    redisClient = null;
+    redisReady = false;
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Redis rate limiter disabled, fallback to memory:', err?.message || err);
+    }
+  }
+}
+
+await initRedisRateLimiter();
+
+async function simpleRateLimit(key, maxPerMinute = 30) {
+  if (redisReady && redisClient) {
+    try {
+      const bucket = Math.floor(Date.now() / 60000);
+      const redisKey = `ratelimit:${key}:${bucket}`;
+      const current = await redisClient.incr(redisKey);
+      if (current === 1) {
+        await redisClient.expire(redisKey, 60);
+      }
+      return current <= maxPerMinute;
+    } catch (err) {
+      redisReady = false;
+      console.warn('Redis rate limiting failed, using memory fallback:', err?.message || err);
+    }
+  }
+
   const now = Date.now();
   if (!rateLimit[key]) rateLimit[key] = [];
-  rateLimit[key] = rateLimit[key].filter(ts => now - ts < 60000);
+  rateLimit[key] = rateLimit[key].filter((ts) => now - ts < 60000);
   if (rateLimit[key].length >= maxPerMinute) return false;
   rateLimit[key].push(now);
   return true;
@@ -106,12 +105,36 @@ function simpleRateLimit(key, maxPerMinute = 30) {
 // Route GET /api/lessons accessible sans requireAuth
 // Removed duplicate /api/lessons route. Only the protected version remains below.
 // Session pour Passport
-app.use(session({
+const sessionConfig = {
+  name: 'hackit.sid',
   secret: process.env.SESSION_SECRET || "dev_secret",
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 1000 * 3600 * 24 * 365 }
-}));
+  rolling: process.env.NODE_ENV === 'production',
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 3600 * 24 * 30,
+  },
+};
+
+const sessionStoreMongoUrl = process.env.SESSION_STORE_MONGO_URL || process.env.MONGODB_URI;
+if (process.env.NODE_ENV === 'production' && sessionStoreMongoUrl) {
+  try {
+    const mongoStoreModule = await dynamicImport('connect-mongo');
+    const MongoStore = mongoStoreModule.default;
+    sessionConfig.store = MongoStore.create({
+      mongoUrl: sessionStoreMongoUrl,
+      ttl: 60 * 60 * 24 * 30,
+      autoRemove: 'native',
+    });
+  } catch (err) {
+    console.warn('External session store unavailable, falling back to memory store:', err?.message || err);
+  }
+}
+
+app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 // Enable concise logging in all non-test environments
@@ -119,37 +142,76 @@ if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 // ============ AUTHENTIFICATION GOOGLE ============
-// Lance le flow OAuth Google
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-
-// Callback Google OAuth
-app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => {
-    // Redirige vers le frontend avec le userId en paramètre (à adapter selon l'URL du frontend)
-    const userId = req.user?.id;
-    res.redirect(`/auth-success?userId=${userId}`);
-  }
-);
-// DELETE /api/lessons/:id
-app.delete("/api/lessons/:id", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
-  const id = String(req.params.id || '').trim();
-  if (!id) return res.status(400).json({ error: 'id is required' });
-  try {
-    await deleteLesson(id);
-    return res.json({ deleted: true, id });
-  } catch (e) {
-    return res.status(500).json({ error: 'Failed to delete lesson', detail: e?.message || 'Unknown error' });
-  }
+app.get('/auth/google/status', (_req, res) => {
+  return res.json({
+    enabled: isGoogleOAuthEnabled(),
+    hasClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
+    hasCallbackUrl: Boolean(process.env.GOOGLE_CALLBACK_URL),
+  });
 });
 
-// Endpoint pour récupérer l'utilisateur authentifié
-app.get('/api/me', (req, res) => {
-  if (req.isAuthenticated?.() && req.user) {
-    res.json({ ok: true, user: req.user });
-  } else {
-    res.status(401).json({ ok: false, error: 'Not authenticated' });
+app.get('/api/feature-flags', (_req, res) => {
+  return res.json({ ok: true, flags: featureFlags });
+});
+
+// Lance le flow OAuth Google (CSRF state token)
+app.get('/auth/google', (req, res, next) => {
+  if (!isGoogleOAuthEnabled()) {
+    return res.status(503).json({
+      error: 'Google OAuth is not configured',
+      detail: 'Missing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, or GOOGLE_CALLBACK_URL',
+    });
   }
+
+  const state = randomBytes(24).toString('hex');
+  req.session.oauthState = state;
+  return passport.authenticate('google', { scope: ['profile', 'email'], state })(req, res, next);
+});
+
+// Callback Google OAuth + state validation + session rotation
+app.get('/auth/google/callback',
+  (req, res, next) => {
+    if (!isGoogleOAuthEnabled()) {
+      return res.status(503).json({ error: 'Google OAuth is not configured' });
+    }
+    const expectedState = req.session?.oauthState;
+    if (req.session) delete req.session.oauthState;
+    if (!expectedState || req.query.state !== expectedState) {
+      return res.status(403).json({ error: 'Invalid OAuth state' });
+    }
+    return next();
+  },
+  passport.authenticate('google', { failureRedirect: '/' }),
+  (req, res, next) => {
+    const authenticatedUser = req.user;
+    req.session.regenerate((sessionErr) => {
+      if (sessionErr) return next(sessionErr);
+      req.login(authenticatedUser, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        const userId = authenticatedUser?.id;
+        const frontendOrigin = process.env.FRONTEND_ORIGIN || '';
+        if (frontendOrigin) {
+          return res.redirect(`${frontendOrigin.replace(/\/$/, '')}/auth-success?userId=${userId}`);
+        }
+        return res.redirect(`/auth-success?userId=${userId}`);
+      });
+    });
+  }
+);
+// Endpoint pour récupérer l'utilisateur authentifié
+app.get('/api/me', userIdMiddleware, (req, res) => {
+  if (req.isAuthenticated?.() && req.user) {
+    return res.json({ ok: true, user: req.user, auth: 'google-session' });
+  }
+
+  return res.json({
+    ok: true,
+    auth: 'anonymous',
+    user: {
+      id: req.userId,
+      isAnonymous: Boolean(req.isAnonymous),
+    },
+  });
 });
 
 const USE_GEMINI_ENV = (process.env.USE_GEMINI || "false") === "true";
@@ -209,6 +271,26 @@ function heuristicSummary({ desiredSteps } = {}) {
     return out.join("\n");
   }
   return base.join("\n");
+}
+
+
+function getSummaryConfig(summaryLength = 'standard') {
+  switch (summaryLength) {
+    case 'tldr':
+      return { stepsTarget: 3, maxOutputTokens: 140 };
+    case 'deep':
+      return { stepsTarget: 8, maxOutputTokens: 420 };
+    default:
+      return { stepsTarget: 5, maxOutputTokens: 300 };
+  }
+}
+
+function annotateSource(source, mode = 'real') {
+  return {
+    source,
+    resultMode: mode,
+    badges: [mode.toUpperCase()],
+  };
 }
 
 function extractDesiredSteps(text) {
@@ -318,6 +400,7 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       GEMINI_OPERATIONAL = true;
       GEMINI_FAILURE_TIMESTAMPS = [];
       GEMINI_BREAKER_UNTIL = 0;
+      observeExternal('gemini', 'success');
       return txt;
     }
   } catch (error) {
@@ -333,6 +416,7 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       if (GEMINI_FAILURE_TIMESTAMPS.length >= 3) {
         GEMINI_BREAKER_UNTIL = Math.max(GEMINI_BREAKER_UNTIL, now + BREAKER_OPEN_MS);
       }
+      observeExternal('gemini', 'timeout');
       throw new Error(`Gemini timeout after ${GEMINI_TIMEOUT_MS}ms`);
     }
     // If NOT_FOUND: try a known accessible lite model explicitly
@@ -340,6 +424,7 @@ async function generateWithGemini(prompt, maxOutputTokens = 256) {
       process.env.GEMINI_MODEL = "models/gemini-2.0-flash-lite";
       return await generateWithGemini(prompt, maxOutputTokens);
     }
+    observeExternal('gemini', 'error');
     if (status === 404) {
       // mark non-operational and record failure
       GEMINI_OPERATIONAL = false;
@@ -401,15 +486,94 @@ app.get("/health/extended", (_req, res) => {
     }
   });
 });
+app.get("/health/observability", (_req, res) => {
+  if (!featureFlags.observability) {
+    return res.status(503).json({ error: 'Observability is disabled by feature flag' });
+  }
+  const snapshot = buildObservabilitySnapshot();
+  const alerts = evaluateAlerts(snapshot);
+  res.json({ ok: true, snapshot, alerts });
+});
+
+app.post('/api/search/feedback', validateBody(validateFeedbackPayload), async (req, res) => {
+  if (!featureFlags.searchFeedback) {
+    return res.status(503).json({ error: 'Search feedback is disabled by feature flag' });
+  }
+  const { requestId, clicked, completed, rating } = req.validatedBody;
+  observeQualityEvent({ requestId, clicked, completed, rating });
+  return res.json({ ok: true });
+});
+
+app.post('/api/analytics/ttv', validateBody(validateTtvPayload), async (req, res) => {
+  const { requestId, ttvMs } = req.validatedBody;
+  observeTtvEvent({ requestId, ttvMs });
+  return res.json({ ok: true });
+});
+
+app.get('/api/recommendations', requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
+  if (!featureFlags.recommendations) {
+    return res.status(503).json({ error: 'Recommendations are disabled by feature flag' });
+  }
+  try {
+    const Lesson = (await import('./models/lesson.js')).default;
+    const userId = req.userId;
+    const history = await Lesson.find({ userId }).sort({ lastViewedAt: -1, updatedAt: -1 }).limit(20).lean();
+    const seedWords = new Set();
+    history.forEach((l) => String(l.title || '').toLowerCase().split(/\W+/).filter((w) => w.length > 3).forEach((w) => seedWords.add(w)));
+    const candidates = await Lesson.find({ userId: { $ne: userId } }).sort({ favorite: -1, views: -1, createdAt: -1 }).limit(100).lean();
+    const scored = candidates.map((l) => {
+      const words = String(l.title || '').toLowerCase().split(/\W+/);
+      const overlap = words.filter((w) => seedWords.has(w)).length;
+      const score = overlap * 3 + (l.favorite ? 2 : 0) + Math.min(5, Math.floor((l.views || 0) / 10));
+      return { ...l, score };
+    }).sort((a, b) => b.score - a.score).slice(0, 10);
+    return res.json({ items: scored });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to build recommendations', detail: e?.message || 'Unknown error' });
+  }
+});
+
 
 app.post("/api/search", async (req, res) => {
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  if (!simpleRateLimit(`search:${ip}`, 20)) {
+  if (!(await simpleRateLimit(`search:${ip}`, 20))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
-  const { query } = req.body;
-  if (!query) return res.status(400).json({ error: "query is required" });
+  let query;
+  let useGeminiOverride;
+  let summaryLength;
+  let maxResults;
+  let pageToken;
+  try {
+    ({ query, useGemini: useGeminiOverride, summaryLength, maxResults, pageToken } = validateSearchPayload(req.body || {}));
+  } catch (e) {
+    return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload', detail: e?.details || null });
+  }
+  const requestId = randomBytes(8).toString('hex');
+  const summaryConfig = getSummaryConfig(featureFlags.multiLengthSummary ? summaryLength : 'standard');
+  const searchOptions = { maxResults, pageToken };
+  const cacheAllowed = useGeminiOverride === false || !USE_GEMINI_ENV;
+  const cacheKey = buildSearchCacheKey({
+    query,
+    summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard',
+    useGemini: useGeminiOverride,
+    maxResults,
+    pageToken,
+  });
+  if (cacheAllowed) {
+    const cachedResult = searchCache.get(cacheKey);
+    if (cachedResult) {
+      res.setHeader('X-Search-Cache', 'HIT');
+      return res.json({
+        ...cachedResult,
+        requestId,
+        cache: { hit: true },
+        badges: [...new Set([...(cachedResult.badges || []), 'CACHED'])],
+      });
+    }
+  }
+  res.setHeader('X-Search-Cache', 'MISS');
 
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
@@ -417,13 +581,16 @@ app.post("/api/search", async (req, res) => {
     const mock = makeMockResponse();
     const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
-    return res.json({ ...mock, citations });
+    const desiredChapters = extractDesiredChapters(query);
+    const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
+    const sourceMeta = annotateSource(mock.source, 'mock');
+    return res.json({ ...mock, ...sourceMeta, citations, chapters, requestId, summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
   }
 
   try {
     let searchTerm = query;
     const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
-    const useGemini = USE_GEMINI_ENV && !breakerActive && (req.body?.useGemini !== false);
+    const useGemini = USE_GEMINI_ENV && !breakerActive && (useGeminiOverride !== false);
     let reformulationTimedOut = false;
     if (useGemini && USE_GEMINI_REFORMULATION) {
       const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
@@ -449,33 +616,42 @@ app.post("/api/search", async (req, res) => {
     }
 
     let videoTitle, videoUrl, source, videoId;
+    let videoAlternatives = [];
+    let nextPageToken = null;
     try {
-      const video = await searchYouTube(searchTerm);
+      const video = await searchYouTube(searchTerm, searchOptions);
       videoTitle = video.title;
       videoUrl = video.url;
       videoId = video.videoId || extractYouTubeVideoId(video.url);
       source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+      videoAlternatives = Array.isArray(video.alternatives) ? video.alternatives : [];
+      nextPageToken = video.nextPageToken || null;
+      observeExternal('youtube', 'success');
     } catch (videoErr) {
       console.warn("Video search failed:", videoErr.message);
       if (videoErr.code === "YOUTUBE_NO_RESULTS" && searchTerm !== query) {
         console.log("Retrying YouTube search with original query after no results for reformulated term.");
         try {
-          const retryVideo = await searchYouTube(query);
+          const retryVideo = await searchYouTube(query, searchOptions);
           videoTitle = retryVideo.title;
           videoUrl = retryVideo.url;
           videoId = retryVideo.videoId || extractYouTubeVideoId(retryVideo.url);
           source = retryVideo.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+          videoAlternatives = Array.isArray(retryVideo.alternatives) ? retryVideo.alternatives : [];
+          nextPageToken = retryVideo.nextPageToken || null;
           console.log("Recovered video via original query.");
         } catch (retryErr) {
           console.warn("Retry with original query also failed:", retryErr.message);
           if ((process.env.ALLOW_FALLBACK || "true") === "true") {
-            return res.json({ ...makeMockResponse(), source: "mock-fallback" });
+            observeExternal('youtube', 'fallback');
+            return res.json({ ...makeMockResponse(), ...annotateSource('mock-fallback', 'fallback'), summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
           }
           throw retryErr;
         }
       } else {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
-          return res.json({ ...makeMockResponse(), source: "mock-fallback" });
+          observeExternal('youtube', 'fallback');
+          return res.json({ ...makeMockResponse(), ...annotateSource('mock-fallback', 'fallback'), summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard' });
         }
         throw videoErr;
       }
@@ -483,7 +659,7 @@ app.post("/api/search", async (req, res) => {
 
     let summaryText = "";
     const attemptGeminiSummary = useGemini && !reformulationTimedOut;
-    const desiredSteps = extractDesiredSteps(query);
+    const desiredSteps = extractDesiredSteps(query) || summaryConfig.stepsTarget;
     if (attemptGeminiSummary) {
       // Récupère le transcript YouTube
       let transcriptText = "";
@@ -502,7 +678,7 @@ app.post("/api/search", async (req, res) => {
           ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
           : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`);
       try {
-        summaryText = await generateWithGemini(summaryPrompt, 300);
+        summaryText = await generateWithGemini(summaryPrompt, summaryConfig.maxOutputTokens);
       } catch (e) {
         console.warn("Gemini summary failed:", e.message);
         summaryText = heuristicSummary({ desiredSteps });
@@ -516,7 +692,26 @@ app.post("/api/search", async (req, res) => {
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
     const desiredChapters = extractDesiredChapters(query);
     const chapters = vid ? (await getChapters(vid, videoTitle, { desired: desiredChapters })).chapters : [];
-    return res.json({ title: videoTitle, steps, videoUrl, source, citations, chapters });
+    const sourceMeta = annotateSource(source, 'real');
+    const relatedQueries = buildRelatedQueries({ query, title: videoTitle, alternatives: videoAlternatives, max: 5 });
+    const responsePayload = {
+      title: videoTitle,
+      steps,
+      videoUrl,
+      ...sourceMeta,
+      citations,
+      chapters,
+      alternatives: videoAlternatives,
+      nextPageToken,
+      relatedQueries,
+      requestId,
+      summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard',
+      cache: { hit: false },
+    };
+    if (cacheAllowed) {
+      searchCache.set(cacheKey, { ...responsePayload, requestId: null });
+    }
+    return res.json(responsePayload);
   } catch (err) {
     console.error("Search error:", err?.response?.data || err.message || err);
     const statusCode = err?.status || err?.response?.status || 500;
@@ -528,9 +723,12 @@ app.post("/api/search", async (req, res) => {
 // Server-Sent Events streaming endpoint for progressive UI updates
 // Usage: GET /api/search/stream?query=...
 app.get("/api/search/stream", async (req, res) => {
+  if (!featureFlags.searchStreaming) {
+    return res.status(503).json({ error: 'Search streaming is disabled by feature flag' });
+  }
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  if (!simpleRateLimit(`stream:${ip}`, 10)) {
+  if (!(await simpleRateLimit(`stream:${ip}`, 10))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   const query = String(req.query.query || "").trim();
@@ -614,9 +812,11 @@ app.get("/api/search/stream", async (req, res) => {
         videoUrl = video.url;
         videoId = video.videoId || extractYouTubeVideoId(video.url);
         source = video.source || (process.env.YT_API_KEY ? "youtube-api" : "yt-search-fallback");
+        observeExternal('youtube', 'success');
       } catch (videoErr) {
         if ((process.env.ALLOW_FALLBACK || "true") === "true") {
           const mock = makeMockResponse();
+          observeExternal('youtube', 'fallback');
           writeEvent({ type: "meta", title: mock.title, videoUrl: mock.videoUrl, source: "mock-fallback" });
           for (const s of mock.steps) {
             writeEvent({ type: "partial", step: s });
@@ -714,6 +914,16 @@ app.get("/api/chapters", async (req, res) => {
   }
 });
 
+
+
+app.use((err, _req, res, _next) => {
+  const status = err?.status || 500;
+  const code = err?.code || (status === 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR');
+  const message = err?.message || 'Internal server error';
+  const detail = err?.details || null;
+  return res.status(status).json({ error: message, code, detail });
+});
+
 export function createApp() {
   return app;
 }
@@ -733,74 +943,20 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   });
 }
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/hackit', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-mongoose.connection.on('connected', () => {
-  console.log('MongoDB connected');
-});
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
-});
+// Connect to MongoDB (skip in tests to avoid external dependency requirement)
+const shouldConnectMongo = process.env.NODE_ENV !== 'test';
+if (shouldConnectMongo) {
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/hackit';
+  mongoose.connect(mongoUri)
+    .then(() => {
+      console.log('MongoDB connected');
+    })
+    .catch((err) => {
+      console.error('MongoDB connection error:', err);
+    });
+}
 
 // ============ LESSON GENERATION & PERSISTENCE ============
-// POST /api/lessons { title, steps[], videoUrl, summary? } (userId via middleware)
-app.post("/api/lessons", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
-  // Only log userId, not full headers
-  console.log('[POST /api/lessons] userId:', req.userId);
-  try {
-    const { title, steps, videoUrl, summary } = req.body || {};
-    const userId = req.userId;
-    // Advanced validation
-    if (!userId || typeof userId !== 'string' || userId.length < 3 || userId.length > 128) {
-      return res.status(400).json({ error: "Invalid userId" });
-    }
-    // Autoriser les userId anonymes ou numériques
-    const isAnon = userId.startsWith('anon_');
-    const isNumeric = /^[0-9]+$/.test(userId);
-    const isAlphaNum = /^[a-zA-Z0-9_\-]+$/.test(userId);
-    if (!(isAnon || isNumeric || isAlphaNum)) {
-      return res.status(400).json({ error: "userId must be anon_, numeric, or alphanum" });
-    }
-    if (!title || typeof title !== 'string' || title.length < 2 || title.length > 120) {
-      return res.status(400).json({ error: "Title must be 2-120 chars" });
-    }
-    if (!videoUrl || typeof videoUrl !== 'string' || !/^https?:\/\/.{8,}/.test(videoUrl)) {
-      return res.status(400).json({ error: "Invalid videoUrl" });
-    }
-    if (!Array.isArray(steps) || steps.length === 0 || steps.length > 20 || !steps.every(s => typeof s === 'string' && s.length > 1 && s.length < 200)) {
-      return res.status(400).json({ error: "steps[] must be 1-20 non-empty strings, each 2-200 chars" });
-    }
-    // Use Mongoose Lesson model directly
-    const Lesson = (await import('./models/lesson.js')).default;
-    const User = (await import('./models/User.js')).default;
-    const lesson = await Lesson.create({ userId, title, steps, videoUrl, summary });
-    // Only link lesson to user if userId is a valid ObjectId
-    const mongoose = (await import('mongoose')).default;
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      await User.findByIdAndUpdate(userId, { $push: { savedLessons: lesson._id } });
-    }
-    // Ensure all fields are non-null strings/arrays for frontend
-    return res.json({
-      id: lesson._id?.toString() ?? '',
-      userId: lesson.userId?.toString() ?? '',
-      title: lesson.title?.toString() ?? '',
-      summary: lesson.summary?.toString() ?? '',
-      steps: Array.isArray(lesson.steps) ? lesson.steps.map(s => s?.toString() ?? '') : [],
-      videoUrl: lesson.videoUrl?.toString() ?? '',
-      favorite: !!lesson.favorite,
-      views: typeof lesson.views === 'number' ? lesson.views : 0,
-      createdAt: lesson.createdAt?.toISOString?.() ?? new Date().toISOString(),
-      updatedAt: lesson.updatedAt?.toISOString?.() ?? new Date().toISOString(),
-    });
-  } catch (e) {
-    console.error('[POST /api/lessons] Internal error:', e?.message || e);
-    return res.status(500).json({ error: 'Failed to save lesson', detail: 'Internal error' });
-  }
-});
 // POST /api/generateLesson { query } (userId via middleware)
 app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
   console.log('[POST /api/generateLesson] Authorization:', req.headers.authorization, 'userId:', req.userId);
@@ -830,17 +986,16 @@ app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async 
       }
     }
 
-    let videoTitle, videoUrl, videoId;
+    let videoTitle, videoUrl;
     try {
       const video = await searchYouTube(searchTerm);
       videoTitle = video.title;
       videoUrl = video.url;
-      videoId = video.videoId || extractYouTubeVideoId(video.url);
     } catch (e) {
       console.warn("Video search (generateLesson) failed:", e.message);
       if ((process.env.ALLOW_FALLBACK || "true") === "true") {
         const mock = makeMockResponse();
-        videoTitle = mock.title; videoUrl = mock.videoUrl; videoId = extractYouTubeVideoId(videoUrl);
+        videoTitle = mock.title; videoUrl = mock.videoUrl;
       } else {
         throw e;
       }
@@ -895,89 +1050,6 @@ app.post("/api/generateLesson", requireJwtAuthOrGoogle, userIdMiddleware, async 
   }
 });
 
-// PATCH /api/lessons/:id/favorite { favorite: true|false }
-import { updateFavorite } from './controllers/lessonsController.js';
-app.patch("/api/lessons/:id/favorite", requireJwtAuthOrGoogle, async (req, res) => {
-  console.log('[PATCH /api/lessons/:id/favorite] Authorization:', req.headers.authorization, 'userId:', req.userId);
-  const id = String(req.params.id || '').trim();
-  const favorite = !!req.body?.favorite;
-  if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id is required' });
-  try {
-    const updated = await updateFavorite(id, favorite);
-    if (!updated) return res.status(404).json({ error: 'Not found' });
-    return res.json({ ok: true, lesson: updated });
-  } catch (e) {
-    console.error('[PATCH /api/lessons/:id/favorite] Internal error:', e?.message || e);
-    return res.status(500).json({ error: 'Failed to update favorite', detail: e?.message || 'Unknown error' });
-  }
-});
-
-// POST /api/lessons/:id/view -> record history entry (views++, lastViewedAt=now)
-app.post("/api/lessons/:id/view", requireJwtAuthOrGoogle, async (req, res) => {
-  console.log('[POST /api/lessons/:id/view] Authorization:', req.headers.authorization, 'userId:', req.userId);
-  const id = String(req.params.id || '').trim();
-  if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id is required' });
-  try {
-    const updated = await recordView(id);
-    if (!updated) return res.status(404).json({ error: 'Not found' });
-    return res.json(updated);
-  } catch (e) {
-    console.error('[POST /api/lessons/:id/view] Internal error:', e?.message || e);
-    return res.status(500).json({ error: 'Failed to record view', detail: e?.message || 'Unknown error' });
-  }
-});
-
-// GET /api/lessons?favorite=true|false&sort=createdAt|lastViewedAt&order=desc|asc (userId via middleware)
-app.get("/api/lessons", requireJwtAuthOrGoogle, userIdMiddleware, async (req, res) => {
-  // Middleware to accept either JWT (login/password) or Google OAuth
-  function requireJwtAuthOrGoogle(req, res, next) {
-    // Try JWT first
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      const { verifyToken } = require('./utils/jwtAuth.js');
-      const payload = verifyToken(token);
-      if (payload && payload.userId) {
-        req.userId = payload.userId;
-        req.jwtUser = payload;
-        return next();
-      }
-    }
-    // Fallback to Google OAuth
-    return requireAuth(req, res, next);
-  }
-  const userId = req.userId;
-  if (!userId) return res.status(400).json({ error: 'userId is required' });
-  const favorite = req.query.favorite === undefined ? undefined : String(req.query.favorite).toLowerCase() === 'true';
-  const sortBy = ['createdAt', 'lastViewedAt', 'views'].includes(String(req.query.sort || '')) ? String(req.query.sort) : 'createdAt';
-  const order = String(req.query.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '50'), 10)));
-  const offset = Math.max(0, parseInt(String(req.query.offset || '0'), 10));
-  try {
-    let items = await listLessons({ userId, favorite, sortBy, order, limit, offset });
-    // Add progress/reminder fields for My Learning Journey pivot
-    items = items.map(lesson => ({
-      ...lesson,
-      progress: lesson.progress || 0, // Placeholder, to be implemented
-      reminder: lesson.reminder || null, // Placeholder, to be implemented
-      // Guest mode prompt
-      guestPrompt: (!req.isAuthenticated?.() && !req.user) ? 'Save progress or unlock premium features by signing in.' : undefined
-    }));
-    // Suggested actions for empty/error states
-    const suggestedActions = items.length === 0 ? [
-      { label: 'Search for a lesson', action: '/api/search' },
-      { label: 'Request help', action: '/support' }
-    ] : undefined;
-    return res.json({ items, total: items.length, suggestedActions });
-  } catch (e) {
-    return res.status(500).json({
-      error: 'Failed to list lessons', detail: e?.message || 'Unknown error', suggestedActions: [
-        { label: 'Retry', action: '/api/lessons' },
-        { label: 'Request help', action: '/support' }
-      ]
-    });
-  }
-});
-
-// Import and mount the user router on /api/users to expose /api/users/all endpoint.
+// Mount lessons and users routers.
+app.use('/api/lessons', lessonsRouter);
 app.use('/api/users', userRouter);

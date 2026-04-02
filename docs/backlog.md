@@ -134,3 +134,18 @@ The items below are grouped for planning and complement the existing backlog. Us
 3. Caching layer + fallback badges
 4. Bookmarks and history (Flutter)
 5. E2E smoke test flow
+
+
+---
+
+## 2026 Strategic Execution Addendum
+
+For a complete execution plan with KPIs, phased delivery, SLOs, and product positioning, see:
+
+- `docs/product_strategy_2026.md`
+
+This addendum translates the backlog into a practical 12-week roadmap focused on:
+- time-to-first-value,
+- answer trustworthiness,
+- personalization,
+- and operational reliability.
