@@ -44,3 +44,37 @@ await test('POST /api/search without query returns 400', async (t) => {
     const json = JSON.parse(res.data);
     assert.equal(json.error, 'query is required');
 });
+
+
+await test('POST /api/search with invalid summaryLength returns 400', async (t) => {
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await postJson({ port, path: '/api/search', body: { query: 'ok', summaryLength: 'ultra' } });
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.error, 'summaryLength must be one of: tldr, standard, deep');
+});
+
+await test('POST /api/search with invalid maxResults returns 400', async (t) => {
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await postJson({ port, path: '/api/search', body: { query: 'ok', maxResults: 99 } });
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.error, 'maxResults must be an integer between 1 and 10');
+});
+
+await test('POST /api/search with invalid tone returns 400', async (t) => {
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await postJson({ port, path: '/api/search', body: { query: 'ok', tone: 'formal' } });
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.error, 'tone must be one of: practical, friendly, coach');
+});
