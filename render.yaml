@@ -34,6 +34,9 @@ services:
       rm -rf render-static
       mkdir -p render-static
       cp -R frontend_flutter/gh-pages/. render-static
+      perl -0pi -e 's|<base href="/hackit-mvp/">|<base href="/">|g' render-static/index.html
+      perl -0pi -e 's|<script src="flutter_bootstrap\.js" async></script>\s*<!-- This script adds the flutter initialization JS code -->\s*<script src="flutter\.js" defer></script>|<script src="flutter.js" defer></script>\n  <script src="flutter_bootstrap.js" defer></script>|g' render-static/index.html
+      perl -0pi -e 's|<body>\s*<script>\s*window\.addEventListener\('\''load'\'', function \(\) \{.*?\}\);\s*</script>\s*</body>|<body>\n</body>|gs' render-static/index.html
       find render-static -type f -name "*.js" -print0 | xargs -0 sed -i "s|http://localhost:3000|${API_BASE_URL}|g"
     staticPublishPath: render-static
     routes:
