@@ -10,7 +10,9 @@ import express from 'express';
 import mongoose from 'mongoose';
 import morgan from 'morgan';
 
+import { getFeatureFlags } from './config/featureFlags.js';
 import lessonsRouter from './routes/lessons.js';
+import { validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
 import { getChapters, extractDesiredChapters } from './services/chapters.js';
 import { getTranscript } from './services/transcript.js';
 import { searchYouTube as originalSearchYouTube } from './services/youtube.js';
@@ -21,6 +23,8 @@ import { userIdMiddleware } from './utils/userIdMiddleware.js';
 const dynamicImport = (moduleName) => Function('m', 'return import(m)')(moduleName);
 
 dotenv.config({ quiet: true });
+
+const featureFlags = getFeatureFlags();
 
 
 
@@ -102,6 +106,10 @@ app.get('/api/me', (req, res) => {
   return res.json({ ok: true, auth: 'disabled' });
 });
 
+app.get('/api/feature-flags', (_req, res) => {
+  return res.json({ ok: true, flags: featureFlags });
+});
+
 const USE_GEMINI_ENV = (process.env.USE_GEMINI || "false") === "true";
 const USE_GEMINI_REFORMULATION = (process.env.USE_GEMINI_REFORMULATION || "false") === "true";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -161,6 +169,25 @@ function heuristicSummary({ desiredSteps } = {}) {
     return out.join("\n");
   }
   return base.join("\n");
+}
+
+function getSummaryConfig(summaryLength = 'standard') {
+  switch (summaryLength) {
+    case 'tldr':
+      return { stepsTarget: 3 };
+    case 'deep':
+      return { stepsTarget: 8 };
+    default:
+      return { stepsTarget: 5 };
+  }
+}
+
+function annotateSource(source, mode = 'real') {
+  return {
+    source,
+    resultMode: mode,
+    badges: [mode.toUpperCase()],
+  };
 }
 
 function extractDesiredSteps(text) {
@@ -382,15 +409,26 @@ app.get("/health/observability", (_req, res) => {
 });
 
 app.post('/api/search/feedback', async (req, res) => {
-  const { requestId, clicked, completed, rating } = req.body || {};
+  let payload;
+  try {
+    payload = validateFeedbackPayload(req.body || {});
+  } catch (e) {
+    return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload' });
+  }
+  const { requestId, clicked, completed, rating } = payload;
   observeQualityEvent({ requestId, clicked, completed, rating });
   return res.json({ ok: true });
 });
 
 app.post('/api/analytics/ttv', async (req, res) => {
-  const { requestId, ttvMs } = req.body || {};
-  if (!Number.isFinite(Number(ttvMs))) return res.status(400).json({ error: 'ttvMs is required' });
-  observeTtvEvent({ requestId, ttvMs: Number(ttvMs) });
+  let payload;
+  try {
+    payload = validateTtvPayload(req.body || {});
+  } catch (e) {
+    return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload' });
+  }
+  const { requestId, ttvMs } = payload;
+  observeTtvEvent({ requestId, ttvMs });
   return res.json({ ok: true });
 });
 
@@ -422,9 +460,15 @@ app.post("/api/search", async (req, res) => {
   if (!(await simpleRateLimit(`search:${ip}`, 20))) {
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
-  const validation = normalizeQueryInput(req.body?.query, MAX_QUERY_LEN);
-  if (!validation.ok) return res.status(validation.status).json({ error: validation.error });
-  const query = validation.value;
+  let query;
+  let summaryLength;
+  let useGeminiOverride;
+  try {
+    ({ query, summaryLength, useGemini: useGeminiOverride } = validateSearchPayload(req.body || {}));
+  } catch (e) {
+    return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload' });
+  }
+  const summaryConfig = getSummaryConfig(featureFlags.multiLengthSummary ? summaryLength : 'standard');
   const requestId = randomBytes(8).toString('hex');
 
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
@@ -435,13 +479,20 @@ app.post("/api/search", async (req, res) => {
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
     const desiredChapters = extractDesiredChapters(query);
     const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
-    return res.json({ ...mock, citations, chapters, requestId });
+    return res.json({
+      ...mock,
+      ...annotateSource(mock.source, 'mock'),
+      citations,
+      chapters,
+      requestId,
+      summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard',
+    });
   }
 
   try {
     let searchTerm = query;
     const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
-    const useGemini = USE_GEMINI_ENV && !breakerActive && (req.body?.useGemini !== false);
+    const useGemini = USE_GEMINI_ENV && !breakerActive && (useGeminiOverride !== false);
     let reformulationTimedOut = false;
     if (useGemini && USE_GEMINI_REFORMULATION) {
       const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
@@ -503,7 +554,7 @@ app.post("/api/search", async (req, res) => {
 
     let summaryText = "";
     const attemptGeminiSummary = useGemini && !reformulationTimedOut;
-    const desiredSteps = extractDesiredSteps(query);
+    const desiredSteps = extractDesiredSteps(query) || summaryConfig.stepsTarget;
     if (attemptGeminiSummary) {
       // Récupère le transcript YouTube
       let transcriptText = "";
@@ -536,7 +587,16 @@ app.post("/api/search", async (req, res) => {
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
     const desiredChapters = extractDesiredChapters(query);
     const chapters = vid ? (await getChapters(vid, videoTitle, { desired: desiredChapters })).chapters : [];
-    return res.json({ title: videoTitle, steps, videoUrl, source, citations, chapters, requestId });
+    return res.json({
+      title: videoTitle,
+      steps,
+      videoUrl,
+      ...annotateSource(source, 'real'),
+      citations,
+      chapters,
+      requestId,
+      summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard',
+    });
   } catch (err) {
     console.error("Search error:", err?.response?.data || err.message || err);
     const statusCode = err?.status || err?.response?.status || 500;

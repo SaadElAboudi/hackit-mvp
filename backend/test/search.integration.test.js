@@ -67,6 +67,12 @@ await test('POST /api/search returns expected shape in mock mode', async (t) => 
 
 
 await test('POST /api/search supports summaryLength=tldr and returns response metadata', async (t) => {
+    const previousMockMode = process.env.MOCK_MODE;
+    process.env.MOCK_MODE = 'true';
+    t.after(() => {
+        process.env.MOCK_MODE = previousMockMode;
+    });
+
     const app = createApp();
     const { server, port } = await startServer(app);
     t.after(() => server.close());
