@@ -120,7 +120,19 @@ The REAL smoke will fail if the response still indicates a mock source, ensuring
    - Production web build published to GitHub Pages.
    - See full notes in [CHANGELOG.md](CHANGELOG.md).
 
-GitHub Pages (if enabled in Settings → Pages): https://saadelaboudi.github.io/hackit-mvp/
+GitHub Pages (if enabled in Settings -> Pages): https://saadelaboudi.github.io/hackit-mvp/
+
+## Deploy (Render)
+
+A ready-to-use Render blueprint is included:
+
+- `render.yaml`
+- setup guide: `docs/render_deploy.md`
+
+This deploys the full stack on Render:
+
+- `hackit-backend` (Node API + health + post-deploy smoke test)
+- `hackit-frontend` (static site published from `frontend_flutter/gh-pages`)
 
 ## Contributing
 Contributions are welcome! Please submit a pull request or open an issue for any enhancements or bug fixes.

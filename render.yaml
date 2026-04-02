@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: hackit-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    autoDeployTrigger: commit
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    postDeployCommand: API_HOST=127.0.0.1 API_PORT=$PORT npm run test:smoke
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: NODE_ENV
+        value: production
+      - key: MOCK_MODE
+        value: "true"
+      - key: ALLOW_FALLBACK
+        value: "true"
+      - key: JSON_BODY_LIMIT
+        value: 1mb
+      - key: FRONTEND_ORIGIN
+        fromService:
+          type: web
+          name: hackit-frontend
+          envVarKey: RENDER_EXTERNAL_URL
+
+  - type: web
+    name: hackit-frontend
+    runtime: static
+    rootDir: .
+    autoDeployTrigger: commit
+    buildCommand: |
+      rm -rf render-static
+      mkdir -p render-static
+      cp -R frontend_flutter/gh-pages/. render-static
+      find render-static -type f -name "*.js" -print0 | xargs -0 sed -i "s|http://localhost:3000|${API_BASE_URL}|g"
+    staticPublishPath: render-static
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: API_BASE_URL
+        fromService:
+          type: web
+          name: hackit-backend
+          envVarKey: RENDER_EXTERNAL_URL
