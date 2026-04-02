@@ -15,7 +15,7 @@
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
-  <base href="/hackit-mvp/">
+  <base href="/">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
@@ -32,30 +32,57 @@
 
   <title>frontend_flutter</title>
   <link rel="manifest" href="manifest.json">
+  <!-- Google Sign-In JS API for web -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    // Intercept buildConfig assignment to force HTML renderer before bootstrap autoloads.
+    (function () {
+      function supportsWebGL() {
+        try {
+          var c = document.createElement('canvas');
+          return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+        } catch (_) {
+          return false;
+        }
+      }
+      // For now, force HTML to avoid CanvasKit GL surface errors; toggle to detection if needed.
+      var forceHtml = true; // or: !supportsWebGL();
+      window._flutter = window._flutter || {};
+      var _cfg;
+      try {
+        Object.defineProperty(window._flutter, 'buildConfig', {
+          configurable: true,
+          get: function () { return _cfg; },
+          set: function (v) {
+            try {
+              if (v && Array.isArray(v.builds)) {
+                v.builds = v.builds.map(function (b) {
+                  return forceHtml ? Object.assign({}, b, { renderer: 'html' }) : b;
+                });
+              }
+            } catch (_) { }
+            _cfg = v;
+          }
+        });
+      } catch (_) {
+        // If defineProperty fails, we proceed without interception.
+      }
+    })();
+  </script>
 
   <script>
     // Deprecated local variable replaced by template token.
-    // Flutter tooling will substitute "3389086178" at build time.
-    const serviceWorkerVersion = '"3389086178"';
+    // Flutter tooling will substitute "14038167" at build time.
+    const serviceWorkerVersion = '"14038167"';
   </script>
-  <!-- Bootstrap script sets window._flutter.buildConfig required by FlutterLoader.load -->
-  <script src="flutter_bootstrap.js" async></script>
-  <!-- This script adds the flutter initialization JS code -->
-  <script src="flutter.js" defer></script>
+  <!-- Flutter bootstrap (generated during build) includes the loader and auto-starts the app. -->
+  <script src="flutter_bootstrap.js" defer></script>
 </head>
 
 <body>
-  <script>
-    window.addEventListener('load', function () {
-      // Updated to FlutterLoader.load API (was loadEntrypoint, now deprecated).
-      _flutter.loader.load({
-        serviceWorker: { serviceWorkerVersion },
-        onEntrypointLoaded(engineInitializer) {
-          engineInitializer.initializeEngine().then(appRunner => appRunner.runApp());
-        }
-      });
-    });
-  </script>
+  <!-- Fallback: define minimal buildConfig if bootstrap race occurs -->
+  <script>if(!window._flutter)window._flutter={};if(!window._flutter.buildConfig){window._flutter.buildConfig={entrypointUrl:"main.dart.js"};}</script>
+  <!-- No inline bootstrap code needed; flutter_bootstrap.js calls loader.load() for us. -->
 </body>
 
 </html>
