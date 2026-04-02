@@ -131,7 +131,7 @@ A ready-to-use Render blueprint is included:
 
 This deploys the full stack on Render:
 
-- `hackit-backend` (Node API + health + post-deploy smoke test)
+- `hackit-backend` (Node API + health check)
 - `hackit-frontend` (static site published from `frontend_flutter/gh-pages`)
 
 ## Contributing

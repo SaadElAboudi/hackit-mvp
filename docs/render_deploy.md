@@ -5,13 +5,12 @@ This repository includes a full-stack Render Blueprint that deploys:
 - `hackit-backend` (Node web service)
 - `hackit-frontend` (Render static site)
 
-The backend runs health + smoke checks on each deploy, and the frontend is published from `frontend_flutter/gh-pages`.
+The backend uses a native Render health check on each deploy, and the frontend is published from `frontend_flutter/gh-pages`.
 
 ## What is included
 
 - `render.yaml` blueprint for both services
 - Backend health check on `/health`
-- Automatic backend post-deploy smoke test (`npm run test:smoke`)
 - Frontend SPA rewrite (`/* -> /index.html`)
 - Automatic frontend API URL wiring from backend Render URL
 
@@ -52,13 +51,17 @@ This avoids local-only API endpoints in production.
 
 ## Automatic checks on each backend deploy
 
-Render runs:
+Render Blueprint supports `healthCheckPath`, but not a `postDeployCommand` service field.
 
-```bash
-API_HOST=127.0.0.1 API_PORT=$PORT npm run test:smoke
-```
+That means:
 
-If smoke fails, deployment is marked failed.
+- backend deploy validity is checked via `/health`
+- smoke tests should be run outside the Blueprint
+
+Recommended options:
+
+- run `cd backend && API_HOST=<your-render-backend> API_PORT=443 npm run test:smoke` manually against the deployed API
+- keep smoke validation in GitHub Actions or another external CI job
 
 ## After first deploy
 
