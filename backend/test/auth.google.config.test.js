@@ -22,7 +22,15 @@ function request({ host = '127.0.0.1', port, path, method = 'GET' }) {
       res.setEncoding('utf8');
       res.on('data', (c) => (data += c));
       res.on('end', () => {
-        resolve({ status: res.statusCode, data: data ? JSON.parse(data) : {} });
+        let parsed = {};
+        if (data) {
+          try {
+            parsed = JSON.parse(data);
+          } catch (_) {
+            parsed = {};
+          }
+        }
+        resolve({ status: res.statusCode, data: parsed, headers: res.headers });
       });
     });
     req.on('error', reject);
@@ -30,13 +38,25 @@ function request({ host = '127.0.0.1', port, path, method = 'GET' }) {
   });
 }
 
-await test('GET /auth/google/status is removed in no-auth mode', async (t) => {
+await test('GET /auth/google/status exposes guest-only compatibility mode', async (t) => {
   const app = createApp();
   const { server, port } = await startServer(app);
   t.after(() => server.close());
 
   const res = await request({ port, path: '/auth/google/status' });
-  assert.equal(res.status, 404);
+  assert.equal(res.status, 200);
+  assert.equal(res.data.enabled, false);
+  assert.equal(res.data.mode, 'guest-only');
+});
+
+await test('GET /auth/google redirects to auth-success guest flow', async (t) => {
+  const app = createApp();
+  const { server, port } = await startServer(app);
+  t.after(() => server.close());
+
+  const res = await request({ port, path: '/auth/google' });
+  assert.equal(res.status, 302);
+  assert.match(String(res.headers.location || ''), /\/auth-success\?userId=.+&mode=guest/);
 });
 
 await test('GET /api/me returns no-auth status', async (t) => {

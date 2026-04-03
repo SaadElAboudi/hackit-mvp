@@ -103,7 +103,40 @@ if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 app.get('/api/me', (req, res) => {
-  return res.json({ ok: true, auth: 'disabled' });
+  return res.json({
+    ok: true,
+    auth: 'disabled',
+    user: {
+      id: req.headers['x-user-id'] || 'anonymous',
+      isAnonymous: true,
+    },
+  });
+});
+
+function buildGuestAuthSuccessUrl(req) {
+  const frontendOrigin = (process.env.FRONTEND_ORIGIN || '').trim().replace(/\/$/, '');
+  const fallbackOrigin = `${req.protocol}://${req.get('host')}`;
+  const base = frontendOrigin || fallbackOrigin;
+  const userId = randomBytes(8).toString('hex');
+  return `${base}/auth-success?userId=${userId}&mode=guest`;
+}
+
+// Compatibility endpoints: legacy login buttons may still call Google OAuth routes.
+// The app currently runs in no-auth mode, so we redirect to guest success instead.
+app.get('/auth/google/status', (_req, res) => {
+  return res.json({
+    enabled: false,
+    mode: 'guest-only',
+    reason: 'Authentication is disabled in this deployment',
+  });
+});
+
+app.get('/auth/google', (req, res) => {
+  return res.redirect(302, buildGuestAuthSuccessUrl(req));
+});
+
+app.get('/auth/google/callback', (req, res) => {
+  return res.redirect(302, buildGuestAuthSuccessUrl(req));
 });
 
 app.get('/api/feature-flags', (_req, res) => {
