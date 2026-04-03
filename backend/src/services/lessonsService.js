@@ -15,7 +15,12 @@ function isValidObjectId(id) {
 const _mockStore = new Map(); // id -> lesson object
 
 function _isMock() {
-  return (process.env.MOCK_MODE || '').toLowerCase() === 'true';
+  const mockMode = (process.env.MOCK_MODE || '').toLowerCase() === 'true';
+  const dbReady = mongoose.connection.readyState === 1;
+  // In runtime (dev/prod), gracefully fallback to in-memory mode if MongoDB is unavailable.
+  // Keep tests deterministic by requiring explicit MOCK_MODE in test env.
+  const allowDbFallback = process.env.NODE_ENV !== 'test';
+  return mockMode || (allowDbFallback && !dbReady);
 }
 
 function _mockId() {
