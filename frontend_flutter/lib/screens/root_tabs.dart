@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/google_auth_provider.dart';
 import '../screens/home_screen.dart';
-import '../screens/lessons_screen.dart';
-import '../screens/favorites_screen.dart';
-import '../screens/history_screen.dart';
+import '../screens/library_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/login_screen.dart';
 
@@ -18,15 +16,11 @@ class RootTabs extends StatefulWidget {
 class _RootTabsState extends State<RootTabs> {
   final List<String> tabRoutes = [
     '/',
-    '/lessons',
-    '/favorites',
-    '/history',
+    '/library',
   ];
 
   int _index = 0;
   final _navigatorKeys = [
-    GlobalKey<NavigatorState>(),
-    GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
   ];
@@ -38,8 +32,11 @@ class _RootTabsState extends State<RootTabs> {
     final route = ModalRoute.of(context)?.settings.name;
     if (route != null) {
       final tabIdx = tabRoutes.indexOf(route);
-      if (tabIdx != -1 && tabIdx != _index) {
-        setState(() => _index = tabIdx);
+      final legacyLibraryRoutes = {'/lessons', '/favorites', '/history'};
+      final resolvedIdx =
+          (tabIdx == -1 && legacyLibraryRoutes.contains(route)) ? 1 : tabIdx;
+      if (resolvedIdx != -1 && resolvedIdx != _index) {
+        setState(() => _index = resolvedIdx);
       }
     }
   }
@@ -57,13 +54,7 @@ class _RootTabsState extends State<RootTabs> {
               page = const HomeScreen();
               break;
             case 1:
-              page = LessonsScreen();
-              break;
-            case 2:
-              page = const FavoritesScreen();
-              break;
-            case 3:
-              page = const HistoryScreen();
+              page = const LibraryScreen();
               break;
             default:
               page = const HomeScreen();
@@ -75,13 +66,7 @@ class _RootTabsState extends State<RootTabs> {
               page = const HomeScreen();
               break;
             case 1:
-              page = LessonsScreen();
-              break;
-            case 2:
-              page = const FavoritesScreen();
-              break;
-            case 3:
-              page = const HistoryScreen();
+              page = const LibraryScreen();
               break;
             default:
               page = const HomeScreen();
@@ -163,7 +148,7 @@ class _RootTabsState extends State<RootTabs> {
         ),
         body: IndexedStack(
           index: _index,
-          children: List.generate(4, (i) => _buildTabNavigator(i)),
+          children: List.generate(2, (i) => _buildTabNavigator(i)),
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
@@ -184,19 +169,9 @@ class _RootTabsState extends State<RootTabs> {
               label: 'Chat',
             ),
             NavigationDestination(
-              icon: Icon(Icons.school_outlined),
-              selectedIcon: Icon(Icons.school_rounded),
-              label: 'Leçons',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.star_border_rounded),
-              selectedIcon: Icon(Icons.star_rounded),
-              label: 'Favoris',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.history_rounded),
-              selectedIcon: Icon(Icons.history_toggle_off_rounded),
-              label: 'Historique',
+              icon: Icon(Icons.collections_bookmark_outlined),
+              selectedIcon: Icon(Icons.collections_bookmark_rounded),
+              label: 'Bibliothèque',
             ),
           ],
         ),
