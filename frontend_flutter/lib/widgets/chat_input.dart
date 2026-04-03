@@ -196,7 +196,8 @@ class _ChatInputState extends State<ChatInput> {
                               fontSize: SizeConfig.adaptiveFontSize(15),
                               color: Colors.black),
                           decoration: InputDecoration(
-                            hintText: 'Posez votre question…',
+                            hintText:
+                                'Decris le brief client ou le livrable a produire...',
                             prefixIcon: const Icon(Icons.search_rounded),
                             suffixIcon: null,
                             filled: true,
@@ -228,7 +229,7 @@ class _ChatInputState extends State<ChatInput> {
                         children: [
                           Icon(Icons.send_rounded, size: 22),
                           SizedBox(width: 8),
-                          Text('Envoyer',
+                            Text('Generer',
                               style: TextStyle(fontWeight: FontWeight.w600)),
                         ],
                       ),
@@ -278,11 +279,10 @@ class _TemplateChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const templates = [
-      ('resume', 'Résumé'),
-      ('tutoriel', 'Tutoriel'),
-      ('eli5', 'ELI5'),
-      ('fr2en', 'FR→EN'),
-      ('en2fr', 'EN→FR'),
+      ('cadrer', 'Cadrer'),
+      ('produire', 'Produire'),
+      ('communiquer', 'Communiquer'),
+      ('audit', 'Audit 7j'),
     ];
     return Wrap(
       spacing: 8,

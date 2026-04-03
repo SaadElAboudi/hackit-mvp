@@ -595,16 +595,14 @@ class SearchProvider extends ChangeNotifier {
     final base = current.trim();
     if (base.isEmpty) return '';
     switch (id) {
-      case 'resume':
-        return 'Résume: $base';
-      case 'tutoriel':
-        return 'Explique-moi étape par étape: $base';
-      case 'eli5':
-        return 'Explique-moi comme si j\'avais 5 ans: $base';
-      case 'fr2en':
-        return 'Traduis en anglais: $base';
-      case 'en2fr':
-        return 'Traduis en français: $base';
+      case 'cadrer':
+        return 'Mode CADRER. Contexte client: $base. Fournis: objectif business, hypotheses, contraintes, perimetre in/out, risques, priorites, et definition de done.';
+      case 'produire':
+        return 'Mode PRODUIRE. Brief: $base. Fournis un plan d\'execution concret avec checklist actionnable, ordre des taches, estimation temps, livrables intermediaires et criteres de qualite.';
+      case 'communiquer':
+        return 'Mode COMMUNIQUER. Situation: $base. Rédige un message client professionnel: avancement, decisions prises, risques, prochaines etapes, call-to-action et deadline.';
+      case 'audit':
+        return 'Mode AUDIT EXPRESS. Projet: $base. Identifie les points faibles, quick wins 80/20, dette critique, et plan de correction sur 7 jours.';
       default:
         return base;
     }

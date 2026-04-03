@@ -20,7 +20,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Hackit',
-      subtitle: 'Assistant pratique sans friction',
+      subtitle: 'Du brief client au livrable actionnable',
       leadingIcon: Icons.chat_bubble_rounded,
       actions: [
         IconButton(
@@ -28,7 +28,9 @@ class HomeScreen extends StatelessWidget {
           tooltip: 'Conseils',
           onPressed: () {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Astuce: utilise des requetes courtes et precises.')),
+              const SnackBar(
+                  content: Text(
+                      'Astuce: choisis un mode (Cadrer/Produire/Communiquer) puis colle le brief client.')),
             );
           },
         ),
@@ -53,6 +55,7 @@ class HomeScreen extends StatelessWidget {
             getLastQuery: () =>
                 Provider.of<SearchProvider>(context, listen: false).lastQuery ??
                 '',
+            showTemplates: true,
           ),
         ],
       ),
