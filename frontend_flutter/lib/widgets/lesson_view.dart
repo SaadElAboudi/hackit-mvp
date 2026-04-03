@@ -42,9 +42,13 @@ class LessonView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lessons = context.read<LessonsProvider>();
+    final lessons = context.watch<LessonsProvider>();
     final alreadySaved =
         lessons.lessons.any((l) => l.title == title && l.videoUrl == videoUrl);
+    final canSave =
+      title.trim().length >= 2 && steps.isNotEmpty && videoUrl.startsWith('http');
+    final saveError = lessons.error;
+
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
@@ -136,41 +140,122 @@ class LessonView extends StatelessWidget {
               ),
             ],
             SizedBox(height: 24),
-            if (!alreadySaved)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.save_rounded),
-                  label: const Text('Enregistrer comme leçon'),
-                  onPressed: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    try {
-                      final created = await lessons.saveFromChat(
-                        title: title,
-                        steps: steps,
-                        videoUrl: videoUrl,
-                      );
-                      if (created != null) {
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Leçon enregistrée.')),
-                        );
-                      } else {
-                        messenger.showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              lessons.error ?? 'Échec de l\'enregistrement',
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.bookmark_add_rounded,
+                          size: 18, color: Colors.grey.shade700),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Sauvegarde',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 15),
+                      ),
+                      const Spacer(),
+                      if (alreadySaved)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE9F9F2),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFF9ED9BF)),
+                          ),
+                          child: const Text(
+                            'Enregistrée',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF146C43),
                             ),
                           ),
-                        );
-                      }
-                    } catch (e) {
-                      messenger.showSnackBar(
-                        SnackBar(content: Text('Erreur: $e')),
-                      );
-                    }
-                  },
-                ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    alreadySaved
+                        ? 'Cette leçon est déjà dans ta bibliothèque.'
+                        : 'Ajoute cette réponse à ta bibliothèque pour la retrouver rapidement.',
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                  ),
+                  if (!canSave && !alreadySaved) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Impossible d\'enregistrer: lien vidéo invalide.',
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                    ),
+                  ],
+                  if (saveError != null && saveError.trim().isNotEmpty && !alreadySaved) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      saveError,
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      icon: lessons.loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Icon(
+                              alreadySaved
+                                  ? Icons.check_rounded
+                                  : Icons.bookmark_add_rounded,
+                            ),
+                      label: Text(
+                        alreadySaved
+                            ? 'Leçon enregistrée'
+                            : (lessons.loading
+                                ? 'Enregistrement...'
+                                : 'Enregistrer la leçon'),
+                      ),
+                      onPressed: (!alreadySaved && canSave && !lessons.loading)
+                          ? () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              final created = await lessons.saveFromChat(
+                                title: title,
+                                steps: steps,
+                                videoUrl: videoUrl,
+                              );
+                              if (created != null) {
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                      content: Text('Leçon enregistrée.')),
+                                );
+                              } else {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(lessons.error ??
+                                        'Échec de l\'enregistrement'),
+                                  ),
+                                );
+                              }
+                            }
+                          : null,
+                    ),
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),

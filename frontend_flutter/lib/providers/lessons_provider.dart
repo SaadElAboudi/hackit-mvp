@@ -49,14 +49,8 @@ class LessonsProvider extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final resp = await LessonsService.getLessons();
-      lessons = (resp['items'] as List<dynamic>?)
-              ?.map<Lesson>((j) => Lesson.fromMap(j as Map<String, dynamic>))
-              .toList() ??
-          [];
-      suggestedActions = resp['suggestedActions'] != null
-          ? List<Map<String, dynamic>>.from(resp['suggestedActions'])
-          : null;
+      lessons = await _service.listLessons();
+      suggestedActions = null;
       error = null;
     } catch (e) {
       error = e.toString();

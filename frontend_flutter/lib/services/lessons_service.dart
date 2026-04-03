@@ -11,18 +11,6 @@ class LessonsService {
     await _api.deleteLesson(lessonId: lessonId);
   }
 
-  /// Static method for provider: returns items, total, suggestedActions from API response
-  static Future<Map<String, dynamic>> getLessons() async {
-    final api = ApiService.create();
-    final resp = await api.get('/api/lessons');
-    final data = resp.data as Map<String, dynamic>?;
-    return {
-      'items': data?['items'] ?? [],
-      'total': data?['total'] ?? 0,
-      'suggestedActions': data?['suggestedActions'],
-    };
-  }
-
   static const _userIdKey = 'hackit:v1:userId';
 
   final ApiService _api;
@@ -116,8 +104,15 @@ class LessonsService {
       {required String lessonId, required bool favorite}) async {
     final Response resp =
         await _api.setFavorite(lessonId: lessonId, favorite: favorite);
-    return Lesson.fromMap(resp.data as Map<String, dynamic>,
-        userIdFallback: userId);
+    final raw = resp.data;
+    if (raw is Map<String, dynamic>) {
+      final nested = raw['lesson'];
+      if (nested is Map<String, dynamic>) {
+        return Lesson.fromMap(nested, userIdFallback: userId);
+      }
+      return Lesson.fromMap(raw, userIdFallback: userId);
+    }
+    throw StateError('Invalid favorite response payload');
   }
 
   Future<Lesson> recordView({required String lessonId}) async {
