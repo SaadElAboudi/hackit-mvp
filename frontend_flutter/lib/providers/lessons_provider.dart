@@ -1,11 +1,53 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 
 import '../models/lesson.dart';
 import '../services/api/api_service.dart';
 import '../services/lessons_service.dart';
 
 class LessonsProvider extends ChangeNotifier {
+  String _friendlyError(Object e, {String fallback = 'Une erreur est survenue.'}) {
+    if (e is DioException) {
+      final status = e.response?.statusCode;
+      final data = e.response?.data;
+
+      if (status == 400) {
+        if (data is Map<String, dynamic> && data['error'] is String) {
+          return 'Donnees invalides: ${data['error']}';
+        }
+        return 'Donnees invalides. Verifie les informations de la lecon.';
+      }
+      if (status == 401) return 'Session expiree. Reconnecte-toi puis reessaie.';
+      if (status == 403) return 'Action non autorisee.';
+      if (status == 404) return 'Ressource introuvable.';
+      if (status == 409) return 'Conflit detecte. Recharge puis reessaie.';
+      if (status != null && status >= 500) {
+        if (data is Map<String, dynamic> && data['error'] is String) {
+          return 'Serveur indisponible: ${data['error']}';
+        }
+        return 'Serveur indisponible pour le moment. Reessaie dans quelques secondes.';
+      }
+
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+          return 'Le serveur met trop de temps a repondre. Reessaie.';
+        case DioExceptionType.connectionError:
+          return 'Impossible de joindre le serveur. Verifie ta connexion.';
+        case DioExceptionType.cancel:
+          return 'Requete annulee.';
+        case DioExceptionType.badCertificate:
+          return 'Probleme de certificat SSL.';
+        case DioExceptionType.badResponse:
+        case DioExceptionType.unknown:
+          break;
+      }
+    }
+    return fallback;
+  }
+
   Future<void> deleteLesson(String lessonId) async {
     final idx = lessons.indexWhere((l) => l.id == lessonId);
     if (idx == -1) return;
@@ -18,7 +60,7 @@ class LessonsProvider extends ChangeNotifier {
       lessons.removeAt(idx);
       notifyListeners();
     } catch (e) {
-      error = e.toString();
+      error = _friendlyError(e, fallback: 'Impossible de supprimer la lecon.');
       notifyListeners();
     }
   }
@@ -53,7 +95,7 @@ class LessonsProvider extends ChangeNotifier {
       suggestedActions = null;
       error = null;
     } catch (e) {
-      error = e.toString();
+      error = _friendlyError(e, fallback: 'Impossible de charger les lecons.');
       lessons = [];
       suggestedActions = null;
     } finally {
@@ -73,7 +115,7 @@ class LessonsProvider extends ChangeNotifier {
       lessons = [lesson, ...lessons];
       return lesson;
     } catch (e) {
-      error = e.toString();
+      error = _friendlyError(e, fallback: 'Impossible de generer la lecon.');
       return null;
     } finally {
       loading = false;
@@ -100,7 +142,7 @@ class LessonsProvider extends ChangeNotifier {
       lessons = [lesson, ...lessons];
       return lesson;
     } catch (e) {
-      error = e.toString();
+      error = _friendlyError(e, fallback: 'Impossible d\'enregistrer la lecon.');
       return null;
     } finally {
       loading = false;
@@ -138,7 +180,7 @@ class LessonsProvider extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      error = e.toString();
+      error = _friendlyError(e, fallback: 'Impossible de mettre a jour le favori.');
       notifyListeners();
     }
   }
