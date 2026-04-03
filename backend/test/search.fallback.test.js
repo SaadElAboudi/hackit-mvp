@@ -55,4 +55,11 @@ await test('POST /api/search falls back to mock-fallback on search error when al
     const json = JSON.parse(res.data);
     assert.equal(json.source, 'mock-fallback');
     assert.ok(Array.isArray(json.steps) && json.steps.length > 0);
+    assert.ok(Array.isArray(json.citations));
+    assert.ok(Array.isArray(json.chapters));
+    assert.ok(Array.isArray(json.relatedQueries));
+    assert.ok(Array.isArray(json.learningPath?.checkpoints));
+    assert.ok(Array.isArray(json.nextActions));
+    assert.ok(json.queryAnalysis && typeof json.queryAnalysis.complexity === 'string');
+    assert.ok(Array.isArray(json.suggestions));
 });

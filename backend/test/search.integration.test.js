@@ -64,3 +64,17 @@ await test('POST /api/search returns expected shape in mock mode', async (t) => 
         }
     }
 });
+
+
+await test('POST /api/search supports summaryLength=tldr and returns response metadata', async (t) => {
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await postJson({ port, path: '/api/search', body: { query: 'changer un pneu', summaryLength: 'tldr' } });
+    assert.equal(res.status, 200, 'status should be 200');
+    const json = JSON.parse(res.data);
+    assert.equal(json.summaryLength, 'tldr');
+    assert.equal(json.resultMode, 'mock');
+    assert.ok(Array.isArray(json.badges));
+});

@@ -1,31 +1,21 @@
-import express from "express";
+import express from 'express';
+
 import {
-    createLesson,
-    generateLesson,
-    listLessons,
-    setFavorite,
-    recordView,
-    deleteLesson
-} from "../controllers/lessonsController.js";
+  createLesson,
+  deleteLesson,
+  listLessons,
+  recordView,
+  setFavorite,
+} from '../controllers/lessonsController.js';
+import { requireJwtAuthOrGoogle } from '../utils/jwtAuth.js';
+import { userIdMiddleware } from '../utils/userIdMiddleware.js';
 
 const router = express.Router();
 
-// GET /api/lessons - List lessons for a user
-router.get("/", listLessons);
-
-// POST /api/lessons - Create a lesson from chat
-router.post("/", createLesson);
-
-// POST /api/generateLesson - Generate a lesson from query
-router.post("/generateLesson", generateLesson);
-
-// PATCH /api/lessons/:id/favorite - Set favorite status
-router.patch("/:id/favorite", setFavorite);
-
-// POST /api/lessons/:id/view - Record a view
-router.post("/:id/view", recordView);
-
-// DELETE /api/lessons/:id - Delete a lesson
-router.delete("/:id", deleteLesson);
+router.get('/', requireJwtAuthOrGoogle, userIdMiddleware, listLessons);
+router.post('/', requireJwtAuthOrGoogle, userIdMiddleware, createLesson);
+router.delete('/:id', requireJwtAuthOrGoogle, userIdMiddleware, deleteLesson);
+router.patch('/:id/favorite', requireJwtAuthOrGoogle, userIdMiddleware, setFavorite);
+router.post('/:id/view', requireJwtAuthOrGoogle, userIdMiddleware, recordView);
 
 export default router;
