@@ -139,6 +139,7 @@ class SearchProvider extends ChangeNotifier {
     }
 
     lastQuery = query.trim();
+    final deliveryMode = _resolveDeliveryMode(lastQuery!);
     _appendUser(lastQuery!);
     loading = true;
     error = null;
@@ -183,7 +184,7 @@ class SearchProvider extends ChangeNotifier {
         if (_cacheManager != null) {
           await _cacheManager.cacheSearchResult(query, r);
         }
-        _appendAssistantFromResult(r);
+        _appendAssistantFromResult(r, deliveryMode: deliveryMode);
         // record history entry
         _historyFavs?.addHistory(
           query: query,
@@ -284,6 +285,7 @@ class SearchProvider extends ChangeNotifier {
     String? currentTitle;
     String? currentVideo;
     String? currentSource;
+    final deliveryMode = _resolveDeliveryMode(lastQuery!);
     int?
         stepsMsgIndex; // index in messages list for the streaming steps message
 
@@ -301,7 +303,12 @@ class SearchProvider extends ChangeNotifier {
               currentTitle,
               const [],
               source: currentSource.isNotEmpty ? currentSource : null,
-            );
+            ).copyWith(content: {
+              'title': currentTitle,
+              'steps': const <String>[],
+              if (currentSource.isNotEmpty) 'source': currentSource,
+              if (deliveryMode != null) 'deliveryMode': deliveryMode,
+            });
             messages = [...messages, msg];
             stepsMsgIndex = messages.length - 1;
             _saveMessages();
@@ -416,6 +423,7 @@ class SearchProvider extends ChangeNotifier {
     if (loading) return;
     final q = (lastQuery ?? '').trim();
     if (q.isEmpty) return;
+    final deliveryMode = _resolveDeliveryMode(q);
 
     final analytics = AnalyticsManager();
     final stopwatch = Stopwatch()..start();
@@ -455,7 +463,7 @@ class SearchProvider extends ChangeNotifier {
       }
 
       // Append assistant response only (pas de bulle user en plus)
-      _appendAssistantFromResult(newResult);
+      _appendAssistantFromResult(newResult, deliveryMode: deliveryMode);
       _historyFavs?.addHistory(
         query: q,
         title: newResult.title,
@@ -528,6 +536,7 @@ class SearchProvider extends ChangeNotifier {
     if (loading) return;
     final q = query.trim();
     if (q.isEmpty) return;
+    final deliveryMode = _resolveDeliveryMode(q);
     final analytics = AnalyticsManager();
     final stopwatch = Stopwatch()..start();
     loading = true;
@@ -557,7 +566,7 @@ class SearchProvider extends ChangeNotifier {
       if (_cacheManager != null) {
         await _cacheManager.cacheSearchResult(q, newResult);
       }
-      _appendAssistantFromResult(newResult);
+      _appendAssistantFromResult(newResult, deliveryMode: deliveryMode);
       _historyFavs?.addHistory(
         query: q,
         title: newResult.title,
@@ -616,7 +625,16 @@ class SearchProvider extends ChangeNotifier {
     _push(msg);
   }
 
-  void _appendAssistantFromResult(BaseSearchResult r) {
+  String? _resolveDeliveryMode(String query) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.startsWith('mode cadrer')) return 'cadrer';
+    if (normalized.startsWith('mode produire')) return 'produire';
+    if (normalized.startsWith('mode communiquer')) return 'communiquer';
+    if (normalized.startsWith('mode audit express')) return 'audit';
+    return _lastTemplate;
+  }
+
+  void _appendAssistantFromResult(BaseSearchResult r, {String? deliveryMode}) {
     // Ajoute une seule bulle assistant avec toutes les infos principales
     final stepsMsg = ChatMessage.assistantSteps(
       _newId(),
@@ -635,6 +653,7 @@ class SearchProvider extends ChangeNotifier {
           "chapters": r.chapters.map((c) => c.toMap()).toList(),
         if (r.keyTakeaways.isNotEmpty) "keyTakeaways": r.keyTakeaways,
         if (r.quiz.isNotEmpty) "quiz": r.quiz,
+        if (deliveryMode != null) "deliveryMode": deliveryMode,
       },
     );
     _push(stepsMsg);

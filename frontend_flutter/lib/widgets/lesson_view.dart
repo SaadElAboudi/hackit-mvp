@@ -29,6 +29,8 @@ class LessonView extends StatelessWidget {
   final String title;
   final List<String> steps;
   final String videoUrl;
+  final String? source;
+  final String? deliveryMode;
   final List<String>? transcript;
   final List<String>? chapters;
   const LessonView({
@@ -36,6 +38,8 @@ class LessonView extends StatelessWidget {
     required this.title,
     required this.steps,
     required this.videoUrl,
+    this.source,
+    this.deliveryMode,
     this.transcript,
     this.chapters,
   });
@@ -62,7 +66,12 @@ class LessonView extends StatelessWidget {
                 border: Border.all(color: Colors.grey.shade300, width: 1),
               ),
               padding: const EdgeInsets.all(16.0),
-              child: SummaryView(title: title, steps: steps),
+              child: SummaryView(
+                title: title,
+                steps: steps,
+                source: source,
+                deliveryMode: deliveryMode,
+              ),
             ),
             SizedBox(height: 18),
             Container(

@@ -94,6 +94,8 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         final steps = List<String>.from(m.content['steps'] ?? const <String>[]);
         final title = (m.content['title'] ?? '') as String;
         final videoUrl = (m.content['videoUrl'] ?? '') as String;
+        final source = (m.content['source'] ?? '') as String;
+        final deliveryMode = m.content['deliveryMode']?.toString();
         return Card(
           elevation: 5,
           shape:
@@ -106,6 +108,8 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
               title: title,
               steps: steps,
               videoUrl: videoUrl,
+              source: source,
+              deliveryMode: deliveryMode,
             ),
           ),
         );
