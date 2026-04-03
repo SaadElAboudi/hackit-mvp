@@ -71,7 +71,7 @@ class _FavoritesList extends StatelessWidget {
                       builder: (ctx) => AlertDialog(
                         title: const Text('Retirer des favoris'),
                         content: const Text(
-                            'Voulez-vous retirer cette leçon des favoris ?'),
+                            'Voulez-vous retirer ce livrable des favoris ?'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.of(ctx).pop(false),

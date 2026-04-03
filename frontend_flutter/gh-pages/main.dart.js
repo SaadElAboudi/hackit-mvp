@@ -87814,7 +87814,7 @@ break
 case 3:q=2
 k=p.pop()
 m=A.a9(k)
-n.d=n.En(m,"Impossible de charger les lecons.")
+n.d=n.En(m,"Impossible de charger les livrables.")
 n.c=A.b([],t.Lo)
 o.push(5)
 s=4

@@ -95,7 +95,7 @@ class LessonsProvider extends ChangeNotifier {
       suggestedActions = null;
       error = null;
     } catch (e) {
-      error = _friendlyError(e, fallback: 'Impossible de charger les lecons.');
+      error = _friendlyError(e, fallback: 'Impossible de charger les livrables.');
       lessons = [];
       suggestedActions = null;
     } finally {
