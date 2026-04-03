@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/google_auth_provider.dart';
 import '../screens/home_screen.dart';
-import '../screens/lessons_screen.dart';
-import '../screens/favorites_screen.dart';
-import '../screens/history_screen.dart';
+import '../screens/library_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../screens/login_screen.dart';
 
 class RootTabs extends StatefulWidget {
   const RootTabs({super.key});
@@ -14,15 +16,11 @@ class RootTabs extends StatefulWidget {
 class _RootTabsState extends State<RootTabs> {
   final List<String> tabRoutes = [
     '/',
-    '/lessons',
-    '/favorites',
-    '/history',
+    '/library',
   ];
 
   int _index = 0;
-  final List<GlobalKey<NavigatorState>> _navigatorKeys = [
-    GlobalKey<NavigatorState>(),
-    GlobalKey<NavigatorState>(),
+  final _navigatorKeys = [
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
   ];
@@ -30,11 +28,15 @@ class _RootTabsState extends State<RootTabs> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Synchronise l'onglet sélectionné avec la route actuelle
     final route = ModalRoute.of(context)?.settings.name;
     if (route != null) {
       final tabIdx = tabRoutes.indexOf(route);
-      if (tabIdx != -1 && tabIdx != _index) {
-        setState(() => _index = tabIdx);
+      final legacyLibraryRoutes = {'/lessons', '/favorites', '/history'};
+      final resolvedIdx =
+          (tabIdx == -1 && legacyLibraryRoutes.contains(route)) ? 1 : tabIdx;
+      if (resolvedIdx != -1 && resolvedIdx != _index) {
+        setState(() => _index = resolvedIdx);
       }
     }
   }
@@ -44,54 +46,116 @@ class _RootTabsState extends State<RootTabs> {
       key: _navigatorKeys[tabIndex],
       initialRoute: '/',
       onGenerateRoute: (settings) {
-        late final Widget page;
-        switch (tabIndex) {
-          case 0:
-            page = const HomeScreen();
-            break;
-          case 1:
-            page = const LessonsScreen();
-            break;
-          case 2:
-            page = const FavoritesScreen();
-            break;
-          case 3:
-            page = const HistoryScreen();
-            break;
-          default:
-            page = const HomeScreen();
+        Widget page;
+        // Si settings.name est null ou '/', on affiche la page principale du tab
+        if (settings.name == null || settings.name == '/') {
+          switch (tabIndex) {
+            case 0:
+              page = const HomeScreen();
+              break;
+            case 1:
+              page = const LibraryScreen();
+              break;
+            default:
+              page = const HomeScreen();
+          }
+        } else {
+          // Pour toute autre route, on affiche la page principale du tab (ou personnaliser si besoin)
+          switch (tabIndex) {
+            case 0:
+              page = const HomeScreen();
+              break;
+            case 1:
+              page = const LibraryScreen();
+              break;
+            default:
+              page = const HomeScreen();
+          }
         }
-        return MaterialPageRoute(builder: (_) => page, settings: settings);
+        return MaterialPageRoute(
+          builder: (_) => page,
+          settings: settings,
+        );
       },
     );
   }
 
-  void _onPopInvoked(bool didPop) {
-    if (didPop) return;
+  Future<bool> _onWillPop() async {
     final currentNavigator = _navigatorKeys[_index].currentState;
     if (currentNavigator != null && currentNavigator.canPop()) {
       currentNavigator.pop();
-      return;
+      return false;
     }
-    Navigator.of(context).maybePop();
+    return true;
   }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) => _onPopInvoked(didPop),
+    return WillPopScope(
+      onWillPop: _onWillPop,
       child: Scaffold(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          automaticallyImplyLeading: false,
+          actions: [
+            Builder(
+              builder: (context) {
+                return PopupMenuButton<String>(
+                  icon: const Icon(Icons.account_circle),
+                  itemBuilder: (context) {
+                    final googleAuth =
+                        Provider.of<GoogleAuthProvider>(context, listen: false);
+                    if (googleAuth.user != null) {
+                      return [
+                        PopupMenuItem<String>(
+                          value: 'logout',
+                          child: Text(
+                              'Déconnexion (${googleAuth.user!.displayName})'),
+                        ),
+                      ];
+                    } else {
+                      return [
+                        PopupMenuItem<String>(
+                          value: 'login',
+                          child: Text('Se connecter avec Google'),
+                        ),
+                      ];
+                    }
+                  },
+                  onSelected: (value) async {
+                    final googleAuth =
+                        Provider.of<GoogleAuthProvider>(context, listen: false);
+                    if (value == 'logout') {
+                      await googleAuth.signOut();
+                      // Clear JWT token and userId from SharedPreferences
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('auth_token');
+                      await prefs.remove('userId');
+                      // Retour à l'écran de login
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                      );
+                    } else if (value == 'login') {
+                      await googleAuth.signIn();
+                    }
+                  },
+                );
+              },
+            ),
+          ],
+        ),
         body: IndexedStack(
           index: _index,
-          children: List.generate(4, (i) => _buildTabNavigator(i)),
+          children: List.generate(2, (i) => _buildTabNavigator(i)),
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
           onDestinationSelected: (i) {
             if (i != _index) {
               setState(() => _index = i);
+              // Met à jour la route pour deep linking
               final routeName = tabRoutes[i];
               if (ModalRoute.of(context)?.settings.name != routeName) {
                 Navigator.of(context).pushReplacementNamed(routeName);
@@ -105,19 +169,9 @@ class _RootTabsState extends State<RootTabs> {
               label: 'Chat',
             ),
             NavigationDestination(
-              icon: Icon(Icons.school_outlined),
-              selectedIcon: Icon(Icons.school_rounded),
-              label: 'Lecons',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.star_border_rounded),
-              selectedIcon: Icon(Icons.star_rounded),
-              label: 'Favoris',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.history_rounded),
-              selectedIcon: Icon(Icons.history_toggle_off_rounded),
-              label: 'Historique',
+              icon: Icon(Icons.collections_bookmark_outlined),
+              selectedIcon: Icon(Icons.collections_bookmark_rounded),
+              label: 'Bibliothèque',
             ),
           ],
         ),

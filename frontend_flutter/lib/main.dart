@@ -91,16 +91,9 @@ class _MyAppState extends State<MyApp> {
                     settings: settings,
                   );
                 case '/lessons':
-                  return PageTransitions.slideTransition(
-                    page: const RootTabs(),
-                    settings: settings,
-                  );
                 case '/favorites':
-                  return PageTransitions.slideTransition(
-                    page: const RootTabs(),
-                    settings: settings,
-                  );
                 case '/history':
+                case '/library':
                   return PageTransitions.slideTransition(
                     page: const RootTabs(),
                     settings: settings,
