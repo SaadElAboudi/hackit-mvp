@@ -9,6 +9,7 @@ class BaseSearchResult {
   final List<Chapter> chapters;
   final List<String> keyTakeaways;
   final List<Map<String, dynamic>> quiz;
+  final Map<String, dynamic>? deliveryPlan;
 
   const BaseSearchResult({
     required this.title,
@@ -21,6 +22,7 @@ class BaseSearchResult {
     this.chapters = const [],
     this.keyTakeaways = const [],
     this.quiz = const [],
+    this.deliveryPlan,
   });
 
   factory BaseSearchResult.fromMap(Map<String, dynamic> map) {
@@ -50,6 +52,11 @@ class BaseSearchResult {
       ? rawQuiz.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
       : <Map<String, dynamic>>[];
 
+    final rawDeliveryPlan = map['deliveryPlan'];
+    final deliveryPlan = rawDeliveryPlan is Map<String, dynamic>
+      ? rawDeliveryPlan
+      : (rawDeliveryPlan is Map ? Map<String, dynamic>.from(rawDeliveryPlan) : null);
+
     return BaseSearchResult(
       title: map['title'] as String? ?? '',
       steps: (map['steps'] is List)
@@ -65,6 +72,7 @@ class BaseSearchResult {
         ? (map['keyTakeaways'] as List).map((e) => e.toString()).toList()
         : const [],
       quiz: quiz,
+      deliveryPlan: deliveryPlan,
     );
   }
 
@@ -79,6 +87,7 @@ class BaseSearchResult {
         'chapters': chapters.map((c) => c.toMap()).toList(),
         'keyTakeaways': keyTakeaways,
         'quiz': quiz,
+        'deliveryPlan': deliveryPlan,
       };
 }
 

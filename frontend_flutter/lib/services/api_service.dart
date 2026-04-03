@@ -88,6 +88,9 @@ class ApiService {
             videoUrl: body['videoUrl'] ?? '',
             source: body['source'] ?? '',
             summary: body['summary'],
+            deliveryPlan: (body['deliveryPlan'] is Map)
+                ? Map<String, dynamic>.from(body['deliveryPlan'])
+                : null,
             citations: (body['citations'] as List<dynamic>? ?? [])
                 .map((e) => Citation.fromMap(e as Map<String, dynamic>))
                 .toList(),

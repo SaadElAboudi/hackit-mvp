@@ -68,6 +68,7 @@ await test('GET /api/search/stream streams meta, partial steps, then done', asyn
     assert.ok(typeof events[0].title === 'string' && events[0].title.length > 0);
     assert.ok(typeof events[0].videoUrl === 'string' && events[0].videoUrl.startsWith('http'));
     assert.ok(typeof events[0].source === 'string');
+    assert.ok(typeof events[0].deliveryMode === 'string');
 
     const partials = events.filter(e => e.type === 'partial');
     assert.ok(partials.length >= 1, 'should stream at least one partial step');
@@ -78,6 +79,8 @@ await test('GET /api/search/stream streams meta, partial steps, then done', asyn
         assert.match(finalEvent.citations[0].url, /[?&]t=\d+/);
     }
     assert.ok(Array.isArray(finalEvent.chapters), 'chapters included in final event');
+    assert.ok(finalEvent.deliveryPlan && typeof finalEvent.deliveryPlan === 'object');
+    assert.ok(Array.isArray(finalEvent.deliveryPlan.nextActions));
     if (finalEvent.chapters.length) {
         for (let i = 1; i < finalEvent.chapters.length; i++) {
             assert.ok(finalEvent.chapters[i].startSec >= finalEvent.chapters[i - 1].startSec);

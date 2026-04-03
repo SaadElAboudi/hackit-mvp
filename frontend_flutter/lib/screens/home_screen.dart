@@ -96,6 +96,10 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         final videoUrl = (m.content['videoUrl'] ?? '') as String;
         final source = (m.content['source'] ?? '') as String;
         final deliveryMode = m.content['deliveryMode']?.toString();
+        final rawDeliveryPlan = m.content['deliveryPlan'];
+        final deliveryPlan = rawDeliveryPlan is Map
+          ? Map<String, dynamic>.from(rawDeliveryPlan)
+          : null;
         return Card(
           elevation: 5,
           shape:
@@ -110,6 +114,7 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
               videoUrl: videoUrl,
               source: source,
               deliveryMode: deliveryMode,
+              deliveryPlan: deliveryPlan,
             ),
           ),
         );

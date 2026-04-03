@@ -8,12 +8,14 @@ class SummaryView extends StatelessWidget {
   final List<String> steps;
   final String? deliveryMode;
   final String? source;
+  final Map<String, dynamic>? deliveryPlan;
   const SummaryView({
     super.key,
     required this.title,
     required this.steps,
     this.deliveryMode,
     this.source,
+    this.deliveryPlan,
   });
 
   String get _modeLabel {
@@ -32,6 +34,26 @@ class SummaryView extends StatelessWidget {
   }
 
   List<_PlanSection> _buildSections() {
+    final plan = deliveryPlan;
+    if (plan != null && plan.isNotEmpty) {
+      List<String> listOf(String key) {
+        final value = plan[key];
+        if (value is List) return value.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList();
+        if (value is String && value.trim().isNotEmpty) return [value.trim()];
+        return const <String>[];
+      }
+
+      final fromPlan = [
+        _PlanSection(title: 'Objectif', items: listOf('objective')),
+        _PlanSection(title: 'Perimetre', items: listOf('scope')),
+        _PlanSection(title: 'Risques', items: listOf('risks')),
+        _PlanSection(title: 'Prochaines actions', items: listOf('nextActions')),
+        _PlanSection(title: 'Message client', items: listOf('clientMessage')),
+      ].where((section) => section.items.isNotEmpty).toList();
+
+      if (fromPlan.isNotEmpty) return fromPlan;
+    }
+
     final cleanSteps = steps.where((step) => step.trim().isNotEmpty).toList();
     if (cleanSteps.isEmpty) {
       return const [

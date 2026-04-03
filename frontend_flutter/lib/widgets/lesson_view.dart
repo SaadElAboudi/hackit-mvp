@@ -31,6 +31,7 @@ class LessonView extends StatelessWidget {
   final String videoUrl;
   final String? source;
   final String? deliveryMode;
+  final Map<String, dynamic>? deliveryPlan;
   final List<String>? transcript;
   final List<String>? chapters;
   const LessonView({
@@ -40,6 +41,7 @@ class LessonView extends StatelessWidget {
     required this.videoUrl,
     this.source,
     this.deliveryMode,
+    this.deliveryPlan,
     this.transcript,
     this.chapters,
   });
@@ -71,6 +73,7 @@ class LessonView extends StatelessWidget {
                 steps: steps,
                 source: source,
                 deliveryMode: deliveryMode,
+                deliveryPlan: deliveryPlan,
               ),
             ),
             SizedBox(height: 18),

@@ -215,6 +215,50 @@ function getSummaryConfig(summaryLength = 'standard') {
   }
 }
 
+function detectDeliveryModeFromQuery(query) {
+  const q = String(query || '').toLowerCase();
+  if (q.includes('mode cadrer')) return 'cadrer';
+  if (q.includes('mode produire')) return 'produire';
+  if (q.includes('mode communiquer')) return 'communiquer';
+  if (q.includes('mode audit')) return 'audit';
+  return 'produire';
+}
+
+function buildDeliveryPlan({ mode, query, title, steps }) {
+  const items = Array.isArray(steps) ? steps.filter(Boolean).map((s) => String(s).trim()).filter(Boolean) : [];
+  const pick = (from, count) => items.slice(from, from + count);
+
+  const fallbackObjective = `Transformer la demande en livrable concret: ${String(query || '').slice(0, 120)}`;
+  const objective = pick(0, 1);
+  const scope = pick(1, 2);
+  const risks = pick(3, 2);
+  const nextActions = pick(5, 3);
+
+  let clientMessage = [];
+  if (mode === 'communiquer') {
+    clientMessage = items.length ? items : [
+      `Bonjour, voici l'avancement sur "${title}".`,
+      "Les prochaines actions sont planifiees et je vous propose un point de validation rapide.",
+      "Pouvez-vous confirmer la priorite et la deadline cible ?",
+    ];
+  } else {
+    clientMessage = [
+      `Bonjour, voici le plan de livraison propose pour "${title}".`,
+      "Je partage les priorites, risques et prochaines actions pour alignement.",
+      "Merci de valider le perimetre et la priorite des taches.",
+    ];
+  }
+
+  return {
+    mode,
+    objective: objective.length ? objective : [fallbackObjective],
+    scope: scope.length ? scope : ["Perimetre initial a valider avec le client"],
+    risks: risks.length ? risks : ["Risque de derive du perimetre"],
+    nextActions: nextActions.length ? nextActions : items.slice(0, Math.min(3, items.length)),
+    clientMessage,
+  };
+}
+
 function annotateSource(source, mode = 'real') {
   return {
     source,
@@ -502,21 +546,26 @@ app.post("/api/search", async (req, res) => {
     return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload' });
   }
   const summaryConfig = getSummaryConfig(featureFlags.multiLengthSummary ? summaryLength : 'standard');
+  const deliveryMode = detectDeliveryModeFromQuery(query);
   const requestId = randomBytes(8).toString('hex');
 
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
   if ((process.env.MOCK_MODE || mockDefault) === "true") {
     const mock = makeMockResponse();
+    const steps = Array.isArray(mock.steps) ? mock.steps : [];
     const vid = extractYouTubeVideoId(mock.videoUrl) || 'dQw4w9WgXcQ';
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
     const desiredChapters = extractDesiredChapters(query);
     const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
+    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: mock.title, steps });
     return res.json({
       ...mock,
+      steps,
       ...annotateSource(mock.source, 'mock'),
       citations,
       chapters,
+      deliveryPlan,
       requestId,
       summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard',
     });
@@ -616,6 +665,7 @@ app.post("/api/search", async (req, res) => {
     }
 
     const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
+    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps });
     const vid = videoId || extractYouTubeVideoId(videoUrl);
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
     const desiredChapters = extractDesiredChapters(query);
@@ -627,6 +677,7 @@ app.post("/api/search", async (req, res) => {
       ...annotateSource(source, 'real'),
       citations,
       chapters,
+      deliveryPlan,
       requestId,
       summaryLength: featureFlags.multiLengthSummary ? summaryLength : 'standard',
     });
@@ -649,6 +700,7 @@ app.get("/api/search/stream", async (req, res) => {
   const validation = normalizeQueryInput(req.query.query, MAX_STREAM_QUERY_LEN);
   if (!validation.ok) return res.status(validation.status).json({ error: validation.error });
   const query = validation.value;
+  const deliveryMode = detectDeliveryModeFromQuery(query);
 
   // Set SSE headers
   res.setHeader("Content-Type", "text/event-stream");
@@ -685,7 +737,8 @@ app.get("/api/search/stream", async (req, res) => {
   if ((process.env.MOCK_MODE || mockDefault) === "true") {
     // Stream mock in small chunks
     const mock = makeMockResponse();
-    writeEvent({ type: "meta", title: mock.title, videoUrl: mock.videoUrl, source: mock.source });
+    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: mock.title, steps: mock.steps || [] });
+    writeEvent({ type: "meta", title: mock.title, videoUrl: mock.videoUrl, source: mock.source, deliveryMode });
     const steps = mock.steps || [];
     let idx = 0;
     const interval = setInterval(() => {
@@ -702,7 +755,7 @@ app.get("/api/search/stream", async (req, res) => {
             const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
             const desiredChapters = extractDesiredChapters(query);
             const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
-            writeEvent({ type: 'final', citations, chapters });
+            writeEvent({ type: 'final', citations, chapters, deliveryPlan });
             writeEvent({ type: 'done' });
           } catch (err) {
             writeEvent({ type: 'error', error: 'Internal server error', detail: err?.message || 'Unexpected error' });
@@ -761,7 +814,7 @@ app.get("/api/search/stream", async (req, res) => {
         throw videoErr;
       }
 
-      writeEvent({ type: "meta", title: videoTitle, videoUrl, source });
+      writeEvent({ type: "meta", title: videoTitle, videoUrl, source, deliveryMode });
 
       // Summarize and stream steps one by one (Gemini returns full text; we simulate token streaming)
       let summaryText = "";
@@ -782,6 +835,7 @@ app.get("/api/search/stream", async (req, res) => {
       }
 
       const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
+      const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps });
       for (const s of steps) {
         if (clientState.closed) return end();
         writeEvent({ type: "partial", step: s });
@@ -792,7 +846,7 @@ app.get("/api/search/stream", async (req, res) => {
       const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
       const desiredChapters = extractDesiredChapters(query);
       const chapters = vid ? (await getChapters(vid, videoTitle, { desired: desiredChapters })).chapters : [];
-      writeEvent({ type: "final", citations, chapters });
+      writeEvent({ type: "final", citations, chapters, deliveryPlan });
       writeEvent({ type: "done" });
       end();
     } catch (err) {

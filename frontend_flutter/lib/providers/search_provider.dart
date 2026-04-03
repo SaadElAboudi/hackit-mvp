@@ -319,6 +319,25 @@ class SearchProvider extends ChangeNotifier {
               _push(ChatMessage.assistantCitations(
                   _newId(), evt.citations.map((c) => c.toMap()).toList()));
             }
+            final rawPlan = evt.raw['deliveryPlan'];
+            if (rawPlan is Map &&
+                stepsMsgIndex != null &&
+                stepsMsgIndex >= 0 &&
+                stepsMsgIndex < messages.length) {
+              final m = messages[stepsMsgIndex];
+              final updated = m.copyWith(
+                content: {
+                  ...m.content,
+                  'deliveryPlan': Map<String, dynamic>.from(rawPlan),
+                },
+              );
+              messages = [
+                ...messages.sublist(0, stepsMsgIndex),
+                updated,
+                ...messages.sublist(stepsMsgIndex + 1),
+              ];
+              _saveMessages();
+            }
             if (evt.chapters.isNotEmpty && currentVideo != null) {
               _push(ChatMessage.assistantChapters(
                   _newId(), evt.chapters.map((c) => c.toMap()).toList(),
@@ -653,6 +672,7 @@ class SearchProvider extends ChangeNotifier {
           "chapters": r.chapters.map((c) => c.toMap()).toList(),
         if (r.keyTakeaways.isNotEmpty) "keyTakeaways": r.keyTakeaways,
         if (r.quiz.isNotEmpty) "quiz": r.quiz,
+        if (r.deliveryPlan != null) "deliveryPlan": r.deliveryPlan,
         if (deliveryMode != null) "deliveryMode": deliveryMode,
       },
     );
