@@ -43,7 +43,13 @@ class HomeScreen extends StatelessWidget {
             disabled: Provider.of<SearchProvider>(context).loading,
             onRegenerate: Provider.of<SearchProvider>(context, listen: false)
                 .regenerateLast,
-            onEditLast: () {},
+            onEditLast: () {
+              final provider = Provider.of<SearchProvider>(context, listen: false);
+              final last = provider.lastQuery;
+              if (last != null && last.trim().isNotEmpty) {
+                provider.setDraft(last);
+              }
+            },
             getLastQuery: () =>
                 Provider.of<SearchProvider>(context, listen: false).lastQuery ??
                 '',

@@ -111,6 +111,8 @@ class _ChatInputState extends State<ChatInput> {
       provider = null;
     }
     final draft = provider?.draftText;
+    final lastQuery = (widget.getLastQuery?.call() ?? '').trim();
+    final hasLastQuery = lastQuery.isNotEmpty;
     if (draft != null && draft != _controller.text) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -233,6 +235,32 @@ class _ChatInputState extends State<ChatInput> {
                     ),
                   ],
                 ),
+                if (widget.onRegenerate != null || widget.onEditLast != null)
+                  Padding(
+                    padding: EdgeInsets.only(top: AdaptiveSpacing.small),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (widget.onEditLast != null)
+                          OutlinedButton.icon(
+                            onPressed: (widget.disabled || !hasLastQuery)
+                                ? null
+                                : widget.onEditLast,
+                            icon: const Icon(Icons.edit_rounded, size: 18),
+                            label: const Text('Modifier dernier prompt'),
+                          ),
+                        if (widget.onRegenerate != null)
+                          OutlinedButton.icon(
+                            onPressed: (widget.disabled || !hasLastQuery)
+                                ? null
+                                : widget.onRegenerate,
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: const Text('Relancer'),
+                          ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
