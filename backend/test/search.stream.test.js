@@ -81,6 +81,10 @@ await test('GET /api/search/stream streams meta, partial steps, then done', asyn
     assert.ok(Array.isArray(finalEvent.chapters), 'chapters included in final event');
     assert.ok(finalEvent.deliveryPlan && typeof finalEvent.deliveryPlan === 'object');
     assert.ok(Array.isArray(finalEvent.deliveryPlan.nextActions));
+    assert.ok(Array.isArray(finalEvent.deliveryPlan.timeline));
+    assert.ok(Array.isArray(finalEvent.deliveryPlan.effort));
+    assert.ok(Array.isArray(finalEvent.deliveryPlan.dependencies));
+    assert.ok(Array.isArray(finalEvent.deliveryPlan.acceptanceCriteria));
     if (finalEvent.chapters.length) {
         for (let i = 1; i < finalEvent.chapters.length; i++) {
             assert.ok(finalEvent.chapters[i].startSec >= finalEvent.chapters[i - 1].startSec);

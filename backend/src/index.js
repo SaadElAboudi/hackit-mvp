@@ -234,6 +234,40 @@ function buildDeliveryPlan({ mode, query, title, steps }) {
   const risks = pick(3, 2);
   const nextActions = pick(5, 3);
 
+  let timeline = [
+    'J0: validation du cadrage et priorites',
+    'J1-J2: execution des taches critiques',
+    'J3: revue qualite et ajustements',
+    'J4: livraison et feedback client',
+  ];
+
+  if (mode === 'audit') {
+    timeline = [
+      'J0: diagnostic rapide et tri des risques',
+      'J1-J2: correction des quick wins',
+      'J3-J4: correction des points structurants',
+      'J5-J7: verification finale et stabilisation',
+    ];
+  }
+
+  const effort = [
+    'Complexite: moyenne',
+    'Charge estimee: 0.5 a 1 jour',
+    'Contrainte principale: clarte du perimetre',
+  ];
+
+  const dependencies = [
+    'Validation client sur le perimetre',
+    'Acces aux ressources/projet',
+    'Disponibilite d\'un point de feedback',
+  ];
+
+  const acceptanceCriteria = [
+    'Le livrable couvre le perimetre valide',
+    'Les risques majeurs sont traites ou documentes',
+    'Le client peut valider et passer a l\'etape suivante',
+  ];
+
   let clientMessage = [];
   if (mode === 'communiquer') {
     clientMessage = items.length ? items : [
@@ -255,6 +289,10 @@ function buildDeliveryPlan({ mode, query, title, steps }) {
     scope: scope.length ? scope : ["Perimetre initial a valider avec le client"],
     risks: risks.length ? risks : ["Risque de derive du perimetre"],
     nextActions: nextActions.length ? nextActions : items.slice(0, Math.min(3, items.length)),
+    timeline,
+    effort,
+    dependencies,
+    acceptanceCriteria,
     clientMessage,
   };
 }

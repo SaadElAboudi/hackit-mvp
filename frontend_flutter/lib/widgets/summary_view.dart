@@ -48,6 +48,10 @@ class SummaryView extends StatelessWidget {
         _PlanSection(title: 'Perimetre', items: listOf('scope')),
         _PlanSection(title: 'Risques', items: listOf('risks')),
         _PlanSection(title: 'Prochaines actions', items: listOf('nextActions')),
+        _PlanSection(title: 'Timeline', items: listOf('timeline')),
+        _PlanSection(title: 'Effort', items: listOf('effort')),
+        _PlanSection(title: 'Dependances', items: listOf('dependencies')),
+        _PlanSection(title: 'Criteres d\'acceptation', items: listOf('acceptanceCriteria')),
         _PlanSection(title: 'Message client', items: listOf('clientMessage')),
       ].where((section) => section.items.isNotEmpty).toList();
 
