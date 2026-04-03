@@ -116,7 +116,7 @@ class _RootTabsState extends State<RootTabs> {
             NavigationDestination(
               icon: Icon(Icons.collections_bookmark_outlined),
               selectedIcon: Icon(Icons.collections_bookmark_rounded),
-              label: 'Bibliothèque',
+              label: 'Pipeline',
             ),
           ],
         ),

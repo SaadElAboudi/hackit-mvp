@@ -185,8 +185,8 @@ class LessonView extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     alreadySaved
-                        ? 'Cette leçon est déjà dans ta bibliothèque.'
-                        : 'Ajoute cette réponse à ta bibliothèque pour la retrouver rapidement.',
+                        ? 'Ce livrable est déjà dans ton pipeline.'
+                        : 'Ajoute cette réponse à ton pipeline pour la retrouver et la réutiliser rapidement.',
                     style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                   ),
                   if (!canSave && !alreadySaved) ...[
@@ -223,10 +223,10 @@ class LessonView extends StatelessWidget {
                             ),
                       label: Text(
                         alreadySaved
-                            ? 'Leçon enregistrée'
+                          ? 'Livrable enregistré'
                             : (lessons.loading
                                 ? 'Enregistrement...'
-                                : 'Enregistrer la leçon'),
+                            : 'Enregistrer le livrable'),
                       ),
                       onPressed: (!alreadySaved && canSave && !lessons.loading)
                           ? () async {
@@ -239,7 +239,7 @@ class LessonView extends StatelessWidget {
                               if (created != null) {
                                 messenger.showSnackBar(
                                   const SnackBar(
-                                      content: Text('Leçon enregistrée.')),
+                                      content: Text('Livrable enregistré.')),
                                 );
                               } else {
                                 messenger.showSnackBar(

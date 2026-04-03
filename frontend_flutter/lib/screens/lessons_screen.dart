@@ -21,8 +21,8 @@ class LessonsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Lecons',
-      subtitle: 'Toutes tes lecons sauvegardees',
+      title: 'Livrables',
+      subtitle: 'Tous tes livrables sauvegardes',
       leadingIcon: Icons.menu_book_rounded,
       child: Consumer<LessonsProvider>(
         builder: (context, lp, _) {
@@ -30,7 +30,7 @@ class LessonsScreen extends StatelessWidget {
           if (lessons.isEmpty) {
             return const EmptyState(
               icon: Icons.menu_book,
-              title: 'Aucune leçon',
+              title: 'Aucun livrable',
             );
           }
           return ListView.separated(
@@ -60,9 +60,9 @@ class LessonsScreen extends StatelessWidget {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
-                          title: const Text('Supprimer la leçon'),
+                          title: const Text('Supprimer le livrable'),
                           content: const Text(
-                              'Voulez-vous vraiment supprimer cette leçon ?'),
+                            'Voulez-vous vraiment supprimer ce livrable ?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.of(ctx).pop(false),
@@ -81,7 +81,7 @@ class LessonsScreen extends StatelessWidget {
                           await lessonsProvider.deleteLesson(lesson.id);
                           messenger.showSnackBar(
                             const SnackBar(
-                                content: Text('Leçon supprimée'),
+                              content: Text('Livrable supprimé'),
                                 backgroundColor: Colors.green),
                           );
                         } catch (e) {

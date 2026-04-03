@@ -119,8 +119,8 @@ class _FavoritesList extends StatelessWidget {
         icon: Icons.star_border_rounded,
         title: 'Aucun favori',
         subtitle:
-            'Ajoutez des vidéos à conserver pour les retrouver rapidement.',
-        actionLabel: 'Rechercher des leçons',
+            'Ajoutez des ressources a conserver pour les retrouver rapidement.',
+        actionLabel: 'Generer un livrable',
         onAction: () {
           Navigator.of(context).pushNamed('/search');
         },

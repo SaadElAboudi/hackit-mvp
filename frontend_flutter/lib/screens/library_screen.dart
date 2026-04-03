@@ -21,7 +21,7 @@ class LibraryScreen extends StatelessWidget {
         elevation: 2,
         centerTitle: true,
         title: const Text(
-          'Bibliothèque',
+          'Pipeline',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Color(0xFF222B45),
@@ -72,9 +72,9 @@ class LibraryScreen extends StatelessWidget {
               )),
           const SizedBox(height: 12),
           _SectionHeader(
-            title: 'Leçons sauvegardées',
+            title: 'Livrables sauvegardés',
             count: lessons.length,
-            emptyLabel: 'Aucune leçon sauvegardée.',
+            emptyLabel: 'Aucun livrable sauvegardé.',
           ),
           ...lessons.take(8).map((lesson) => Card(
                 child: ListTile(

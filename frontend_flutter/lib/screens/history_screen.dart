@@ -37,7 +37,7 @@ class _HistoryList extends StatelessWidget {
       return EmptyState(
         icon: Icons.history_rounded,
         title: 'Aucun historique',
-        subtitle: 'Vos recherches et leçons récentes apparaîtront ici.',
+        subtitle: 'Vos recherches et livrables recents apparaitront ici.',
         actionLabel: 'Demander de l\'aide',
         onAction: () {
           Navigator.of(context).pushNamed('/support');

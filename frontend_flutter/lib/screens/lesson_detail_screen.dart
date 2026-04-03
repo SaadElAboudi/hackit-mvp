@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/lesson.dart';
-import 'package:provider/provider.dart';
-import '../providers/lessons_provider.dart';
 import '../widgets/lesson_view.dart';
 
 class LessonDetailScreen extends StatelessWidget {
@@ -29,6 +27,15 @@ class LessonDetailScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text(
+                    'Livrable',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF00C48C),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
                   Text(
                     lesson.title,
                     style: const TextStyle(
