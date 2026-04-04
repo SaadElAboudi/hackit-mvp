@@ -1,3 +1,4 @@
+// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables
 import 'package:flutter/material.dart';
 
 class ChatBubble extends StatelessWidget {
@@ -7,12 +8,12 @@ class ChatBubble extends StatelessWidget {
   final IconData icon;
 
   const ChatBubble({
-    Key? key,
+    super.key,
     required this.content,
     required this.isUser,
     required this.roleLabel,
     required this.icon,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,8 +24,9 @@ class ChatBubble extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: 10, horizontal: 16),
         constraints: BoxConstraints(maxWidth: 420),
         decoration: BoxDecoration(
-          color:
-              isUser ? Color(0xFF00C48C).withOpacity(0.12) : Color(0xFFF7F7F9),
+          color: isUser
+              ? Color(0xFF00C48C).withValues(alpha: 0.12)
+              : Color(0xFFF7F7F9),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(

@@ -8,11 +8,8 @@ import 'providers/search_provider.dart';
 import 'providers/history_favorites_provider.dart';
 import 'providers/lessons_provider.dart';
 import 'services/cache_manager.dart';
-// import 'screens/home_screen.dart';
 import 'screens/root_tabs.dart';
 import 'screens/result_screen.dart';
-// import 'screens/history_screen.dart';
-// import 'screens/favorites_screen.dart';
 import 'utils/page_transitions.dart';
 
 final getIt = GetIt.instance;

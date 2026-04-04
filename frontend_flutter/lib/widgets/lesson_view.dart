@@ -1,3 +1,4 @@
+// ignore_for_file: prefer_const_constructors
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/lessons_provider.dart';
@@ -52,8 +53,9 @@ class LessonView extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final alreadySaved =
         lessons.lessons.any((l) => l.title == title && l.videoUrl == videoUrl);
-    final canSave =
-      title.trim().length >= 2 && steps.isNotEmpty && videoUrl.startsWith('http');
+    final canSave = title.trim().length >= 2 &&
+        steps.isNotEmpty &&
+        videoUrl.startsWith('http');
     final saveError = lessons.error;
 
     return SingleChildScrollView(
@@ -72,7 +74,8 @@ class LessonView extends StatelessWidget {
             decoration: BoxDecoration(
               color: scheme.surfaceContainerLow,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.25)),
             ),
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -85,7 +88,8 @@ class LessonView extends StatelessWidget {
                     SizedBox(width: 8),
                     Text('Vidéo',
                         style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
                             color: scheme.onSurface)),
                   ],
                 ),
@@ -102,7 +106,8 @@ class LessonView extends StatelessWidget {
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+                border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.25)),
               ),
               padding: const EdgeInsets.all(16.0),
               child: ChaptersView(
@@ -117,7 +122,8 @@ class LessonView extends StatelessWidget {
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+                border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.25)),
               ),
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -130,14 +136,18 @@ class LessonView extends StatelessWidget {
                       SizedBox(width: 8),
                       Text('Transcript',
                           style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
                               color: scheme.onSurface)),
                     ],
                   ),
                   SizedBox(height: 8),
                   ...transcript!.map((t) => Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2.0),
-                        child: Text(t, style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.8))),
+                        child: Text(t,
+                            style: TextStyle(
+                                color:
+                                    scheme.onSurface.withValues(alpha: 0.8))),
                       )),
                 ],
               ),
@@ -150,7 +160,8 @@ class LessonView extends StatelessWidget {
             decoration: BoxDecoration(
               color: scheme.surfaceContainerLow,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,7 +174,8 @@ class LessonView extends StatelessWidget {
                     Text(
                       'Sauvegarde',
                       style: TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
                           color: scheme.onSurface),
                     ),
                     const Spacer(),
@@ -191,7 +203,8 @@ class LessonView extends StatelessWidget {
                   alreadySaved
                       ? 'Ce livrable est déjà dans ton pipeline.'
                       : 'Ajoute cette réponse à ton pipeline pour la retrouver et la réutiliser rapidement.',
-                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+                  style:
+                      TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
                 ),
                 if (!canSave && !alreadySaved) ...[
                   const SizedBox(height: 10),
@@ -200,7 +213,9 @@ class LessonView extends StatelessWidget {
                     style: TextStyle(color: scheme.error, fontSize: 12),
                   ),
                 ],
-                if (saveError != null && saveError.trim().isNotEmpty && !alreadySaved) ...[
+                if (saveError != null &&
+                    saveError.trim().isNotEmpty &&
+                    !alreadySaved) ...[
                   const SizedBox(height: 10),
                   Text(
                     saveError,
@@ -227,10 +242,10 @@ class LessonView extends StatelessWidget {
                           ),
                     label: Text(
                       alreadySaved
-                        ? 'Livrable enregistré'
+                          ? 'Livrable enregistré'
                           : (lessons.loading
                               ? 'Enregistrement...'
-                          : 'Enregistrer le livrable'),
+                              : 'Enregistrer le livrable'),
                     ),
                     onPressed: (!alreadySaved && canSave && !lessons.loading)
                         ? () async {

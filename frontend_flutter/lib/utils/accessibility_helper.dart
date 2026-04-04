@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
@@ -36,7 +37,7 @@ class AccessibilityHelper {
   }
 
   static const double minTouchTarget = 48.0;
-  
+
   static Widget enlargeTouchTarget({
     required Widget child,
     double size = minTouchTarget,

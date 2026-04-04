@@ -1,17 +1,8 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import '../analytics/analytics_manager.dart';
 
 class ApiService {
-  Future<Response> deleteLesson({required String lessonId}) async {
-    return _trackApiCall(
-      endpoint: '/api/lessons/:id',
-      apiCall: () => _dio.delete('/api/lessons/$lessonId'),
-    );
-  }
-
   final Dio _dio;
-  final AnalyticsManager _analytics = AnalyticsManager.instance;
 
   /// Base URL resolution priority:
   /// 1. --dart-define=API_BASE_URL=...
@@ -20,7 +11,6 @@ class ApiService {
     final fromDefine =
         const String.fromEnvironment('API_BASE_URL', defaultValue: '').trim();
     if (fromDefine.isNotEmpty) return fromDefine;
-    // In dev we assume backend runs on 3000.
     return 'http://localhost:3000';
   })();
 
@@ -38,42 +28,9 @@ class ApiService {
     return ApiService(dio);
   }
 
-  Future<T> _trackApiCall<T>({
-    required String endpoint,
-    required Future<T> Function() apiCall,
-  }) async {
-    final stopwatch = Stopwatch()..start();
-    try {
-      final result = await apiCall();
-      stopwatch.stop();
-
-      await _analytics.trackApiLatency(
-        endpoint: endpoint,
-        latencyMs: stopwatch.elapsedMilliseconds.toDouble(),
-        isSuccess: true,
-      );
-
-      return result;
-    } catch (e) {
-      stopwatch.stop();
-
-      await _analytics.trackApiLatency(
-        endpoint: endpoint,
-        latencyMs: stopwatch.elapsedMilliseconds.toDouble(),
-        isSuccess: false,
-        errorMessage: e.toString(),
-      );
-
-      rethrow;
-    }
-  }
-
   Future<Response> get(String path,
       {Map<String, dynamic>? queryParameters}) async {
-    return _trackApiCall(
-      endpoint: path,
-      apiCall: () => _dio.get(path, queryParameters: queryParameters),
-    );
+    return _dio.get(path, queryParameters: queryParameters);
   }
 
   Future<Response> post(
@@ -81,11 +38,7 @@ class ApiService {
     dynamic data,
     Map<String, dynamic>? queryParameters,
   }) async {
-    return _trackApiCall(
-      endpoint: path,
-      apiCall: () =>
-          _dio.post(path, data: data, queryParameters: queryParameters),
-    );
+    return _dio.post(path, data: data, queryParameters: queryParameters);
   }
 
   // ---- Lesson persistence endpoints ----
@@ -135,17 +88,15 @@ class ApiService {
 
   Future<Response> setFavorite(
       {required String lessonId, required bool favorite}) async {
-    return _trackApiCall(
-      endpoint: '/api/lessons/:id/favorite',
-      apiCall: () => _dio.patch('/api/lessons/$lessonId/favorite',
-          data: {'favorite': favorite}),
-    );
+    return _dio
+        .patch('/api/lessons/$lessonId/favorite', data: {'favorite': favorite});
   }
 
   Future<Response> recordView({required String lessonId}) async {
-    return _trackApiCall(
-      endpoint: '/api/lessons/:id/view',
-      apiCall: () => _dio.post('/api/lessons/$lessonId/view'),
-    );
+    return _dio.post('/api/lessons/$lessonId/view');
+  }
+
+  Future<Response> deleteLesson({required String lessonId}) async {
+    return _dio.delete('/api/lessons/$lessonId');
   }
 }

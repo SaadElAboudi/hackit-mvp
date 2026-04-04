@@ -1,7 +1,8 @@
+// ignore_for_file: prefer_const_constructors
 import 'package:flutter/material.dart';
 
 class ResultScreen extends StatelessWidget {
-  const ResultScreen({Key? key}) : super(key: key);
+  const ResultScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -65,13 +66,13 @@ class ResultScreen extends StatelessWidget {
               itemBuilder: (context, index) {
                 return InkWell(
                   borderRadius: BorderRadius.circular(28),
-                  splashColor: Colors.blueAccent.withOpacity(0.1),
+                  splashColor: Colors.blueAccent.withValues(alpha: 0.1),
                   onTap: () {
                     // Action pour ouvrir le détail du résultat
                   },
                   child: Card(
                     elevation: 7,
-                    shadowColor: Colors.blueAccent.withOpacity(0.18),
+                    shadowColor: Colors.blueAccent.withValues(alpha: 0.18),
                     color: Colors.white,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28)),
@@ -82,7 +83,7 @@ class ResultScreen extends StatelessWidget {
                           horizontal: 22, vertical: 18),
                       leading: Container(
                         decoration: BoxDecoration(
-                          color: Colors.blueAccent.withOpacity(0.08),
+                          color: Colors.blueAccent.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         padding: const EdgeInsets.all(8),
