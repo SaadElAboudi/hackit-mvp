@@ -6,8 +6,11 @@ import '../core/responsive/size_config.dart';
 import 'package:provider/provider.dart';
 import '../providers/search_provider.dart';
 
+typedef SearchContext = Map<String, String?>;
+
 class ChatInput extends StatefulWidget {
   final void Function(String) onSearch;
+  final void Function(String, SearchContext)? onSearchWithContext;
   final bool disabled;
   final VoidCallback? onRegenerate;
   final VoidCallback? onEditLast;
@@ -20,6 +23,7 @@ class ChatInput extends StatefulWidget {
   const ChatInput({
     super.key,
     required this.onSearch,
+    this.onSearchWithContext,
     this.disabled = false,
     this.onRegenerate,
     this.onEditLast,
@@ -36,15 +40,38 @@ class _ChatInputState extends State<ChatInput> {
   // Feature flag: show/hide prompt template chips above the input.
   // Read from widget.showTemplates.
   final TextEditingController _controller = TextEditingController();
+  final TextEditingController _clientTypeController = TextEditingController();
+  final TextEditingController _budgetController = TextEditingController();
+  final TextEditingController _deadlineController = TextEditingController();
+  final TextEditingController _maturityController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   String? _selectedTemplate; // local UI state
   bool _restoredToastShown = false;
+  bool _showContextFields = false;
 
   @override
   void dispose() {
     _controller.dispose();
+    _clientTypeController.dispose();
+    _budgetController.dispose();
+    _deadlineController.dispose();
+    _maturityController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  SearchContext _buildContext() {
+    String? norm(String value) {
+      final v = value.trim();
+      return v.isEmpty ? null : v;
+    }
+
+    return {
+      'clientType': norm(_clientTypeController.text),
+      'budget': norm(_budgetController.text),
+      'deadline': norm(_deadlineController.text),
+      'maturity': norm(_maturityController.text),
+    };
   }
 
   void _submit() {
@@ -62,7 +89,12 @@ class _ChatInputState extends State<ChatInput> {
         }
       } catch (_) {}
 
-      widget.onSearch(q);
+      final contextData = _buildContext();
+      if (widget.onSearchWithContext != null) {
+        widget.onSearchWithContext!(q, contextData);
+      } else {
+        widget.onSearch(q);
+      }
       // Toujours vider le champ après envoi pour UX plus propre.
       _controller.clear();
       try {
@@ -181,6 +213,51 @@ class _ChatInputState extends State<ChatInput> {
                   ),
                   SizedBox(height: AdaptiveSpacing.small),
                 ],
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: widget.disabled
+                        ? null
+                        : () => setState(
+                            () => _showContextFields = !_showContextFields),
+                    icon: Icon(_showContextFields
+                        ? Icons.tune_rounded
+                        : Icons.tune_outlined),
+                    label: Text(_showContextFields
+                        ? 'Masquer contexte client'
+                        : 'Ajouter contexte client (optionnel)'),
+                  ),
+                ),
+                if (_showContextFields) ...[
+                  SizedBox(height: AdaptiveSpacing.tiny),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _ContextField(
+                        controller: _clientTypeController,
+                        label: 'Type client',
+                        hint: 'Startup, PME, grand compte',
+                      ),
+                      _ContextField(
+                        controller: _budgetController,
+                        label: 'Budget',
+                        hint: 'Faible / Moyen / Élevé',
+                      ),
+                      _ContextField(
+                        controller: _deadlineController,
+                        label: 'Deadline',
+                        hint: 'Ex: 2 semaines',
+                      ),
+                      _ContextField(
+                        controller: _maturityController,
+                        label: 'Maturité',
+                        hint: 'Débutant / Intermédiaire / Avancé',
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: AdaptiveSpacing.small),
+                ],
                 Row(
                   children: [
                     Expanded(
@@ -295,6 +372,39 @@ class _TemplateChips extends StatelessWidget {
             onSelected: (v) => onSelected(v ? id : null),
           ),
       ],
+    );
+  }
+}
+
+class _ContextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+
+  const _ContextField({
+    required this.controller,
+    required this.label,
+    required this.hint,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final fieldWidth = width < 700 ? width - 96 : (width - 180) / 2;
+    return SizedBox(
+      width: fieldWidth.clamp(220.0, 420.0),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          isDense: true,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
     );
   }
 }

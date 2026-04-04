@@ -47,7 +47,8 @@ class ApiService {
     return ApiService(http.Client());
   }
 
-  Map<String, dynamic> _decodeJsonObject(String raw, {Map<String, dynamic>? fallback}) {
+  Map<String, dynamic> _decodeJsonObject(String raw,
+      {Map<String, dynamic>? fallback}) {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) return decoded;
@@ -58,7 +59,8 @@ class ApiService {
     return fallback ?? <String, dynamic>{};
   }
 
-  Future<BaseSearchResult> searchVideos(String query) async {
+  Future<BaseSearchResult> searchVideos(String query,
+      {Map<String, String?>? context}) async {
     int attempts = 0;
     late dynamic lastError;
 
@@ -76,8 +78,15 @@ class ApiService {
           'Content-Type': 'application/json',
           if (userId != null && userId.isNotEmpty) 'x-user-id': userId,
         };
+        final contextPayload = <String, String>{
+          for (final e in (context ?? <String, String?>{}).entries)
+            if ((e.value ?? '').trim().isNotEmpty) e.key: e.value!.trim(),
+        };
+        final payload = <String, dynamic>{'query': query};
+        if (contextPayload.isNotEmpty) payload['context'] = contextPayload;
+
         final response = await _client
-            .post(uri, headers: headers, body: jsonEncode({'query': query}))
+            .post(uri, headers: headers, body: jsonEncode(payload))
             .timeout(const Duration(seconds: timeoutSeconds));
 
         final body = _parseResponse(response);
@@ -151,9 +160,17 @@ class ApiService {
   }
 
   // Stream search via SSE endpoint. Emits meta/partial/done events.
-  Stream<StreamEvent> searchVideosStream(String query) async* {
-    final uri = Uri.parse(
-        '$baseUrl/api/search/stream?query=${Uri.encodeQueryComponent(query)}');
+  Stream<StreamEvent> searchVideosStream(String query,
+      {Map<String, String?>? context}) async* {
+    final queryParameters = <String, String>{'query': query};
+    for (final entry in (context ?? <String, String?>{}).entries) {
+      final value = (entry.value ?? '').trim();
+      if (value.isNotEmpty) {
+        queryParameters[entry.key] = value;
+      }
+    }
+    final uri = Uri.parse('$baseUrl/api/search/stream')
+        .replace(queryParameters: queryParameters);
     final request = http.Request('GET', uri);
     final streamed = await _client.send(request);
     if (streamed.statusCode != 200) {
@@ -182,7 +199,8 @@ class ApiService {
         );
         if (dataLine.isNotEmpty) {
           final jsonStr = dataLine.substring(5).trim();
-          final map = _decodeJsonObject(jsonStr, fallback: const {'type': 'malformed'});
+          final map =
+              _decodeJsonObject(jsonStr, fallback: const {'type': 'malformed'});
           if (map['type'] != 'malformed') {
             yield StreamEvent.fromJson(map);
           }
@@ -202,7 +220,8 @@ class ApiService {
     try {
       final resp = await _client.get(uri).timeout(timeout);
       if (resp.statusCode == 200) {
-        final map = _decodeJsonObject(resp.body, fallback: {'ok': false, 'parseError': true});
+        final map = _decodeJsonObject(resp.body,
+            fallback: {'ok': false, 'parseError': true});
         return map;
       }
       return {'ok': false, 'status': resp.statusCode};

@@ -253,6 +253,28 @@ function detectDeliveryModeFromQuery(query) {
   return 'produire';
 }
 
+function normalizeDeliveryContext(raw = {}) {
+  const normalize = (v) => {
+    const s = String(v ?? '').trim();
+    return s ? s.slice(0, 80) : null;
+  };
+  return {
+    clientType: normalize(raw.clientType),
+    budget: normalize(raw.budget),
+    deadline: normalize(raw.deadline),
+    maturity: normalize(raw.maturity),
+  };
+}
+
+function contextNotes(context = {}) {
+  const notes = [];
+  if (context.clientType) notes.push(`Type client: ${context.clientType}`);
+  if (context.budget) notes.push(`Budget: ${context.budget}`);
+  if (context.deadline) notes.push(`Deadline: ${context.deadline}`);
+  if (context.maturity) notes.push(`Maturite: ${context.maturity}`);
+  return notes;
+}
+
 function classifyImpactLabel(actionText = '', mode = 'produire') {
   const t = String(actionText || '').toLowerCase();
   if (/bloquant|critique|urgent|risque|incident|deadline|client/.test(t)) return 'élevé';
@@ -349,7 +371,8 @@ function buildQualityAssessment({ mode, objective, scope, risks, nextActions, ti
   };
 }
 
-function buildDeliveryPlan({ mode, query, title, steps }) {
+function buildDeliveryPlan({ mode, query, title, steps, context }) {
+  const ctx = normalizeDeliveryContext(context);
   const items = Array.isArray(steps) ? steps.filter(Boolean).map((s) => String(s).trim()).filter(Boolean) : [];
   const pick = (from, count) => items.slice(from, from + count);
 
@@ -363,13 +386,18 @@ function buildDeliveryPlan({ mode, query, title, steps }) {
     `Périmètre : ${topic.slice(0, 80) || 'à définir avec le client'}`,
     "Points d'entrée et de sortie à valider avant démarrage.",
   ];
+  const ctxLines = contextNotes(ctx);
   const risksByMode = {
     cadrer: ['Manque de clarté sur les livrables attendus.', 'Parties prenantes non encore alignées.'],
     produire: ["Risque de dérive du périmètre en cours d'exécution.", 'Dépendances techniques ou humaines non identifiées.'],
     communiquer: ["Message mal calibré par rapport à l'audience cible.", 'Timing inadapté ou canal de diffusion sous-optimal.'],
     audit: ['Accès incomplet aux données ou artéfacts du projet.', 'Sous-estimation de la dette technique ou organisationnelle.'],
   };
-  const risks = pick(3, 2).length ? pick(3, 2) : (risksByMode[mode] || risksByMode.produire);
+  const risks = [
+    ...(pick(3, 2).length ? pick(3, 2) : (risksByMode[mode] || risksByMode.produire)),
+    ...(ctx.deadline ? [`Risque de glissement si la deadline (${ctx.deadline}) n'est pas verrouillee.`] : []),
+    ...(ctx.budget ? [`Contrainte budgetaire explicite a respecter: ${ctx.budget}.`] : []),
+  ];
   const nextActions = pick(5, 3).length ? pick(5, 3) : items.slice(0, Math.min(3, items.length));
 
   const timelineByMode = {
@@ -396,7 +424,10 @@ function buildDeliveryPlan({ mode, query, title, steps }) {
       'J7 : bilan final, rapport et plan de suivi',
     ],
   };
-  const timeline = timelineByMode[mode] || timelineByMode.produire;
+  const timeline = [
+    ...(timelineByMode[mode] || timelineByMode.produire),
+    ...(ctx.deadline ? [`Cadence adaptee a la deadline client: ${ctx.deadline}.`] : []),
+  ];
 
   const effortByMode = {
     cadrer: ['Complexité : faible à moyenne', 'Charge estimée : 2 à 4 heures', 'Contrainte principale : disponibilité des parties prenantes'],
@@ -404,7 +435,11 @@ function buildDeliveryPlan({ mode, query, title, steps }) {
     communiquer: ['Complexité : faible', 'Charge estimée : 1 à 4 heures', "Contrainte principale : alignement sur le message et l'audience"],
     audit: ['Complexité : élevée', 'Charge estimée : 1 à 5 jours', 'Contrainte principale : accès aux données et disponibilité des interlocuteurs'],
   };
-  const effort = effortByMode[mode] || effortByMode.produire;
+  const effort = [
+    ...(effortByMode[mode] || effortByMode.produire),
+    ...(ctx.budget ? [`Budget cible: ${ctx.budget}.`] : []),
+    ...(ctx.maturity ? [`Niveau de maturite pris en compte: ${ctx.maturity}.`] : []),
+  ];
 
   const dependenciesByMode = {
     cadrer: ['Brief client disponible et partagé', 'Accès aux parties prenantes clés', 'Historique et contexte projet communiqués'],
@@ -412,7 +447,10 @@ function buildDeliveryPlan({ mode, query, title, steps }) {
     communiquer: ['Validation interne du message avant envoi', 'Liste des destinataires définie', 'Deadline de communication fixée'],
     audit: ['Accès aux artéfacts, données et code du projet', "Temps alloué pour l'analyse approfondie", 'Interlocuteur technique disponible pour clarifications'],
   };
-  const dependencies = dependenciesByMode[mode] || dependenciesByMode.produire;
+  const dependencies = [
+    ...(dependenciesByMode[mode] || dependenciesByMode.produire),
+    ...ctxLines,
+  ].filter(Boolean);
 
   const acceptanceCriteriaByMode = {
     cadrer: [
@@ -436,7 +474,12 @@ function buildDeliveryPlan({ mode, query, title, steps }) {
       "Le plan d'action 7 jours est formalisé et approuvé.",
     ],
   };
-  const acceptanceCriteria = acceptanceCriteriaByMode[mode] || acceptanceCriteriaByMode.produire;
+  const acceptanceCriteria = [
+    ...(acceptanceCriteriaByMode[mode] || acceptanceCriteriaByMode.produire),
+    ...(ctx.deadline ? [`Le planning respecte la deadline: ${ctx.deadline}.`] : []),
+    ...(ctx.budget ? [`La proposition respecte le cadre budgetaire: ${ctx.budget}.`] : []),
+    ...(ctx.maturity ? [`Le niveau de complexite reste adapte a une maturite ${ctx.maturity}.`] : []),
+  ];
 
   let clientMessage = [];
   if (mode === 'communiquer') {
@@ -468,6 +511,7 @@ function buildDeliveryPlan({ mode, query, title, steps }) {
 
   return {
     mode,
+    context: ctx,
     objective,
     scope,
     risks,
@@ -763,8 +807,9 @@ app.post("/api/search", async (req, res) => {
   let query;
   let summaryLength;
   let useGeminiOverride;
+  let requestContext;
   try {
-    ({ query, summaryLength, useGemini: useGeminiOverride } = validateSearchPayload(req.body || {}));
+    ({ query, summaryLength, useGemini: useGeminiOverride, context: requestContext } = validateSearchPayload(req.body || {}));
   } catch (e) {
     return res.status(e?.status || 400).json({ error: e?.message || 'Invalid payload' });
   }
@@ -781,7 +826,7 @@ app.post("/api/search", async (req, res) => {
     const citations = await buildCitations({ videoId: vid, videoTitle: mock.title, videoUrl: mock.videoUrl, max: 3 });
     const desiredChapters = extractDesiredChapters(query);
     const chapters = (await getChapters(vid, mock.title, { desired: desiredChapters })).chapters;
-    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: mock.title, steps });
+    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: mock.title, steps, context: requestContext });
     return res.json({
       ...mock,
       steps,
@@ -888,7 +933,7 @@ app.post("/api/search", async (req, res) => {
     }
 
     const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
-    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps });
+    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps, context: requestContext });
     const vid = videoId || extractYouTubeVideoId(videoUrl);
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
     const desiredChapters = extractDesiredChapters(query);
@@ -923,6 +968,7 @@ app.get("/api/search/stream", async (req, res) => {
   const validation = normalizeQueryInput(req.query.query, MAX_STREAM_QUERY_LEN);
   if (!validation.ok) return res.status(validation.status).json({ error: validation.error });
   const query = validation.value;
+  const requestContext = normalizeDeliveryContext(req.query || {});
   const deliveryMode = detectDeliveryModeFromQuery(query);
 
   // Set SSE headers
@@ -960,7 +1006,7 @@ app.get("/api/search/stream", async (req, res) => {
   if ((process.env.MOCK_MODE || mockDefault) === "true") {
     // Stream mock in small chunks
     const mock = makeMockResponse();
-    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: mock.title, steps: mock.steps || [] });
+    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: mock.title, steps: mock.steps || [], context: requestContext });
     writeEvent({ type: "meta", title: mock.title, videoUrl: mock.videoUrl, source: mock.source, deliveryMode });
     const steps = mock.steps || [];
     let idx = 0;
@@ -1058,7 +1104,7 @@ app.get("/api/search/stream", async (req, res) => {
       }
 
       const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
-      const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps });
+      const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps, context: requestContext });
       for (const s of steps) {
         if (clientState.closed) return end();
         writeEvent({ type: "partial", step: s });

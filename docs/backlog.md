@@ -61,6 +61,16 @@ Status legend: [ ] not-started · [~] in-progress · [x] completed
 ## Analytics & Metrics
 - [ ] (27) Analytics Instrumentation — Event tracking (query_submitted, result_clicked) with privacy toggle.
 
+## Product Relevance 2026
+- [~] (41) Context-Aware Personalization — Add optional context inputs (client type, budget, deadline, maturity) and adapt deliveryPlan sections from those signals.
+- [ ] (42) Decision Assistant — Return 2-3 strategy variants (fast/balanced/ambitious) with trade-offs and recommendation.
+- [ ] (43) Explicit Feedback Loop — Add relevance feedback (pertinent/moyen/hors-sujet + reason) and feed it back into ranking/scoring.
+- [ ] (44) Domain Templates — Add domain packs (Marketing, Product, Ops, Sales, Agency) with tailored vocabulary and acceptance criteria.
+- [ ] (45) Execution Export — Convert plans to tasks (owner, priority, due date) and export to Notion/Trello/Asana/CSV.
+- [ ] (46) Trust & Explainability — Show why-this-plan, assumptions, limits, and section-level confidence.
+- [ ] (47) Output Modes — Add executive one-pager (client-ready/PDF) and team mode (detailed checklist) views.
+- [ ] (48) Product KPI Instrumentation — Track TTV, save rate, regenerate rate, feedback score, export rate.
+
 ## Docs & Architecture
 - [ ] (29) README Feature List — Populate README features with current capabilities; link diagram.
 - [ ] (30) Architecture Diagram — High-level diagram (frontends → backend → providers) in `docs/`.

@@ -50,6 +50,7 @@ class SearchProvider extends ChangeNotifier {
   DateTime? lastUpdated;
   bool _isOffline = false;
   String? lastQuery;
+  Map<String, String?>? _lastContext;
   final SharedPreferences? _prefs;
   List<ChatMessage> messages = [];
   // Draft prompt temporarily set when user chooses to edit a previous message.
@@ -124,7 +125,7 @@ class SearchProvider extends ChangeNotifier {
     return type == ErrorType.network || type == ErrorType.timeout;
   }
 
-  Future<void> search(String query) async {
+  Future<void> search(String query, {Map<String, String?>? context}) async {
     final analytics = AnalyticsManager();
     final stopwatch = Stopwatch()..start();
 
@@ -139,6 +140,7 @@ class SearchProvider extends ChangeNotifier {
     }
 
     lastQuery = query.trim();
+    _lastContext = context;
     final deliveryMode = _resolveDeliveryMode(lastQuery!);
     _appendUser(lastQuery!);
     loading = true;
@@ -171,7 +173,7 @@ class SearchProvider extends ChangeNotifier {
     ErrorType? lastType;
     while (attempt <= maxRetries) {
       try {
-        final r = await _api.searchVideos(query);
+        final r = await _api.searchVideos(query, context: context);
         result = r;
         lastUpdated = DateTime.now();
         error = null;
@@ -232,7 +234,8 @@ class SearchProvider extends ChangeNotifier {
   }
 
   // Streaming variant: progressively updates steps, then appends video at the end.
-  Future<void> searchStreaming(String query) async {
+  Future<void> searchStreaming(String query,
+      {Map<String, String?>? context}) async {
     // Supprimer tous les messages sauf la bulle de bienvenue (assistantText)
     if (messages.isNotEmpty &&
         messages.first.kind == ChatKind.text &&
@@ -256,6 +259,7 @@ class SearchProvider extends ChangeNotifier {
     }
 
     lastQuery = query.trim();
+    _lastContext = context;
     _appendUser(lastQuery!);
     loading = true;
     error = null;
@@ -290,7 +294,7 @@ class SearchProvider extends ChangeNotifier {
         stepsMsgIndex; // index in messages list for the streaming steps message
 
     try {
-      final stream = _api.searchVideosStream(lastQuery!);
+      final stream = _api.searchVideosStream(lastQuery!, context: context);
       await for (final evt in stream) {
         switch (evt.type) {
           case 'meta':
@@ -461,7 +465,7 @@ class SearchProvider extends ChangeNotifier {
     }
 
     try {
-      final newResult = await _api.searchVideos(q);
+      final newResult = await _api.searchVideos(q, context: _lastContext);
       result = newResult;
       lastUpdated = DateTime.now();
       error = null;
@@ -569,7 +573,7 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
     try {
-      final newResult = await _api.searchVideos(q);
+      final newResult = await _api.searchVideos(q, context: _lastContext);
       result = newResult;
       lastUpdated = DateTime.now();
       error = null;

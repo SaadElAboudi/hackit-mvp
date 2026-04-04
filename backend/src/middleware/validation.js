@@ -36,7 +36,33 @@ export function validateSearchPayload(body) {
     throw badRequest('summaryLength must be one of: tldr, standard, deep', { field: 'summaryLength' });
   }
 
-  return { query, useGemini, summaryLength };
+  const rawContext = body.context && typeof body.context === 'object' ? body.context : {};
+  const clientType = rawContext.clientType === undefined ? '' : String(rawContext.clientType).trim();
+  const budget = rawContext.budget === undefined ? '' : String(rawContext.budget).trim();
+  const deadline = rawContext.deadline === undefined ? '' : String(rawContext.deadline).trim();
+  const maturity = rawContext.maturity === undefined ? '' : String(rawContext.maturity).trim();
+
+  if (clientType.length > 80) {
+    throw badRequest('context.clientType is too long', { field: 'context.clientType', max: 80 });
+  }
+  if (budget.length > 80) {
+    throw badRequest('context.budget is too long', { field: 'context.budget', max: 80 });
+  }
+  if (deadline.length > 80) {
+    throw badRequest('context.deadline is too long', { field: 'context.deadline', max: 80 });
+  }
+  if (maturity.length > 80) {
+    throw badRequest('context.maturity is too long', { field: 'context.maturity', max: 80 });
+  }
+
+  const context = {
+    clientType: clientType || null,
+    budget: budget || null,
+    deadline: deadline || null,
+    maturity: maturity || null,
+  };
+
+  return { query, useGemini, summaryLength, context };
 }
 
 export function validateFeedbackPayload(body) {

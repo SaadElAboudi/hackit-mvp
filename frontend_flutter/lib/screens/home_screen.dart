@@ -29,6 +29,9 @@ class HomeScreen extends StatelessWidget {
             onSearch: (query) =>
                 Provider.of<SearchProvider>(context, listen: false)
                     .searchStreaming(query),
+            onSearchWithContext: (query, contextData) =>
+                Provider.of<SearchProvider>(context, listen: false)
+                    .searchStreaming(query, context: contextData),
             disabled: Provider.of<SearchProvider>(context).loading,
             onRegenerate: Provider.of<SearchProvider>(context, listen: false)
                 .regenerateLast,
