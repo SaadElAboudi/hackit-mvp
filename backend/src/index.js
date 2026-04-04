@@ -254,6 +254,102 @@ function heuristicSummary({ desiredSteps } = {}) {
     return 'produire';
   }
 
+  function classifyImpactLabel(actionText = '', mode = 'produire') {
+    const t = String(actionText || '').toLowerCase();
+    if (/bloquant|critique|urgent|risque|incident|deadline|client/.test(t)) return 'élevé';
+    if (/validation|revue|qualit|test|mesure|suivi/.test(t)) return 'moyen';
+    if (mode === 'audit' && /quick win|correct/.test(t)) return 'élevé';
+    return 'moyen';
+  }
+
+  function classifyEffortLabel(actionText = '', mode = 'produire') {
+    const t = String(actionText || '').toLowerCase();
+    if (/atelier|refonte|migration|impl[eé]ment|stabilisation|structurant/.test(t)) return 'élevé';
+    if (/validation|revue|message|compte.?rendu|relance/.test(t)) return 'faible';
+    if (mode === 'audit' && /diagnostic/.test(t)) return 'moyen';
+    return 'moyen';
+  }
+
+  function actionPriorityScore({ impactLabel, effortLabel }) {
+    const impact = impactLabel === 'élevé' ? 3 : impactLabel === 'moyen' ? 2 : 1;
+    const effortPenalty = effortLabel === 'élevé' ? 3 : effortLabel === 'moyen' ? 2 : 1;
+    return (impact * 30) - (effortPenalty * 12);
+  }
+
+  function buildActionMatrix(nextActions = [], mode = 'produire') {
+    const normalized = (Array.isArray(nextActions) ? nextActions : [])
+      .map((a) => String(a || '').trim())
+      .filter(Boolean);
+
+    const ranked = normalized.map((action) => {
+      const impact = classifyImpactLabel(action, mode);
+      const effort = classifyEffortLabel(action, mode);
+      const score = actionPriorityScore({ impactLabel: impact, effortLabel: effort });
+      return { action, impact, effort, score };
+    }).sort((a, b) => b.score - a.score);
+
+    return ranked.map((item, index) => (
+      `${index + 1}. ${item.action} (impact: ${item.impact}, effort: ${item.effort}, score: ${item.score})`
+    ));
+  }
+
+  function buildQualityAssessment({ mode, objective, scope, risks, nextActions, timeline, dependencies, acceptanceCriteria, clientMessage }) {
+    const checks = [
+      { label: 'Objectif explicite', ok: Array.isArray(objective) && objective.length > 0 },
+      { label: 'Périmètre défini', ok: Array.isArray(scope) && scope.length > 0 },
+      { label: 'Risques identifiés', ok: Array.isArray(risks) && risks.length > 0 },
+      { label: 'Actions concrètes', ok: Array.isArray(nextActions) && nextActions.length >= 2 },
+      { label: 'Timeline présente', ok: Array.isArray(timeline) && timeline.length >= 2 },
+      { label: 'Dépendances explicites', ok: Array.isArray(dependencies) && dependencies.length > 0 },
+      { label: 'Critères d’acceptation', ok: Array.isArray(acceptanceCriteria) && acceptanceCriteria.length >= 2 },
+      { label: 'Message client prêt', ok: Array.isArray(clientMessage) && clientMessage.length >= 2 },
+    ];
+
+    const passed = checks.filter((c) => c.ok).length;
+    const coherenceScore = Math.round((passed / checks.length) * 100);
+    const coherenceChecks = checks.filter((c) => c.ok).map((c) => `OK: ${c.label}`);
+    const coherenceIssues = checks.filter((c) => !c.ok).map((c) => `À renforcer: ${c.label}`);
+
+    const baseImpactByMode = { cadrer: 68, produire: 76, communiquer: 64, audit: 82 };
+    const impactScore = Math.min(
+      100,
+      (baseImpactByMode[mode] || 72)
+      + Math.min((Array.isArray(nextActions) ? nextActions.length : 0), 4) * 4
+      + Math.min((Array.isArray(acceptanceCriteria) ? acceptanceCriteria.length : 0), 4) * 3
+    );
+
+    const baseEffortByMode = { cadrer: 34, produire: 58, communiquer: 28, audit: 72 };
+    const effortScore = Math.min(
+      100,
+      (baseEffortByMode[mode] || 50) + Math.min((Array.isArray(dependencies) ? dependencies.length : 0), 4) * 4
+    );
+
+    const overall = Math.round((impactScore * 0.45) + ((100 - effortScore) * 0.2) + (coherenceScore * 0.35));
+    const priorityIndex = Math.round((impactScore * 0.6) - (effortScore * 0.25) + (coherenceScore * 0.2));
+    const priority = priorityIndex >= 65 ? 'haute' : priorityIndex >= 45 ? 'moyenne' : 'basse';
+
+    const qualitySummary = [
+      `Score global: ${overall}/100`,
+      `Impact estimé: ${impactScore}/100`,
+      `Effort estimé: ${effortScore}/100`,
+      `Cohérence: ${coherenceScore}/100`,
+      `Priorité recommandée: ${priority}`,
+    ];
+
+    return {
+      quality: {
+        overall,
+        impactScore,
+        effortScore,
+        coherenceScore,
+        priority,
+      },
+      qualitySummary,
+      coherenceChecks,
+      coherenceIssues,
+    };
+  }
+
   function buildDeliveryPlan({ mode, query, title, steps }) {
     const items = Array.isArray(steps) ? steps.filter(Boolean).map((s) => String(s).trim()).filter(Boolean) : [];
     const pick = (from, count) => items.slice(from, from + count);
@@ -358,6 +454,19 @@ function heuristicSummary({ desiredSteps } = {}) {
       ];
     }
 
+    const actionMatrix = buildActionMatrix(nextActions, mode);
+    const qualityAssessment = buildQualityAssessment({
+      mode,
+      objective,
+      scope,
+      risks,
+      nextActions,
+      timeline,
+      dependencies,
+      acceptanceCriteria,
+      clientMessage,
+    });
+
     return {
       mode,
       objective,
@@ -369,6 +478,8 @@ function heuristicSummary({ desiredSteps } = {}) {
       dependencies,
       acceptanceCriteria,
       clientMessage,
+      actionMatrix,
+      ...qualityAssessment,
     };
   }
 

@@ -38,11 +38,12 @@ class SummaryView extends StatelessWidget {
     if (plan != null && plan.isNotEmpty) {
       List<String> listOf(String key) {
         final value = plan[key];
-        if (value is List)
+        if (value is List) {
           return value
               .map((e) => e.toString())
               .where((e) => e.trim().isNotEmpty)
               .toList();
+        }
         if (value is String && value.trim().isNotEmpty) return [value.trim()];
         return const <String>[];
       }
@@ -59,6 +60,14 @@ class SummaryView extends StatelessWidget {
             title: "Critères d'acceptation",
             items: listOf('acceptanceCriteria')),
         _PlanSection(title: 'Message client', items: listOf('clientMessage')),
+        _PlanSection(
+            title: 'Priorisation impact/effort', items: listOf('actionMatrix')),
+        _PlanSection(title: 'Score qualité', items: listOf('qualitySummary')),
+        _PlanSection(
+            title: 'Vérifications de cohérence',
+            items: listOf('coherenceChecks')),
+        _PlanSection(
+            title: 'Alertes de cohérence', items: listOf('coherenceIssues')),
       ].where((section) => section.items.isNotEmpty).toList();
 
       if (fromPlan.isNotEmpty) return fromPlan;
@@ -365,6 +374,10 @@ IconData? _iconForSection(String title) {
     'Dépendances': Icons.link_rounded,
     "Critères d'acceptation": Icons.check_circle_outline_rounded,
     'Message client': Icons.chat_bubble_outline_rounded,
+    'Priorisation impact/effort': Icons.balance_rounded,
+    'Score qualité': Icons.auto_graph_rounded,
+    'Vérifications de cohérence': Icons.fact_check_rounded,
+    'Alertes de cohérence': Icons.report_problem_outlined,
     'Objectif et contexte': Icons.flag_rounded,
     'Risques et contraintes': Icons.warning_amber_rounded,
     'Définition du livrable': Icons.description_rounded,
