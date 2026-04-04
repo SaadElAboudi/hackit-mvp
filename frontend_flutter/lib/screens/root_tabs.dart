@@ -76,21 +76,18 @@ class _RootTabsState extends State<RootTabs> {
     );
   }
 
-  Future<bool> _onWillPop() async {
-    final currentNavigator = _navigatorKeys[_index].currentState;
-    if (currentNavigator != null && currentNavigator.canPop()) {
-      currentNavigator.pop();
-      return false;
-    }
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
+        if (didPop) return;
+        final currentNavigator = _navigatorKeys[_index].currentState;
+        if (currentNavigator != null && currentNavigator.canPop()) {
+          currentNavigator.pop();
+        }
+      },
       child: Scaffold(
-        backgroundColor: Colors.white,
         body: IndexedStack(
           index: _index,
           children: List.generate(2, (i) => _buildTabNavigator(i)),

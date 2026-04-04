@@ -4,7 +4,7 @@ import 'app_extensions.dart';
 class AppTheme {
   static ThemeData _buildTheme(Brightness brightness) {
     final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF0B7285),
+      seedColor: const Color(0xFF1A56DB),
       brightness: brightness,
     );
 

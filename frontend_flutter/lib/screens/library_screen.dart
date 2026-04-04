@@ -13,20 +13,12 @@ class LibraryScreen extends StatelessWidget {
     final favorites = context.watch<HistoryFavoritesProvider>().favorites;
     final history = context.watch<HistoryFavoritesProvider>().history;
     final lessons = context.watch<LessonsProvider>().lessons;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 2,
-        centerTitle: true,
-        title: const Text(
-          'Pipeline',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF222B45),
-          ),
-        ),
+        title: const Text('Pipeline'),
+        centerTitle: false,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -38,11 +30,13 @@ class LibraryScreen extends StatelessWidget {
           ),
           ...favorites.take(8).map((item) => Card(
                 child: ListTile(
-                  leading: const Icon(Icons.star_rounded, color: Colors.amber),
+                  leading:
+                      Icon(Icons.star_rounded, color: Colors.amber.shade600),
                   title: Text(item.title.isEmpty ? 'Sans titre' : item.title),
-                  subtitle: Text(item.videoUrl ?? item.id),
+                  subtitle: Text(item.videoUrl ?? item.id,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    icon: Icon(Icons.delete_outline, color: scheme.error),
                     onPressed: () {
                       context.read<HistoryFavoritesProvider>().toggleFavorite(
                             videoId: item.id,
@@ -61,12 +55,17 @@ class LibraryScreen extends StatelessWidget {
           ),
           ...history.take(8).map((item) => Card(
                 child: ListTile(
-                  leading: const Icon(Icons.history_rounded, color: Colors.blueAccent),
-                  title: Text((item.title?.isNotEmpty ?? false) ? item.title! : item.query),
-                  subtitle: Text(item.query),
+                  leading: Icon(Icons.history_rounded, color: scheme.primary),
+                  title: Text((item.title?.isNotEmpty ?? false)
+                      ? item.title!
+                      : item.query),
+                  subtitle: Text(item.query,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => context.read<HistoryFavoritesProvider>().removeHistory(item.id),
+                    icon: Icon(Icons.delete_outline, color: scheme.error),
+                    onPressed: () => context
+                        .read<HistoryFavoritesProvider>()
+                        .removeHistory(item.id),
                   ),
                 ),
               )),
@@ -78,9 +77,11 @@ class LibraryScreen extends StatelessWidget {
           ),
           ...lessons.take(8).map((lesson) => Card(
                 child: ListTile(
-                  leading: const Icon(Icons.menu_book_rounded, color: Color(0xFF00C48C)),
+                  leading:
+                      Icon(Icons.menu_book_rounded, color: scheme.tertiary),
                   title: Text(lesson.title),
-                  subtitle: Text(lesson.videoUrl),
+                  subtitle: Text(lesson.videoUrl,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
@@ -108,28 +109,41 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6, top: 6),
+      padding: const EdgeInsets.only(bottom: 8, top: 12),
       child: Row(
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: scheme.onSurface,
+              letterSpacing: -0.2,
+            ),
           ),
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF3F7),
+              color: scheme.primaryContainer.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(999),
             ),
-            child: Text('$count'),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: scheme.onPrimaryContainer,
+              ),
+            ),
           ),
           const Spacer(),
           if (count == 0)
             Text(
               emptyLabel,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
             ),
         ],
       ),

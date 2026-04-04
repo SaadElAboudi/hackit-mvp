@@ -20,15 +20,16 @@ class UserBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
-    // ...existing code...
+    final scheme = Theme.of(context).colorScheme;
     final bubble = Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
+      margin: const EdgeInsets.only(top: 2, bottom: 2),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.grey.shade300,
-          width: 1,
+        color: scheme.primary,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(5),
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -36,9 +37,9 @@ class UserBubble extends StatelessWidget {
         text,
         style: TextStyle(
           fontSize: SizeConfig.adaptiveFontSize(15),
-          height: 1.32,
+          height: 1.35,
           fontWeight: FontWeight.w500,
-          color: Colors.black,
+          color: scheme.onPrimary,
         ),
       ),
     );
@@ -101,22 +102,27 @@ class AssistantContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
-    // ...existing code...
+    final scheme = Theme.of(context).colorScheme;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
+        margin: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: scheme.surfaceContainerLow,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(5),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
           border: Border.all(
-            color: Colors.grey.shade300,
+            color: scheme.outlineVariant.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: DefaultTextStyle(
-          style: const TextStyle(color: Colors.black),
+          style: TextStyle(color: scheme.onSurface),
           child: child,
         ),
       ),

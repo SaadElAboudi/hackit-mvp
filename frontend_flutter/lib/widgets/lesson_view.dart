@@ -49,6 +49,7 @@ class LessonView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lessons = context.watch<LessonsProvider>();
+    final scheme = Theme.of(context).colorScheme;
     final alreadySaved =
         lessons.lessons.any((l) => l.title == title && l.videoUrl == videoUrl);
     final canSave =
@@ -56,220 +57,210 @@ class LessonView extends StatelessWidget {
     final saveError = lessons.error;
 
     return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade300, width: 1),
-              ),
-              padding: const EdgeInsets.all(16.0),
-              child: SummaryView(
-                title: title,
-                steps: steps,
-                source: source,
-                deliveryMode: deliveryMode,
-                deliveryPlan: deliveryPlan,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SummaryView(
+            title: title,
+            steps: steps,
+            source: source,
+            deliveryMode: deliveryMode,
+            deliveryPlan: deliveryPlan,
+          ),
+          SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
             ),
-            SizedBox(height: 18),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade300, width: 1),
-              ),
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.ondemand_video_rounded,
-                          color: Colors.blueGrey, size: 22),
-                      SizedBox(width: 8),
-                      Text('Vidéo',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  YouTubeEmbed(videoUrl: videoUrl),
-                  SizedBox(height: 8),
-                  VideoCard(title: title, videoUrl: videoUrl),
-                ],
-              ),
-            ),
-            if (chapters != null && chapters!.isNotEmpty) ...[
-              SizedBox(height: 18),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300, width: 1),
-                ),
-                padding: const EdgeInsets.all(16.0),
-                child: ChaptersView(
-                  chapters: chaptersFromAny(chapters!),
-                  videoUrl: videoUrl,
-                ),
-              ),
-            ],
-            if (transcript != null && transcript!.isNotEmpty) ...[
-              SizedBox(height: 18),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300, width: 1),
-                ),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.notes_rounded,
-                            color: Colors.deepPurple, size: 22),
-                        SizedBox(width: 8),
-                        Text('Transcript',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                      ],
-                    ),
-                    SizedBox(height: 8),
-                    ...transcript!.map((t) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                          child:
-                              Text(t, style: TextStyle(color: Colors.black87)),
-                        )),
+                    Icon(Icons.ondemand_video_rounded,
+                        color: scheme.primary, size: 20),
+                    SizedBox(width: 8),
+                    Text('Vidéo',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 15,
+                            color: scheme.onSurface)),
                   ],
                 ),
-              ),
-            ],
-            SizedBox(height: 24),
+                SizedBox(height: 10),
+                YouTubeEmbed(videoUrl: videoUrl),
+                SizedBox(height: 8),
+                VideoCard(title: title, videoUrl: videoUrl),
+              ],
+            ),
+          ),
+          if (chapters != null && chapters!.isNotEmpty) ...[
+            SizedBox(height: 12),
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade300),
+                color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
               ),
+              padding: const EdgeInsets.all(16.0),
+              child: ChaptersView(
+                chapters: chaptersFromAny(chapters!),
+                videoUrl: videoUrl,
+              ),
+            ),
+          ],
+          if (transcript != null && transcript!.isNotEmpty) ...[
+            SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+              ),
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.bookmark_add_rounded,
-                          size: 18, color: Colors.grey.shade700),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Sauvegarde',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 15),
-                      ),
-                      const Spacer(),
-                      if (alreadySaved)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE9F9F2),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFF9ED9BF)),
-                          ),
-                          child: const Text(
-                            'Enregistrée',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF146C43),
-                            ),
-                          ),
-                        ),
+                      Icon(Icons.notes_rounded,
+                          color: scheme.secondary, size: 20),
+                      SizedBox(width: 8),
+                      Text('Transcript',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 15,
+                              color: scheme.onSurface)),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    alreadySaved
-                        ? 'Ce livrable est déjà dans ton pipeline.'
-                        : 'Ajoute cette réponse à ton pipeline pour la retrouver et la réutiliser rapidement.',
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                  ),
-                  if (!canSave && !alreadySaved) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      'Impossible d\'enregistrer: lien vidéo invalide.',
-                      style: TextStyle(color: Colors.red.shade700, fontSize: 12),
-                    ),
-                  ],
-                  if (saveError != null && saveError.trim().isNotEmpty && !alreadySaved) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      saveError,
-                      style: TextStyle(color: Colors.red.shade700, fontSize: 12),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      icon: lessons.loading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Icon(
-                              alreadySaved
-                                  ? Icons.check_rounded
-                                  : Icons.bookmark_add_rounded,
-                            ),
-                      label: Text(
-                        alreadySaved
-                          ? 'Livrable enregistré'
-                            : (lessons.loading
-                                ? 'Enregistrement...'
-                            : 'Enregistrer le livrable'),
-                      ),
-                      onPressed: (!alreadySaved && canSave && !lessons.loading)
-                          ? () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              final created = await lessons.saveFromChat(
-                                title: title,
-                                steps: steps,
-                                videoUrl: videoUrl,
-                              );
-                              if (created != null) {
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Livrable enregistré.')),
-                                );
-                              } else {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(lessons.error ??
-                                        'Échec de l\'enregistrement'),
-                                  ),
-                                );
-                              }
-                            }
-                          : null,
-                    ),
-                  ),
+                  SizedBox(height: 8),
+                  ...transcript!.map((t) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2.0),
+                        child: Text(t, style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.8))),
+                      )),
                 ],
               ),
             ),
           ],
-        ),
+          SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.bookmark_add_rounded,
+                        size: 18, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Sauvegarde',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 15,
+                          color: scheme.onSurface),
+                    ),
+                    const Spacer(),
+                    if (alreadySaved)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: scheme.primaryContainer.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'Enregistrée',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  alreadySaved
+                      ? 'Ce livrable est déjà dans ton pipeline.'
+                      : 'Ajoute cette réponse à ton pipeline pour la retrouver et la réutiliser rapidement.',
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+                ),
+                if (!canSave && !alreadySaved) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Impossible d\'enregistrer: lien vidéo invalide.',
+                    style: TextStyle(color: scheme.error, fontSize: 12),
+                  ),
+                ],
+                if (saveError != null && saveError.trim().isNotEmpty && !alreadySaved) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    saveError,
+                    style: TextStyle(color: scheme.error, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    icon: lessons.loading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            alreadySaved
+                                ? Icons.check_rounded
+                                : Icons.bookmark_add_rounded,
+                          ),
+                    label: Text(
+                      alreadySaved
+                        ? 'Livrable enregistré'
+                          : (lessons.loading
+                              ? 'Enregistrement...'
+                          : 'Enregistrer le livrable'),
+                    ),
+                    onPressed: (!alreadySaved && canSave && !lessons.loading)
+                        ? () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final created = await lessons.saveFromChat(
+                              title: title,
+                              steps: steps,
+                              videoUrl: videoUrl,
+                            );
+                            if (created != null) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                    content: Text('Livrable enregistré.')),
+                              );
+                            } else {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(lessons.error ??
+                                      'Échec de l\'enregistrement'),
+                                ),
+                              );
+                            }
+                          }
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

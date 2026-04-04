@@ -38,7 +38,11 @@ class SummaryView extends StatelessWidget {
     if (plan != null && plan.isNotEmpty) {
       List<String> listOf(String key) {
         final value = plan[key];
-        if (value is List) return value.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList();
+        if (value is List)
+          return value
+              .map((e) => e.toString())
+              .where((e) => e.trim().isNotEmpty)
+              .toList();
         if (value is String && value.trim().isNotEmpty) return [value.trim()];
         return const <String>[];
       }
@@ -51,7 +55,9 @@ class SummaryView extends StatelessWidget {
         _PlanSection(title: 'Timeline', items: listOf('timeline')),
         _PlanSection(title: 'Effort', items: listOf('effort')),
         _PlanSection(title: 'Dependances', items: listOf('dependencies')),
-        _PlanSection(title: 'Criteres d\'acceptation', items: listOf('acceptanceCriteria')),
+        _PlanSection(
+            title: 'Criteres d\'acceptation',
+            items: listOf('acceptanceCriteria')),
         _PlanSection(title: 'Message client', items: listOf('clientMessage')),
       ].where((section) => section.items.isNotEmpty).toList();
 
@@ -71,28 +77,42 @@ class SummaryView extends StatelessWidget {
     switch (deliveryMode) {
       case 'cadrer':
         return [
-          _PlanSection(title: 'Objectif et contexte', items: cleanSteps.take(2).toList()),
-          _PlanSection(title: 'Risques et contraintes', items: cleanSteps.skip(2).take(2).toList()),
-          _PlanSection(title: 'Definition of done', items: cleanSteps.skip(4).toList()),
+          _PlanSection(
+              title: 'Objectif et contexte',
+              items: cleanSteps.take(2).toList()),
+          _PlanSection(
+              title: 'Risques et contraintes',
+              items: cleanSteps.skip(2).take(2).toList()),
+          _PlanSection(
+              title: 'Definition of done', items: cleanSteps.skip(4).toList()),
         ].where((section) => section.items.isNotEmpty).toList();
       case 'communiquer':
         return [
-          _PlanSection(title: 'Message principal', items: cleanSteps.take(2).toList()),
-          _PlanSection(title: 'Points a partager', items: cleanSteps.skip(2).take(2).toList()),
-          _PlanSection(title: 'Call to action', items: cleanSteps.skip(4).toList()),
+          _PlanSection(
+              title: 'Message principal', items: cleanSteps.take(2).toList()),
+          _PlanSection(
+              title: 'Points a partager',
+              items: cleanSteps.skip(2).take(2).toList()),
+          _PlanSection(
+              title: 'Call to action', items: cleanSteps.skip(4).toList()),
         ].where((section) => section.items.isNotEmpty).toList();
       case 'audit':
         return [
           _PlanSection(title: 'Constats', items: cleanSteps.take(2).toList()),
-          _PlanSection(title: 'Quick wins', items: cleanSteps.skip(2).take(2).toList()),
-          _PlanSection(title: 'Plan 7 jours', items: cleanSteps.skip(4).toList()),
+          _PlanSection(
+              title: 'Quick wins', items: cleanSteps.skip(2).take(2).toList()),
+          _PlanSection(
+              title: 'Plan 7 jours', items: cleanSteps.skip(4).toList()),
         ].where((section) => section.items.isNotEmpty).toList();
       case 'produire':
       default:
         return [
           _PlanSection(title: 'Priorites', items: cleanSteps.take(2).toList()),
-          _PlanSection(title: 'Checklist execution', items: cleanSteps.skip(2).take(3).toList()),
-          _PlanSection(title: 'Livrable final', items: cleanSteps.skip(5).toList()),
+          _PlanSection(
+              title: 'Checklist execution',
+              items: cleanSteps.skip(2).take(3).toList()),
+          _PlanSection(
+              title: 'Livrable final', items: cleanSteps.skip(5).toList()),
         ].where((section) => section.items.isNotEmpty).toList();
     }
   }
@@ -118,7 +138,7 @@ class SummaryView extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              const Color(0xFFF7F7F4),
+              scheme.surfaceContainerLow,
               scheme.surface,
             ],
             begin: Alignment.topLeft,
@@ -137,7 +157,7 @@ class SummaryView extends StatelessWidget {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2EA),
+                    color: scheme.primaryContainer.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   padding:
@@ -145,7 +165,7 @@ class SummaryView extends StatelessWidget {
                   child: Text(
                     _modeLabel,
                     style: TextStyle(
-                      color: scheme.primary,
+                      color: scheme.onPrimaryContainer,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -191,85 +211,91 @@ class SummaryView extends StatelessWidget {
                         ),
                         SizedBox(height: AdaptiveSpacing.small),
                         ...sectionEntry.value.items.asMap().entries.map(
-                          (entry) => Padding(
-                      padding: EdgeInsets.only(
-                        bottom: AdaptiveSpacing.tiny + 2,
-                      ),
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0, end: 1),
-                        duration: Duration(
-                          milliseconds:
-                              320 + (sectionEntry.key * 70) + (entry.key * 50),
-                        ),
-                        curve: Curves.easeOutCubic,
-                        builder: (context, t, child) => Opacity(
-                          opacity: t,
-                          child: Transform.translate(
-                            offset: Offset(0, (1 - t) * 12),
-                            child: child,
-                          ),
-                        ),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color:
-                                  scheme.outlineVariant.withValues(alpha: 0.25),
-                              width: 1,
+                              (entry) => Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: AdaptiveSpacing.tiny + 2,
+                                ),
+                                child: TweenAnimationBuilder<double>(
+                                  tween: Tween(begin: 0, end: 1),
+                                  duration: Duration(
+                                    milliseconds: 320 +
+                                        (sectionEntry.key * 70) +
+                                        (entry.key * 50),
+                                  ),
+                                  curve: Curves.easeOutCubic,
+                                  builder: (context, t, child) => Opacity(
+                                    opacity: t,
+                                    child: Transform.translate(
+                                      offset: Offset(0, (1 - t) * 12),
+                                      child: child,
+                                    ),
+                                  ),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut,
+                                    decoration: BoxDecoration(
+                                      color: scheme.surfaceContainerLowest,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: scheme.outlineVariant
+                                            .withValues(alpha: 0.25),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    padding: EdgeInsets.fromLTRB(
+                                      AdaptiveSpacing.small,
+                                      AdaptiveSpacing.small + 2,
+                                      AdaptiveSpacing.small,
+                                      AdaptiveSpacing.small + 4,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          width: 22.0,
+                                          height: 22.0,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                const Color(0xFF111111),
+                                                scheme.primary
+                                                    .withValues(alpha: 0.85),
+                                              ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            '${entry.key + 1}',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12.0,
+                                            ),
+                                          ),
+                                        ),
+                                        SizedBox(width: AdaptiveSpacing.small),
+                                        Expanded(
+                                          child: Text(
+                                            entry.value,
+                                            style: TextStyle(
+                                              fontSize:
+                                                  SizeConfig.adaptiveFontSize(
+                                                      14),
+                                              height: 1.32,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                          padding: EdgeInsets.fromLTRB(
-                            AdaptiveSpacing.small,
-                            AdaptiveSpacing.small + 2,
-                            AdaptiveSpacing.small,
-                            AdaptiveSpacing.small + 4,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 22.0,
-                                height: 22.0,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      const Color(0xFF111111),
-                                      scheme.primary.withValues(alpha: 0.85),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  '${entry.key + 1}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12.0,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(width: AdaptiveSpacing.small),
-                              Expanded(
-                                child: Text(
-                                  entry.value,
-                                  style: TextStyle(
-                                    fontSize: SizeConfig.adaptiveFontSize(14),
-                                    height: 1.32,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                        ),
                       ],
                     ),
                   ),
@@ -278,7 +304,7 @@ class SummaryView extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF4F6F8),
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Text(

@@ -21,20 +21,7 @@ class HomeScreen extends StatelessWidget {
     return AppScaffold(
       title: 'Hackit',
       subtitle: 'Du brief client au livrable actionnable',
-      leadingIcon: Icons.chat_bubble_rounded,
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.tips_and_updates_outlined),
-          tooltip: 'Conseils',
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text(
-                      'Astuce: choisis un mode (Cadrer/Produire/Communiquer) puis colle le brief client.')),
-            );
-          },
-        ),
-      ],
+      leadingIcon: Icons.bolt_rounded,
       child: Column(
         children: [
           Expanded(child: _ChatMessagesList()),
@@ -46,7 +33,8 @@ class HomeScreen extends StatelessWidget {
             onRegenerate: Provider.of<SearchProvider>(context, listen: false)
                 .regenerateLast,
             onEditLast: () {
-              final provider = Provider.of<SearchProvider>(context, listen: false);
+              final provider =
+                  Provider.of<SearchProvider>(context, listen: false);
               final last = provider.lastQuery;
               if (last != null && last.trim().isNotEmpty) {
                 provider.setDraft(last);
@@ -98,119 +86,83 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         final deliveryMode = m.content['deliveryMode']?.toString();
         final rawDeliveryPlan = m.content['deliveryPlan'];
         final deliveryPlan = rawDeliveryPlan is Map
-          ? Map<String, dynamic>.from(rawDeliveryPlan)
-          : null;
-        return Card(
-          elevation: 5,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: LessonView(
-              title: title,
-              steps: steps,
-              videoUrl: videoUrl,
-              source: source,
-              deliveryMode: deliveryMode,
-              deliveryPlan: deliveryPlan,
-            ),
+            ? Map<String, dynamic>.from(rawDeliveryPlan)
+            : null;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: LessonView(
+            title: title,
+            steps: steps,
+            videoUrl: videoUrl,
+            source: source,
+            deliveryMode: deliveryMode,
+            deliveryPlan: deliveryPlan,
           ),
         );
       case ChatKind.text:
-        return Card(
-          elevation: 5,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: AssistantContainer(
-              child: Text(
-                (m.content['text'] ?? '') as String,
-                style: const TextStyle(
-                    fontSize: 17,
-                    color: Colors.black,
-                    fontWeight: FontWeight.w500),
-              ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: AssistantContainer(
+            child: Text(
+              (m.content['text'] ?? '') as String,
+              style: const TextStyle(fontSize: 16, height: 1.45),
             ),
           ),
         );
       case ChatKind.citations:
-        return Card(
-          elevation: 5,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: CitationsView(
-              citations: ((m.content['citations'] as List?) ?? [])
-                  .map((c) {
-                    if (c is Citation) return c;
-                    if (c is Map<String, dynamic>) return Citation.fromMap(c);
-                    return null;
-                  })
-                  .whereType<Citation>()
-                  .toList(),
-            ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: CitationsView(
+            citations: ((m.content['citations'] as List?) ?? [])
+                .map((c) {
+                  if (c is Citation) return c;
+                  if (c is Map<String, dynamic>) return Citation.fromMap(c);
+                  return null;
+                })
+                .whereType<Citation>()
+                .toList(),
           ),
         );
       case ChatKind.chapters:
-        return Card(
-          elevation: 5,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: ChaptersView(
-              chapters:
-                  chaptersFromAny(m.content['chapters'] ?? const <dynamic>[]),
-              videoUrl: (m.content['videoUrl'] ?? '') as String,
-            ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: ChaptersView(
+            chapters:
+                chaptersFromAny(m.content['chapters'] ?? const <dynamic>[]),
+            videoUrl: (m.content['videoUrl'] ?? '') as String,
           ),
         );
       case ChatKind.error:
-        return Card(
-          elevation: 5,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          color: Colors.white,
-          margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    (m.content['message'] ?? 'Erreur') as String,
-                    style: const TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.bold),
-                  ),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline_rounded,
+                  color: Colors.red.shade400, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  (m.content['message'] ?? 'Erreur') as String,
+                  style: TextStyle(
+                      color: Colors.red.shade600, fontWeight: FontWeight.w500),
                 ),
-                const SizedBox(width: 12),
-                Builder(
-                  builder: (context) {
-                    final lastQ = provider.lastQuery;
-                    return TextButton.icon(
-                      onPressed:
-                          (provider.loading || lastQ == null || lastQ.isEmpty)
-                              ? null
-                              : () => provider.search(lastQ),
-                      icon: const Icon(Icons.refresh_rounded,
-                          color: Colors.blueAccent),
-                      label: const Text('Réessayer'),
-                    );
-                  },
-                )
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Builder(
+                builder: (context) {
+                  final lastQ = provider.lastQuery;
+                  return TextButton.icon(
+                    onPressed:
+                        (provider.loading || lastQ == null || lastQ.isEmpty)
+                            ? null
+                            : () => provider.search(lastQ),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Réessayer'),
+                  );
+                },
+              )
+            ],
           ),
         );
       default:
@@ -267,24 +219,16 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
         final text = (m.content['text'] ?? '') as String;
         if (text.isNotEmpty) {
           children.add(
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-              color: Colors.white,
-              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-              child: Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: UserBubble(
-                  text: text,
-                  onEdit:
-                      provider.loading ? null : () => provider.setDraft(text),
-                  onRegenerate: provider.loading
-                      ? null
-                      : () => provider.regenerateFor(text),
-                  disabled: provider.loading,
-                  textColor: Colors.black,
-                ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: UserBubble(
+                text: text,
+                onEdit: provider.loading ? null : () => provider.setDraft(text),
+                onRegenerate: provider.loading
+                    ? null
+                    : () => provider.regenerateFor(text),
+                disabled: provider.loading,
+                textColor: Colors.white,
               ),
             ),
           );
