@@ -49,14 +49,14 @@ class SummaryView extends StatelessWidget {
 
       final fromPlan = [
         _PlanSection(title: 'Objectif', items: listOf('objective')),
-        _PlanSection(title: 'Perimetre', items: listOf('scope')),
+        _PlanSection(title: 'Périmètre', items: listOf('scope')),
         _PlanSection(title: 'Risques', items: listOf('risks')),
         _PlanSection(title: 'Prochaines actions', items: listOf('nextActions')),
         _PlanSection(title: 'Timeline', items: listOf('timeline')),
         _PlanSection(title: 'Effort', items: listOf('effort')),
-        _PlanSection(title: 'Dependances', items: listOf('dependencies')),
+        _PlanSection(title: 'Dépendances', items: listOf('dependencies')),
         _PlanSection(
-            title: 'Criteres d\'acceptation',
+            title: "Critères d'acceptation",
             items: listOf('acceptanceCriteria')),
         _PlanSection(title: 'Message client', items: listOf('clientMessage')),
       ].where((section) => section.items.isNotEmpty).toList();
@@ -68,8 +68,8 @@ class SummaryView extends StatelessWidget {
     if (cleanSteps.isEmpty) {
       return const [
         _PlanSection(
-          title: 'Aucun plan genere',
-          items: ['Aucune etape exploitable n\'a ete retournee.'],
+          title: 'Aucun plan généré',
+          items: ["Aucune étape exploitable n'a été retournée."],
         ),
       ];
     }
@@ -84,14 +84,15 @@ class SummaryView extends StatelessWidget {
               title: 'Risques et contraintes',
               items: cleanSteps.skip(2).take(2).toList()),
           _PlanSection(
-              title: 'Definition of done', items: cleanSteps.skip(4).toList()),
+              title: 'Définition du livrable',
+              items: cleanSteps.skip(4).toList()),
         ].where((section) => section.items.isNotEmpty).toList();
       case 'communiquer':
         return [
           _PlanSection(
               title: 'Message principal', items: cleanSteps.take(2).toList()),
           _PlanSection(
-              title: 'Points a partager',
+              title: 'Points à partager',
               items: cleanSteps.skip(2).take(2).toList()),
           _PlanSection(
               title: 'Call to action', items: cleanSteps.skip(4).toList()),
@@ -107,9 +108,9 @@ class SummaryView extends StatelessWidget {
       case 'produire':
       default:
         return [
-          _PlanSection(title: 'Priorites', items: cleanSteps.take(2).toList()),
+          _PlanSection(title: 'Priorités', items: cleanSteps.take(2).toList()),
           _PlanSection(
-              title: 'Checklist execution',
+              title: 'Checklist exécution',
               items: cleanSteps.skip(2).take(3).toList()),
           _PlanSection(
               title: 'Livrable final', items: cleanSteps.skip(5).toList()),
@@ -201,13 +202,31 @@ class SummaryView extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          sectionEntry.value.title,
-                          style: TextStyle(
-                            fontSize: SizeConfig.adaptiveFontSize(15),
-                            fontWeight: FontWeight.w700,
-                            color: scheme.onSurface.withValues(alpha: 0.88),
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (_iconForSection(sectionEntry.value.title) !=
+                                null) ...[
+                              Icon(
+                                _iconForSection(sectionEntry.value.title)!,
+                                size: 14,
+                                color: scheme.primary.withValues(alpha: 0.85),
+                              ),
+                              const SizedBox(width: 5),
+                            ],
+                            Flexible(
+                              child: Text(
+                                sectionEntry.value.title,
+                                style: TextStyle(
+                                  fontSize: SizeConfig.adaptiveFontSize(15),
+                                  fontWeight: FontWeight.w700,
+                                  color:
+                                      scheme.onSurface.withValues(alpha: 0.88),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         SizedBox(height: AdaptiveSpacing.small),
                         ...sectionEntry.value.items.asMap().entries.map(
@@ -313,8 +332,8 @@ class SummaryView extends StatelessWidget {
                     : deliveryMode == 'cadrer'
                         ? 'Valide ce cadrage avec le client avant de lancer la production.'
                         : deliveryMode == 'audit'
-                            ? 'Commence par les quick wins a faible effort pour montrer de la traction.'
-                            : 'Vise un premier livrable partageable rapidement, puis itere.',
+                            ? 'Commence par les quick wins à faible effort pour montrer de la traction.'
+                            : 'Vise un premier livrable partageable rapidement, puis itère.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.35,
@@ -333,4 +352,32 @@ class _PlanSection {
   final String title;
   final List<String> items;
   const _PlanSection({required this.title, required this.items});
+}
+
+IconData? _iconForSection(String title) {
+  const map = <String, IconData>{
+    'Objectif': Icons.flag_rounded,
+    'Périmètre': Icons.crop_square_rounded,
+    'Risques': Icons.warning_amber_rounded,
+    'Prochaines actions': Icons.bolt_rounded,
+    'Timeline': Icons.calendar_today_rounded,
+    'Effort': Icons.speed_rounded,
+    'Dépendances': Icons.link_rounded,
+    "Critères d'acceptation": Icons.check_circle_outline_rounded,
+    'Message client': Icons.chat_bubble_outline_rounded,
+    'Objectif et contexte': Icons.flag_rounded,
+    'Risques et contraintes': Icons.warning_amber_rounded,
+    'Définition du livrable': Icons.description_rounded,
+    'Message principal': Icons.chat_bubble_outline_rounded,
+    'Points à partager': Icons.format_list_bulleted_rounded,
+    'Call to action': Icons.bolt_rounded,
+    'Constats': Icons.visibility_rounded,
+    'Quick wins': Icons.electric_bolt_rounded,
+    'Plan 7 jours': Icons.calendar_month_rounded,
+    'Priorités': Icons.priority_high_rounded,
+    'Checklist exécution': Icons.checklist_rounded,
+    'Livrable final': Icons.description_rounded,
+    'Aucun plan généré': Icons.info_outline_rounded,
+  };
+  return map[title];
 }

@@ -197,7 +197,7 @@ class _ChatInputState extends State<ChatInput> {
                               color: Colors.black),
                           decoration: InputDecoration(
                             hintText:
-                                'Decris le brief client ou le livrable a produire...',
+                                'Décris le brief client ou le livrable à produire…',
                             prefixIcon: const Icon(Icons.search_rounded),
                             suffixIcon: null,
                             filled: true,
@@ -229,7 +229,7 @@ class _ChatInputState extends State<ChatInput> {
                         children: [
                           Icon(Icons.send_rounded, size: 22),
                           SizedBox(width: 8),
-                            Text('Generer',
+                          Text('Générer',
                               style: TextStyle(fontWeight: FontWeight.w600)),
                         ],
                       ),
