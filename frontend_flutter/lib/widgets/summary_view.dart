@@ -33,6 +33,69 @@ class SummaryView extends StatelessWidget {
     }
   }
 
+  Widget? _buildStrategyCards(BuildContext ctx) {
+    final plan = deliveryPlan;
+    if (plan == null) return null;
+    final raw = plan['strategyVariants'];
+    if (raw is! List || raw.isEmpty) return null;
+    final variants = raw.whereType<Map>().toList();
+    if (variants.isEmpty) return null;
+    final scheme = Theme.of(ctx).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.compare_arrows_rounded,
+                size: 14, color: scheme.primary.withValues(alpha: 0.85)),
+            const SizedBox(width: 5),
+            Text(
+              '3 stratégies disponibles',
+              style: TextStyle(
+                fontSize: SizeConfig.adaptiveFontSize(15),
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface.withValues(alpha: 0.88),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: AdaptiveSpacing.small),
+        LayoutBuilder(
+          builder: (_, constraints) {
+            final wide = constraints.maxWidth > 480;
+            final cards = variants
+                .map((v) => _StrategyCard(variant: v, scheme: scheme))
+                .toList();
+            if (wide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: cards
+                    .asMap()
+                    .entries
+                    .map((e) => Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                                right: e.key < cards.length - 1 ? 8 : 0),
+                            child: e.value,
+                          ),
+                        ))
+                    .toList(),
+              );
+            }
+            return Column(
+              children: cards
+                  .map((c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8), child: c))
+                  .toList(),
+            );
+          },
+        ),
+        SizedBox(height: AdaptiveSpacing.medium),
+      ],
+    );
+  }
+
   List<_PlanSection> _buildSections() {
     final plan = deliveryPlan;
     if (plan != null && plan.isNotEmpty) {
@@ -205,6 +268,10 @@ class SummaryView extends StatelessWidget {
               ],
             ),
             SizedBox(height: AdaptiveSpacing.medium),
+            ...() {
+              final sc = _buildStrategyCards(context);
+              return sc != null ? [sc] : <Widget>[];
+            }(),
             ...sections.asMap().entries.map(
                   (sectionEntry) => Padding(
                     padding: EdgeInsets.only(bottom: AdaptiveSpacing.medium),
@@ -393,4 +460,146 @@ IconData? _iconForSection(String title) {
     'Aucun plan généré': Icons.info_outline_rounded,
   };
   return map[title];
+}
+
+class _StrategyCard extends StatelessWidget {
+  final Map variant;
+  final ColorScheme scheme;
+  const _StrategyCard({required this.variant, required this.scheme});
+
+  @override
+  Widget build(BuildContext context) {
+    final recommended = variant['recommended'] == true;
+    final gains = (variant['estimatedGains'] as List?)
+            ?.map((e) => e.toString())
+            .take(3)
+            .toList() ??
+        [];
+    final risks = (variant['risks'] as List?)
+            ?.map((e) => e.toString())
+            .take(2)
+            .toList() ??
+        [];
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: recommended
+            ? scheme.primaryContainer.withValues(alpha: 0.25)
+            : scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: recommended
+              ? scheme.primary.withValues(alpha: 0.4)
+              : scheme.outlineVariant.withValues(alpha: 0.3),
+          width: recommended ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(variant['emoji']?.toString() ?? '',
+                  style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  variant['label']?.toString() ?? '',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: recommended ? scheme.primary : scheme.onSurface,
+                  ),
+                ),
+              ),
+              if (recommended)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '★ Recommandé',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            variant['description']?.toString() ?? '',
+            style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: scheme.onSurface.withValues(alpha: 0.72)),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '⏱ ${variant['effort'] ?? ''}',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface.withValues(alpha: 0.7)),
+            ),
+          ),
+          if (gains.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...gains.map((g) => Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('✓ ',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.green.shade600,
+                              fontWeight: FontWeight.bold)),
+                      Expanded(
+                          child: Text(g,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurface
+                                      .withValues(alpha: 0.8)))),
+                    ],
+                  ),
+                )),
+          ],
+          if (risks.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ...risks.map((r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('⚠ ',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.orange.shade600)),
+                      Expanded(
+                          child: Text(r,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurface
+                                      .withValues(alpha: 0.65)))),
+                    ],
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
 }

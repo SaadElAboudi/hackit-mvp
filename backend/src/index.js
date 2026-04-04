@@ -371,6 +371,52 @@ function buildQualityAssessment({ mode, objective, scope, risks, nextActions, ti
   };
 }
 
+function buildStrategyVariants({ mode, context }) {
+  const ctx = normalizeDeliveryContext(context);
+  const modeLabels = {
+    cadrer: { rapide: 'Cadrage express', equilibre: 'Cadrage structuré', ambitieux: 'Cadrage complet' },
+    produire: { rapide: 'MVP rapide', equilibre: 'Livraison équilibrée', ambitieux: 'Livraison complète' },
+    communiquer: { rapide: 'Message direct', equilibre: 'Communication structurée', ambitieux: 'Campagne complète' },
+    audit: { rapide: 'Audit flash', equilibre: 'Audit structuré', ambitieux: 'Audit approfondi' },
+  };
+  const lbl = modeLabels[mode] || modeLabels.produire;
+  return [
+    {
+      key: 'rapide',
+      label: lbl.rapide,
+      emoji: '⚡',
+      description: 'Périmètre minimal, livraison en 24h–48h. Idéal si la deadline est serrée ou le budget limité.',
+      estimatedGains: ['Mise en route immédiate', 'Résultat visible rapidement', 'Coût minimal'],
+      risks: ['Périmètre réduit, itérations probables', 'Risque qualité si cornerscut'],
+      effort: ctx.deadline ? `Adapté à: ${ctx.deadline}` : '~0.5j',
+      recommended: !!(ctx.deadline || ctx.budget),
+    },
+    {
+      key: 'equilibre',
+      label: lbl.equilibre,
+      emoji: '⚖️',
+      description: 'Périmètre maîtrisé, qualité et vitesse en équilibre. Recommandé par défaut pour la majorité des missions.',
+      estimatedGains: ['Qualité livrable suffisante', 'Risques anticipés', 'Satisfaction client'],
+      risks: ['Validation intermédiaire requise', 'Légèrement plus long que le mode express'],
+      effort: '~1–2j',
+      recommended: !(ctx.deadline || ctx.budget),
+    },
+    {
+      key: 'ambitieux',
+      label: lbl.ambitieux,
+      emoji: '🚀',
+      description: 'Périmètre complet, documentation poussée, critères d\'acceptation stricts. Pour un impact maximal.',
+      estimatedGains: ['Impact maximal', 'Livrables réutilisables', 'Alignement long terme'],
+      risks: [
+        'Délai plus long',
+        ctx.budget ? `Potentiellement hors budget: ${ctx.budget}` : 'Risque de dépassement budgétaire',
+      ],
+      effort: '~3–5j',
+      recommended: false,
+    },
+  ];
+}
+
 function buildDeliveryPlan({ mode, query, title, steps, context }) {
   const ctx = normalizeDeliveryContext(context);
   const items = Array.isArray(steps) ? steps.filter(Boolean).map((s) => String(s).trim()).filter(Boolean) : [];
@@ -497,6 +543,7 @@ function buildDeliveryPlan({ mode, query, title, steps, context }) {
   }
 
   const actionMatrix = buildActionMatrix(nextActions, mode);
+  const strategyVariants = buildStrategyVariants({ mode, context });
   const qualityAssessment = buildQualityAssessment({
     mode,
     objective,
@@ -522,6 +569,7 @@ function buildDeliveryPlan({ mode, query, title, steps, context }) {
     acceptanceCriteria,
     clientMessage,
     actionMatrix,
+    strategyVariants,
     ...qualityAssessment,
   };
 }
