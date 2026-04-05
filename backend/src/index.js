@@ -1,7 +1,6 @@
 // import { deleteLesson } from "./utils/persistence.js";
 // Deprecated persistence import removed. Use Mongoose models instead.
 import { randomBytes } from 'crypto';
-import { pathToFileURL } from 'url';
 
 import axios from 'axios';
 import cors from 'cors';
@@ -1224,15 +1223,13 @@ export function createApp() {
   return app;
 }
 
-// Only start server if run directly (not when imported for tests)
-// Use URL-safe comparison to handle paths with spaces (e.g., "app howto")
-const isDirectRun = Boolean(process.argv?.[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
+// Start server in all non-test environments.
+// Tests set NODE_ENV='test' in test/_setup.mjs before importing this module.
+const isDirectRun = process.env.NODE_ENV !== 'test';
 let server = null;
 
 if (isDirectRun) {
   const PORT = process.env.PORT || 3000;
-  // Persistence initialization removed; handled by Mongoose.
-  // Persistence mode logging removed; handled by Mongoose.
   server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
@@ -1246,17 +1243,27 @@ if (isDirectRun) {
   });
 }
 
-// Connect to MongoDB (skip in tests to avoid external dependency requirement)
-const shouldConnectMongo = process.env.NODE_ENV !== 'test';
+// Connect to MongoDB only if an explicit Atlas URI is provided.
+// Skipped in tests (NODE_ENV=test) and when no URI is configured,
+// to prevent localhost connection attempts that crash the process after
+// the serverSelectionTimeout expires (unhandled buffered-command rejections).
+const mongoUri = process.env.MONGODB_URI || '';
+const shouldConnectMongo =
+  process.env.NODE_ENV !== 'test' &&
+  mongoUri.length > 0 &&
+  !mongoUri.includes('localhost') &&
+  !mongoUri.includes('127.0.0.1');
+
 if (shouldConnectMongo) {
-  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/hackit';
-  mongoose.connect(mongoUri)
+  mongoose.connect(mongoUri, { bufferCommands: false })
     .then(() => {
       console.log('MongoDB connected');
     })
     .catch((err) => {
-      console.error('MongoDB connection error:', err);
+      console.error('MongoDB connection error:', err?.message || err);
     });
+} else if (process.env.NODE_ENV !== 'test') {
+  console.warn('MongoDB: no MONGODB_URI configured — lessons persistence disabled.');
 }
 
 // ============ LESSON GENERATION & PERSISTENCE ============
