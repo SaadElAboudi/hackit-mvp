@@ -153,34 +153,51 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
       case ChatKind.error:
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline_rounded,
-                  color: Colors.red.shade400, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  (m.content['message'] ?? 'Erreur') as String,
-                  style: TextStyle(
-                      color: Colors.red.shade600, fontWeight: FontWeight.w500),
+          child: AssistantContainer(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline_rounded,
+                    color: Colors.red.shade400, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    (m.content['message'] ??
+                            'Une erreur s\'est produite, réessaie.')
+                        as String,
+                    style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Builder(
-                builder: (context) {
-                  final lastQ = provider.lastQuery;
-                  return TextButton.icon(
-                    onPressed:
-                        (provider.loading || lastQ == null || lastQ.isEmpty)
-                            ? null
-                            : () => provider.search(lastQ),
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Réessayer'),
-                  );
-                },
-              )
-            ],
+                const SizedBox(width: 8),
+                Builder(
+                  builder: (context) {
+                    final lastQ = provider.lastQuery;
+                    return FilledButton.tonal(
+                      style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6)),
+                      onPressed:
+                          (provider.loading || lastQ == null || lastQ.isEmpty)
+                              ? null
+                              : () => provider.search(lastQ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.refresh_rounded, size: 14),
+                          SizedBox(width: 4),
+                          Text('Réessayer',
+                              style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    );
+                  },
+                )
+              ],
+            ),
           ),
         );
       default:
@@ -280,16 +297,17 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
 }
 
 class _EmptyState extends StatelessWidget {
+  static const _examples = [
+    ('⚡ Cadrer', 'Cadrer un CRM pour une PME de 50 personnes'),
+    ('🔨 Produire', 'Rédiger les specs techniques d\'une API de paiement'),
+    ('📣 Pitcher', 'Préparer le pitch deck d\'une levée Série A'),
+    ('🔍 Audit 7j', 'Auditer et reprioriser le backlog produit en 7 jours'),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isMobile = MediaQuery.of(context).size.width < 600;
-
-    const examples = [
-      'Cadrer un projet CRM pour une PME de 50 personnes',
-      'Préparer une démo produit pour un grand compte bancaire',
-      'Auditer l\'existant et proposer un plan de refonte en 7 jours',
-    ];
 
     return Center(
       child: SingleChildScrollView(
@@ -309,78 +327,97 @@ class _EmptyState extends StatelessWidget {
                   color: scheme.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child:
-                    Icon(Icons.bolt_rounded, size: 38, color: scheme.primary),
+                child: Icon(Icons.bolt_rounded, size: 38, color: scheme.primary),
               ),
               const SizedBox(height: 20),
               Text(
-                'Prêt à construire ton plan',
+                'Du brief au plan en quelques secondes',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                   color: scheme.onSurface,
-                  letterSpacing: -0.3,
+                  letterSpacing: -0.4,
                 ),
               ),
               const SizedBox(height: 10),
               Text(
-                'Décris le brief client ou le livrable à produire.\nHackit génère un plan structuré en quelques secondes.',
+                'Décris ton défi ou ton livrable. Hackit structure un plan d\'action immédiatement actionnable.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.5,
-                  color: scheme.onSurface.withValues(alpha: 0.60),
+                  color: scheme.onSurface.withValues(alpha: 0.58),
                 ),
               ),
               const SizedBox(height: 28),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Exemples',
+                  'LANCER UN EXEMPLE',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
-                    color: scheme.onSurface.withValues(alpha: 0.45),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: scheme.onSurface.withValues(alpha: 0.40),
                   ),
                 ),
               ),
               const SizedBox(height: 10),
-              ...examples.map((e) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Material(
-                      color: scheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () {
-                          final provider = context.read<SearchProvider>();
-                          provider.setDraft(e);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 11),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(e,
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        color: scheme.onSurface
-                                            .withValues(alpha: 0.80))),
+              ..._examples.map((e) {
+                final (modeLabel, text) = e;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: scheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () =>
+                          Provider.of<SearchProvider>(context, listen: false)
+                              .searchStreaming(text),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: scheme.primaryContainer
+                                    .withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(999),
                               ),
-                              const SizedBox(width: 8),
-                              Icon(Icons.north_west_rounded,
-                                  size: 16,
-                                  color:
-                                      scheme.onSurface.withValues(alpha: 0.35)),
-                            ],
-                          ),
+                              child: Text(
+                                modeLabel,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onPrimaryContainer),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                text,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: scheme.onSurface
+                                        .withValues(alpha: 0.82)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.play_arrow_rounded,
+                                size: 18,
+                                color: scheme.primary.withValues(alpha: 0.55)),
+                          ],
                         ),
                       ),
                     ),
-                  )),
+                  ),
+                );
+              }),
             ],
           ),
         ),

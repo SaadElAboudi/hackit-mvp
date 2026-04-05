@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/responsive/adaptive_spacing.dart';
 import '../core/responsive/size_config.dart';
 
-class UserBubble extends StatelessWidget {
+class UserBubble extends StatefulWidget {
   final String text;
   final VoidCallback? onEdit;
   final VoidCallback? onRegenerate;
@@ -18,9 +19,19 @@ class UserBubble extends StatelessWidget {
   });
 
   @override
+  State<UserBubble> createState() => _UserBubbleState();
+}
+
+class _UserBubbleState extends State<UserBubble> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
     final scheme = Theme.of(context).colorScheme;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final showActions = isMobile || _hovered;
+
     final bubble = Container(
       margin: const EdgeInsets.only(top: 2, bottom: 2),
       decoration: BoxDecoration(
@@ -34,7 +45,7 @@ class UserBubble extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Text(
-        text,
+        widget.text,
         style: TextStyle(
           fontSize: SizeConfig.adaptiveFontSize(15),
           height: 1.35,
@@ -44,34 +55,40 @@ class UserBubble extends StatelessWidget {
       ),
     );
 
-    final actions = (onEdit != null || onRegenerate != null)
-        ? Padding(
-            padding: EdgeInsets.only(top: AdaptiveSpacing.tiny),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (onRegenerate != null)
-                  Tooltip(
-                    message: 'Relancer',
-                    child: IconButton(
-                      visualDensity: VisualDensity.compact,
-                      iconSize: 18,
-                      onPressed: disabled ? null : onRegenerate,
-                      icon: const Icon(Icons.refresh_rounded),
+    final hasActions = widget.onEdit != null || widget.onRegenerate != null;
+    final actions = hasActions
+        ? AnimatedOpacity(
+            opacity: showActions ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 150),
+            child: Padding(
+              padding: EdgeInsets.only(top: AdaptiveSpacing.tiny),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (widget.onRegenerate != null)
+                    Tooltip(
+                      message: 'Relancer',
+                      child: IconButton(
+                        visualDensity: VisualDensity.compact,
+                        iconSize: 18,
+                        onPressed:
+                            widget.disabled ? null : widget.onRegenerate,
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
                     ),
-                  ),
-                if (onEdit != null)
-                  Tooltip(
-                    message: 'Modifier',
-                    child: IconButton(
-                      visualDensity: VisualDensity.compact,
-                      iconSize: 18,
-                      onPressed: disabled ? null : onEdit,
-                      icon: const Icon(Icons.edit_rounded),
+                  if (widget.onEdit != null)
+                    Tooltip(
+                      message: 'Modifier',
+                      child: IconButton(
+                        visualDensity: VisualDensity.compact,
+                        iconSize: 18,
+                        onPressed: widget.disabled ? null : widget.onEdit,
+                        icon: const Icon(Icons.edit_rounded),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           )
         : const SizedBox.shrink();
@@ -82,13 +99,17 @@ class UserBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: SizeConfig.screenWidth * 0.85,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            bubble,
-            actions,
-          ],
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              bubble,
+              actions,
+            ],
+          ),
         ),
       ),
     );
@@ -130,48 +151,108 @@ class AssistantContainer extends StatelessWidget {
   }
 }
 
-class LoadingBubbles extends StatelessWidget {
+class LoadingBubbles extends StatefulWidget {
   const LoadingBubbles({super.key});
+
+  @override
+  State<LoadingBubbles> createState() => _LoadingBubblesState();
+}
+
+class _LoadingBubblesState extends State<LoadingBubbles>
+    with SingleTickerProviderStateMixin {
+  static const _steps = [
+    'Analyse du brief\u2026',
+    'Structure du plan\u2026',
+    'D\u00e9pendances & timeline\u2026',
+    'Finalisation du livrable\u2026',
+  ];
+
+  int _stepIndex = 0;
+  late final AnimationController _pulse;
+  late final Animation<double> _pulseAnim;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.3, end: 1.0)
+        .animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
+    _timer = Timer.periodic(const Duration(milliseconds: 1800), (_) {
+      if (mounted) {
+        setState(() => _stepIndex = (_stepIndex + 1) % _steps.length);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
     final scheme = Theme.of(context).colorScheme;
-    Widget skeleton({double height = 18, double widthFactor = 1}) => Container(
-          width: SizeConfig.screenWidth * 0.6 * widthFactor,
-          height: height,
-          margin: EdgeInsets.only(bottom: AdaptiveSpacing.tiny + 2),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
-            borderRadius: BorderRadius.circular(8),
+
+    Widget skeleton({double height = 15, double widthFactor = 1}) =>
+        AnimatedBuilder(
+          animation: _pulseAnim,
+          builder: (_, __) => Container(
+            width: SizeConfig.screenWidth * 0.6 * widthFactor,
+            height: height,
+            margin: EdgeInsets.only(bottom: AdaptiveSpacing.tiny + 2),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest
+                  .withValues(alpha: 0.45 * _pulseAnim.value),
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-            'Génération en cours\u2026',
-            style: TextStyle(
-              fontSize: 12,
-              color: scheme.onSurface.withValues(alpha: 0.4),
-              fontStyle: FontStyle.italic,
-            ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          child: Row(
+            key: ValueKey(_stepIndex),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: _pulseAnim,
+                builder: (_, __) => Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: scheme.primary.withValues(alpha: _pulseAnim.value),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _steps[_stepIndex],
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurface.withValues(alpha: 0.55),
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Flexible(child: skeleton(widthFactor: 0.7)),
-          ],
         ),
         SizedBox(height: AdaptiveSpacing.small),
         Container(
-          padding: EdgeInsets.all(AdaptiveSpacing.small),
+          padding: EdgeInsets.all(AdaptiveSpacing.small + 2),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(16).copyWith(
               bottomLeft: const Radius.circular(4),
             ),
@@ -183,14 +264,14 @@ class LoadingBubbles extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              skeleton(widthFactor: 0.35),
+              skeleton(widthFactor: 0.4),
               skeleton(),
-              skeleton(widthFactor: 0.9),
-              skeleton(widthFactor: 0.8),
-              skeleton(widthFactor: 0.6),
+              skeleton(widthFactor: 0.85),
+              skeleton(widthFactor: 0.75),
+              skeleton(widthFactor: 0.55),
             ],
           ),
-        )
+        ),
       ],
     );
   }

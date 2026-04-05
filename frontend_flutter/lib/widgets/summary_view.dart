@@ -1,5 +1,6 @@
 // ignore_for_file: prefer_const_constructors
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../core/responsive/size_config.dart';
 import '../core/responsive/adaptive_spacing.dart';
 
@@ -398,8 +399,6 @@ class _ExpandableSectionsState extends State<_ExpandableSections> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       if (_iconForSection(se.value.title) != null) ...[
                         Icon(_iconForSection(se.value.title)!,
@@ -407,7 +406,7 @@ class _ExpandableSectionsState extends State<_ExpandableSections> {
                             color: scheme.primary.withValues(alpha: 0.85)),
                         const SizedBox(width: 5),
                       ],
-                      Flexible(
+                      Expanded(
                         child: Text(
                           se.value.title,
                           style: TextStyle(
@@ -417,6 +416,7 @@ class _ExpandableSectionsState extends State<_ExpandableSections> {
                           ),
                         ),
                       ),
+                      _CopyIconButton(items: se.value.items),
                     ],
                   ),
                   SizedBox(height: AdaptiveSpacing.small),
@@ -622,6 +622,57 @@ class _StrategyCard extends StatelessWidget {
                 )),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _CopyIconButton extends StatefulWidget {
+  final List<String> items;
+  const _CopyIconButton({required this.items});
+
+  @override
+  State<_CopyIconButton> createState() => _CopyIconButtonState();
+}
+
+class _CopyIconButtonState extends State<_CopyIconButton> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    final text = widget.items.map((e) => '\u2022 $e').join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Section copiée'),
+        duration: Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: 'Copier',
+      child: InkWell(
+        onTap: _copy,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(
+            _copied ? Icons.check_rounded : Icons.content_copy_rounded,
+            size: 15,
+            color: _copied
+                ? Colors.green.shade600
+                : scheme.onSurface.withValues(alpha: 0.30),
+          ),
+        ),
       ),
     );
   }
