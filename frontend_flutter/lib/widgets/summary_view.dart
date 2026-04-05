@@ -273,6 +273,19 @@ class SummaryView extends StatelessWidget {
               final sc = _buildStrategyCards(context);
               return sc != null ? [sc] : <Widget>[];
             }(),
+            ...() {
+              final raw = deliveryPlan?['readyToSend'];
+              if (raw is String && raw.trim().isNotEmpty) {
+                return [
+                  _ReadyToSendCard(
+                    text: raw,
+                    mode: deliveryMode ?? 'produire',
+                  ),
+                  SizedBox(height: AdaptiveSpacing.medium),
+                ];
+              }
+              return <Widget>[];
+            }(),
             _ExpandableSections(sections: sections),
             Container(
               width: double.infinity,
@@ -673,6 +686,159 @@ class _CopyIconButtonState extends State<_CopyIconButton> {
                 : scheme.onSurface.withValues(alpha: 0.30),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Prominent card showing the ready-to-send formatted deliverable.
+class _ReadyToSendCard extends StatefulWidget {
+  final String text;
+  final String mode;
+  const _ReadyToSendCard({required this.text, required this.mode});
+
+  @override
+  State<_ReadyToSendCard> createState() => _ReadyToSendCardState();
+}
+
+class _ReadyToSendCardState extends State<_ReadyToSendCard> {
+  bool _expanded = false;
+  bool _copied = false;
+
+  String get _title {
+    switch (widget.mode) {
+      case 'communiquer':
+        return '✉️  Email prêt à envoyer';
+      case 'cadrer':
+        return '📋  Note de cadrage';
+      case 'audit':
+        return '🔍  Synthèse d\'audit';
+      default:
+        return '📄  Plan de livraison';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    SizeConfig.ensureInitialized(context);
+    final scheme = Theme.of(context).colorScheme;
+    final lines = widget.text.split('\n');
+    final previewLines = lines.take(6).join('\n');
+    final hasMore = lines.length > 6;
+    final displayText = _expanded ? widget.text : previewLines;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scheme.primaryContainer.withValues(alpha: 0.35),
+            scheme.secondaryContainer.withValues(alpha: 0.2),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: scheme.primary.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _title,
+                  style: TextStyle(
+                    fontSize: SizeConfig.adaptiveFontSize(15),
+                    fontWeight: FontWeight.w800,
+                    color: scheme.primary,
+                  ),
+                ),
+              ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: _copied
+                    ? Row(
+                        key: const ValueKey('done'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_rounded,
+                              size: 14, color: Colors.green.shade600),
+                          const SizedBox(width: 4),
+                          Text('Copié !',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green.shade600,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      )
+                    : FilledButton.icon(
+                        key: const ValueKey('copy'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          textStyle: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                        onPressed: () async {
+                          await Clipboard.setData(
+                              ClipboardData(text: widget.text));
+                          if (!mounted) return;
+                          setState(() => _copied = true);
+                          Future.delayed(const Duration(seconds: 2), () {
+                            if (mounted) setState(() => _copied = false);
+                          });
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 13),
+                        label: const Text('Copier tout'),
+                      ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLowest.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              displayText,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: SizeConfig.adaptiveFontSize(12.5),
+                height: 1.55,
+                color: scheme.onSurface.withValues(alpha: 0.87),
+              ),
+            ),
+          ),
+          if (hasMore) ...[
+            const SizedBox(height: 6),
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: () => setState(() => _expanded = !_expanded),
+              icon: Icon(
+                  _expanded
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  size: 16),
+              label: Text(
+                _expanded ? 'Réduire' : 'Voir le livrable complet',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

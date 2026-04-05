@@ -173,41 +173,43 @@ function makeMockResponse() {
   };
 }
 
-function heuristicSummary({ desiredSteps, mode } = {}) {
-  // Mode-aware local summary when Gemini is disabled/unavailable
+function heuristicSummary({ desiredSteps, mode, query } = {}) {
+  // Mode-aware local summary when Gemini is disabled/unavailable — personalised with query topic
+  const topic = extractTopicFromQuery(query);
+  const T = topic ? `"${topic}"` : 'ce sujet';
   const bases = {
     cadrer: [
-      "Lire le brief en entier et surligner les zones d'ambiguïté.",
-      "Lister les livrables attendus et les critères de succès.",
-      "Identifier les parties prenantes, leurs rôles et leurs attentes.",
-      "Formaliser le périmètre dans un document partagé.",
-      "Valider le cadrage avec le client avant de lancer la production.",
+      `Analyser le brief ${T} et identifier les zones d'ambiguïté prioritaires.`,
+      `Formaliser les livrables attendus, les critères de succès et les contraintes pour ${T}.`,
+      `Aligner les parties prenantes sur le périmètre et les responsabilités autour de ${T}.`,
+      `Documenter les hypothèses, risques et dépendances clés liés à ${T}.`,
+      `Valider le cadrage avec le client et déclencher la production de ${T}.`,
     ],
     communiquer: [
-      "Définir l'objectif du message et l'audience cible.",
-      "Structurer en trois parties : contexte, message clé, call to action.",
-      "Choisir le bon canal (email, présentation, réunion).",
-      "Faire relire et valider en interne avant envoi.",
-      "Envoyer, mesurer l'impact et assurer le suivi des retours.",
+      `Clarifier le message central à délivrer sur ${T} et définir l'audience cible.`,
+      `Structurer le contenu en : contexte, valeur ajoutée et call to action pour ${T}.`,
+      `Sélectionner le canal et le timing optimaux pour maximiser l'impact de ${T}.`,
+      `Rédiger, faire relire et valider le message avant diffusion.`,
+      `Diffuser, mesurer les retours et planifier le suivi de ${T}.`,
     ],
     audit: [
-      "Inventorier les artéfacts disponibles (code, données, processus).",
-      "Identifier les écarts par rapport aux standards et aux objectifs.",
-      "Trier les problèmes par criticité : bloquant / à corriger / à surveiller.",
-      "Traiter les quick wins en priorité pour montrer de la traction.",
-      "Rédiger le rapport de synthèse avec un plan d'action priorisé.",
+      `Inventorier les artéfacts et critères d'évaluation disponibles pour ${T}.`,
+      `Diagnostiquer les écarts critiques entre l'état actuel et les objectifs de ${T}.`,
+      `Trier les problèmes par criticité : bloquant / à corriger / à surveiller.`,
+      `Traiter les quick wins à fort impact pour ${T} en priorité.`,
+      `Rédiger la synthèse d'audit avec un plan d'action priorisé.`,
     ],
     produire: [
-      "Valider le périmètre et les spécifications avant de démarrer.",
-      "Décomposer en tâches unitaires avec une priorité et des dépendances claires.",
-      "Exécuter les tâches en commençant par les plus bloquantes.",
-      "Faire une revue qualité et corriger les écarts avant livraison.",
-      "Livrer, recueillir le feedback client et documenter les apprentissages.",
+      `Valider le périmètre et les spécifications de ${T} avant de démarrer.`,
+      `Décomposer ${T} en tâches unitaires avec priorité et dépendances claires.`,
+      `Exécuter les tâches critiques de ${T} en commençant par les bloquantes.`,
+      `Conduire une revue qualité et corriger les écarts avant livraison.`,
+      `Livrer ${T}, recueillir le feedback client et documenter les apprentissages.`,
     ],
   };
   const base = bases[mode] || bases.produire;
   const extras = [
-    "Documenter les décisions prises pour faciliter le suivi.",
+    `Documenter les décisions prises sur ${T} pour faciliter le suivi.`,
     "Anticiper les risques résiduels et préparer un plan B.",
     "Planifier la prochaine itération en tenant compte des retours.",
     "Partager les apprentissages avec l'équipe pour améliorer le processus.",
@@ -272,6 +274,14 @@ function contextNotes(context = {}) {
   if (context.deadline) notes.push(`Deadline: ${context.deadline}`);
   if (context.maturity) notes.push(`Maturite: ${context.maturity}`);
   return notes;
+}
+
+function extractTopicFromQuery(query) {
+  return String(query || '')
+    .replace(/\bmode[\s:]*(cadrer|produire|communiquer|audit)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
 }
 
 function classifyImpactLabel(actionText = '', mode = 'produire') {
@@ -416,6 +426,79 @@ function buildStrategyVariants({ mode, context }) {
   ];
 }
 
+function buildReadyToSend({ mode, query, title, objective, nextActions, timeline, acceptanceCriteria }) {
+  const topic = extractTopicFromQuery(query) || String(title || '').trim().slice(0, 80);
+  const T = topic || 'ce sujet';
+  const lines = [];
+  switch (mode) {
+    case 'communiquer': {
+      lines.push(`Objet : ${T}`, '');
+      lines.push('Bonjour,', '');
+      lines.push(`Suite à notre échange, voici la synthèse sur : ${T}.`, '');
+      if (objective.length) lines.push(`• Objectif : ${objective[0]}`, '');
+      if (nextActions.length) {
+        lines.push('Points clés :');
+        nextActions.slice(0, 3).forEach((a, i) => lines.push(`${i + 1}. ${a}`));
+        lines.push('');
+      }
+      if (timeline.length) {
+        lines.push(`🗓 ${timeline[0]}`);
+        if (timeline[1]) lines.push(`🗓 ${timeline[1]}`);
+        lines.push('');
+      }
+      lines.push('Merci de confirmer votre validation ou de me faire part de vos ajustements.');
+      lines.push('', 'Cordialement');
+      break;
+    }
+    case 'cadrer': {
+      lines.push('NOTE DE CADRAGE', '─────────────────────────────', T.toUpperCase(), '');
+      lines.push('Objectif');
+      objective.forEach((o) => lines.push(`• ${o}`));
+      lines.push('');
+      lines.push('Livrables & critères de succès');
+      acceptanceCriteria.slice(0, 3).forEach((a) => lines.push(`☑ ${a}`));
+      lines.push('');
+      lines.push('Prochaines étapes');
+      nextActions.slice(0, 3).forEach((a, i) => lines.push(`${i + 1}. ${a}`));
+      lines.push('');
+      lines.push('Timeline');
+      timeline.slice(0, 3).forEach((t) => lines.push(`• ${t}`));
+      break;
+    }
+    case 'audit': {
+      lines.push("SYNTHÈSE D'AUDIT", '─────────────────────────────', T.toUpperCase(), '');
+      lines.push('Points diagnostiqués');
+      objective.forEach((o) => lines.push(`• ${o}`));
+      lines.push('');
+      lines.push('Quick wins prioritaires');
+      nextActions.slice(0, 3).forEach((a, i) => lines.push(`${i + 1}. ${a}`));
+      lines.push('');
+      lines.push("Plan d'action");
+      timeline.slice(0, 4).forEach((t) => lines.push(`• ${t}`));
+      lines.push('');
+      lines.push('Critères de clôture');
+      acceptanceCriteria.slice(0, 2).forEach((a) => lines.push(`☑ ${a}`));
+      break;
+    }
+    default: { // produire
+      lines.push('PLAN DE LIVRAISON', '─────────────────────────────', T.toUpperCase(), '');
+      lines.push('Objectif');
+      objective.forEach((o) => lines.push(`• ${o}`));
+      lines.push('');
+      lines.push('Tâches prioritaires');
+      nextActions.slice(0, 4).forEach((a, i) => lines.push(`${i + 1}. ${a}`));
+      lines.push('');
+      lines.push('Timeline');
+      timeline.slice(0, 3).forEach((t) => lines.push(`• ${t}`));
+      lines.push('');
+      lines.push("Critères d'acceptation");
+      acceptanceCriteria.slice(0, 2).forEach((a) => lines.push(`☑ ${a}`));
+      break;
+    }
+  }
+  return lines.join('\n');
+}
+
 function buildDeliveryPlan({ mode, query, title, steps, context }) {
   const ctx = normalizeDeliveryContext(context);
   const items = Array.isArray(steps) ? steps.filter(Boolean).map((s) => String(s).trim()).filter(Boolean) : [];
@@ -555,6 +638,11 @@ function buildDeliveryPlan({ mode, query, title, steps, context }) {
     clientMessage,
   });
 
+  const modeNames = { cadrer: 'Cadrage', produire: 'Production', communiquer: 'Communication', audit: 'Audit' };
+  const bsTopic = extractTopicFromQuery(query) || String(title || '').trim().slice(0, 60);
+  const briefSummary = `${modeNames[mode] || 'Plan'} pour "${bsTopic}". ${nextActions.length} actions prioritaires identifiées.`;
+  const readyToSend = buildReadyToSend({ mode, query, title, objective, nextActions, timeline, acceptanceCriteria });
+
   return {
     mode,
     context: ctx,
@@ -569,6 +657,8 @@ function buildDeliveryPlan({ mode, query, title, steps, context }) {
     clientMessage,
     actionMatrix,
     strategyVariants,
+    briefSummary,
+    readyToSend,
     ...qualityAssessment,
   };
 }
@@ -963,20 +1053,16 @@ app.post("/api/search", async (req, res) => {
       }
       // Utilise le transcript comme input Gemini si disponible
       const summaryPrompt = transcriptText
-        ? (desiredSteps
-          ? `Résume ce texte en ${desiredSteps} étapes claires:\n${transcriptText}`
-          : `Résume ce texte en étapes claires:\n${transcriptText}`)
-        : (desiredSteps
-          ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
-          : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`);
+        ? `Tu es un consultant expert. Génère un plan d'action en ${desiredSteps || 5} étapes concrètes et numérotées pour : "${query}"\n\nTranscription de référence :\n${transcriptText.slice(0, 1200)}\n\nRègles : une étape par ligne numérotée, concrète et directement actionnable, adaptée au brief décrit.`
+        : `Tu es un consultant expert. Génère un plan d'action en ${desiredSteps || 5} étapes concrètes et numérotées pour : "${query}"\n\nContexte : vidéo de référence "${videoTitle}"\n\nRègles : une étape par ligne numérotée, concrète et directement actionnable, adaptée au brief décrit.`;
       try {
         summaryText = await generateWithGemini(summaryPrompt, 300);
       } catch (e) {
         console.warn("Gemini summary failed:", e.message);
-        summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode });
+        summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode, query });
       }
     } else {
-      summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode });
+      summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode, query });
     }
 
     const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
@@ -1137,17 +1223,15 @@ app.get("/api/search/stream", async (req, res) => {
       const attemptGeminiSummary = useGemini && !reformulationTimedOut;
       const desiredSteps = extractDesiredSteps(query);
       if (attemptGeminiSummary) {
-        const summaryPrompt = desiredSteps
-          ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
-          : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`;
+        const summaryPrompt = `Tu es un consultant expert. Génère un plan d'action en ${desiredSteps || 5} étapes concrètes et numérotées pour : "${query}"\n\nContexte : vidéo de référence "${videoTitle}"\n\nRègles : une étape par ligne numérotée, concrète et directement actionnable, adaptée au brief décrit.`;
         try {
           summaryText = await generateWithGemini(summaryPrompt, 300);
         } catch (e) {
           console.warn("Gemini summary (stream) failed:", e.message);
-          summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode });
+          summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode, query });
         }
       } else {
-        summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode });
+        summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode, query });
       }
 
       const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
