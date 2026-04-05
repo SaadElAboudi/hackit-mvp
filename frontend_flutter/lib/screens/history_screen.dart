@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/history_favorites_provider.dart';
 import '../providers/lessons_provider.dart';
+import '../providers/search_provider.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/app_scaffold.dart';
 // ...existing code...
@@ -116,7 +117,10 @@ class _HistoryList extends StatelessWidget {
                 },
               ),
               onTap: () {
-                // Navigation possible vers le détail ou recherche associée
+                context.read<SearchProvider>().searchStreaming(
+                      e.query,
+                      forceFresh: true,
+                    );
               },
             ),
           );

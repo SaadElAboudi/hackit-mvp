@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../screens/home_screen.dart';
 import '../screens/library_screen.dart';
+import '../providers/search_provider.dart';
 
 class RootTabs extends StatefulWidget {
   const RootTabs({super.key});
@@ -15,6 +17,24 @@ class _RootTabsState extends State<RootTabs> {
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
   ];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Register a callback so SearchProvider can switch to the chat tab
+    // (index 0) whenever a new search or refinement starts.
+    context.read<SearchProvider>().onNavigateToChat = () {
+      if (mounted && _index != 0) setState(() => _index = 0);
+    };
+  }
+
+  @override
+  void dispose() {
+    try {
+      context.read<SearchProvider>().onNavigateToChat = null;
+    } catch (_) {}
+    super.dispose();
+  }
 
   Widget _buildTabNavigator(int tabIndex) {
     return Navigator(

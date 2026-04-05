@@ -213,6 +213,57 @@ class ApiService {
     }
   }
 
+  // Stream refinement of an existing deliverable via SSE endpoint.
+  // Sends the original query, the user's follow-up request, and the existing
+  // readyToSend doc so Gemini can produce an improved version without
+  // re-running the YouTube search.
+  Stream<StreamEvent> refineStream(
+      String query, String followUp, String existingDoc, String mode) async* {
+    final queryParameters = <String, String>{
+      'query': query,
+      'followUp': followUp,
+      'existingDoc': existingDoc.substring(0, existingDoc.length.clamp(0, 2000)),
+      'mode': mode,
+    };
+    final uri = Uri.parse('$baseUrl/api/refine/stream')
+        .replace(queryParameters: queryParameters);
+    final request = http.Request('GET', uri);
+    final streamed = await _client.send(request);
+    if (streamed.statusCode != 200) {
+      final body = await streamed.stream.bytesToString();
+      throw ApiException(
+          'Refine stream error: HTTP ${streamed.statusCode} $body',
+          statusCode: streamed.statusCode);
+    }
+    final decoder = utf8.decoder.bind(streamed.stream);
+    final buffer = StringBuffer();
+    await for (final chunk in decoder) {
+      buffer.write(chunk);
+      var text = buffer.toString();
+      int idx;
+      while ((idx = text.indexOf('\n\n')) != -1) {
+        final eventBlock = text.substring(0, idx);
+        text = text.substring(idx + 2);
+        final lines = eventBlock.split('\n');
+        final dataLine = lines.firstWhere(
+          (l) => l.startsWith('data:'),
+          orElse: () => '',
+        );
+        if (dataLine.isNotEmpty) {
+          final jsonStr = dataLine.substring(5).trim();
+          final map = _decodeJsonObject(jsonStr,
+              fallback: const {'type': 'malformed'});
+          if (map['type'] != 'malformed') {
+            yield StreamEvent.fromJson(map);
+          }
+        }
+      }
+      buffer
+        ..clear()
+        ..write(text);
+    }
+  }
+
   // Simple health ping to detect backend availability and meta info.
   Future<Map<String, dynamic>> pingHealth(
       {Duration timeout = const Duration(seconds: 5)}) async {

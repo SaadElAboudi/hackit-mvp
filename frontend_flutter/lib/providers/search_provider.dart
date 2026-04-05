@@ -59,6 +59,9 @@ class SearchProvider extends ChangeNotifier {
 
   final HistoryFavoritesProvider? _historyFavs;
 
+  // Set by RootTabs to switch to the chat tab when a new search starts.
+  VoidCallback? onNavigateToChat;
+
   SearchProvider({
     ApiService? api,
     CacheManager? cacheManager,
@@ -234,8 +237,22 @@ class SearchProvider extends ChangeNotifier {
   }
 
   // Streaming variant: progressively updates steps, then appends video at the end.
+  // If forceFresh is false (default) and the conversation already has a deliverable,
+  // the query is treated as a follow-up refinement instead of a new search.
   Future<void> searchStreaming(String query,
-      {Map<String, String?>? context}) async {
+      {Map<String, String?>? context, bool forceFresh = false}) async {
+    // Smart routing: delegate to refine when there is already an existing plan
+    // and the user typed a follow-up in the chat (not a history/library tap).
+    if (!forceFresh) {
+      final existingPlan = _getExistingPlanContent();
+      if (existingPlan != null) {
+        onNavigateToChat?.call();
+        await _refineStreaming(query, existingPlan: existingPlan);
+        return;
+      }
+    }
+
+    onNavigateToChat?.call();
     // Supprimer tous les messages sauf la bulle de bienvenue (assistantText)
     if (messages.isNotEmpty &&
         messages.first.kind == ChatKind.text &&
@@ -424,6 +441,140 @@ class SearchProvider extends ChangeNotifier {
       }
     } catch (e, stack) {
       error = 'Une erreur inattendue est survenue';
+      await analytics.logError(
+        errorType: 'unexpected_error',
+        message: e.toString(),
+        stackTrace: stack,
+      );
+      _appendError(error!);
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  // Returns the readyToSend text from the most recent completed deliverable in
+  // the chat, or null if no deliverable exists yet.
+  String? _getExistingPlanContent() {
+    for (final m in messages.reversed) {
+      if (m.kind == ChatKind.steps) {
+        final plan = m.content['deliveryPlan'];
+        if (plan is Map) {
+          final readyToSend = plan['readyToSend'];
+          if (readyToSend is String && readyToSend.trim().isNotEmpty) {
+            return readyToSend.trim();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // Refine an existing deliverable based on a user follow-up.
+  // Does NOT clear the message history — appends to the conversation.
+  Future<void> _refineStreaming(String followUp,
+      {required String existingPlan}) async {
+    final analytics = AnalyticsManager();
+    final stopwatch = Stopwatch()..start();
+
+    if (followUp.trim().isEmpty) return;
+
+    final originalQuery = (lastQuery ?? '').trim();
+    final deliveryMode = _resolveDeliveryMode(originalQuery);
+
+    _appendUser(followUp.trim());
+    loading = true;
+    error = null;
+    notifyListeners();
+
+    if (_isOffline) {
+      error = 'Mode hors ligne - Raffinement impossible';
+      _appendError(error!);
+      loading = false;
+      notifyListeners();
+      return;
+    }
+
+    List<String> partialSteps = [];
+    int? stepsMsgIndex;
+
+    try {
+      final stream = _api.refineStream(
+          originalQuery, followUp.trim(), existingPlan, deliveryMode ?? 'produire');
+      await for (final evt in stream) {
+        switch (evt.type) {
+          case 'meta':
+            final msg = ChatMessage.assistantSteps(
+              _newId(),
+              originalQuery,
+              const [],
+              source: 'refine',
+            ).copyWith(content: {
+              'title': originalQuery,
+              'steps': const <String>[],
+              'source': 'refine',
+              if (deliveryMode != null) 'deliveryMode': deliveryMode,
+            });
+            messages = [...messages, msg];
+            stepsMsgIndex = messages.length - 1;
+            _saveMessages();
+            notifyListeners();
+            break;
+          case 'partial':
+            final step = evt.step;
+            if (step != null && step.trim().isNotEmpty) {
+              partialSteps = [...partialSteps, step.trim()];
+              if (stepsMsgIndex != null) {
+                final m = messages[stepsMsgIndex];
+                final updated = m.copyWith(
+                    content: {...m.content, 'steps': partialSteps});
+                messages = [
+                  ...messages.sublist(0, stepsMsgIndex),
+                  updated,
+                  ...messages.sublist(stepsMsgIndex + 1),
+                ];
+                _saveMessages();
+                notifyListeners();
+              }
+            }
+            break;
+          case 'final':
+            final rawPlan = evt.raw['deliveryPlan'];
+            if (rawPlan is Map && stepsMsgIndex != null) {
+              final m = messages[stepsMsgIndex];
+              final updated = m.copyWith(content: {
+                ...m.content,
+                'deliveryPlan': Map<String, dynamic>.from(rawPlan),
+              });
+              messages = [
+                ...messages.sublist(0, stepsMsgIndex),
+                updated,
+                ...messages.sublist(stepsMsgIndex + 1),
+              ];
+              _saveMessages();
+            }
+            notifyListeners();
+            break;
+          case 'error':
+            error = evt.message ?? 'Erreur de raffinement';
+            _appendError(error!);
+            loading = false;
+            notifyListeners();
+            return;
+          case 'done':
+            stopwatch.stop();
+            await analytics.logSearch(
+              query: '$originalQuery → $followUp',
+              isSuccess: true,
+            );
+            loading = false;
+            notifyListeners();
+            return;
+          default:
+            break;
+        }
+      }
+    } catch (e, stack) {
+      error = 'Erreur lors du raffinement';
       await analytics.logError(
         errorType: 'unexpected_error',
         message: e.toString(),
@@ -695,51 +846,7 @@ class SearchProvider extends ChangeNotifier {
   }
 
   void _appendError(String message) {
-    // Ajoute une bulle d'erreur avec mock keyTakeaways, quiz et chapitres
-    final err = ChatMessage.assistantError(_newId(), message).copyWith(
-      content: {
-        'message': message,
-        'keyTakeaways': [
-          'Regardez la vidéo pour comprendre le concept.',
-          'Préparez le matériel nécessaire avant de commencer.',
-          'Suivez chaque étape attentivement pour réussir.',
-        ],
-        'quiz': [
-          {
-            'question':
-                'Quel est le premier réflexe à avoir avant de démarrer ?',
-            'answer': 'Préparer le matériel nécessaire.',
-          },
-          {
-            'question': 'Pourquoi suivre les étapes dans l’ordre ?',
-            'answer': 'Pour garantir le bon déroulement et la sécurité.',
-          },
-        ],
-        'chapters': [
-          {
-            'index': 0,
-            'startSec': 0,
-            'title': 'Ouvre la vidéo',
-          },
-          {
-            'index': 1,
-            'startSec': 45,
-            'title': 'Prépare le matériel nécessaire',
-          },
-          {
-            'index': 2,
-            'startSec': 120,
-            'title': 'Suis les étapes une à une',
-          },
-          {
-            'index': 3,
-            'startSec': 210,
-            'title': 'Vérifie le résultat final',
-          },
-        ],
-        'videoUrl': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      },
-    );
+    final err = ChatMessage.assistantError(_newId(), message);
     _push(err);
   }
 

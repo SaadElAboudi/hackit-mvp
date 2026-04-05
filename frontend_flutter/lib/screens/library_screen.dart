@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/history_favorites_provider.dart';
 import '../providers/lessons_provider.dart';
+import '../providers/search_provider.dart';
 import 'lesson_detail_screen.dart';
 
 class LibraryScreen extends StatelessWidget {
@@ -118,6 +119,12 @@ class LibraryScreen extends StatelessWidget {
                                 .read<HistoryFavoritesProvider>()
                                 .removeHistory(item.id),
                           ),
+                          onTap: () {
+                            context.read<SearchProvider>().searchStreaming(
+                                  item.query,
+                                  forceFresh: true,
+                                );
+                          },
                         ),
                       )),
                   const SizedBox(height: 12),

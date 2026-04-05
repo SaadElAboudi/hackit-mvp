@@ -1417,6 +1417,90 @@ app.get("/api/search/stream", async (req, res) => {
   })();
 });
 
+// Refine stream endpoint: /api/refine/stream?query=...&followUp=...&existingDoc=...&mode=...
+// Allows iterative improvement of an existing deliverable without re-running YouTube search.
+app.get("/api/refine/stream", (req, res) => {
+  const queryValidated = normalizeQueryInput(String(req.query.query || ''), MAX_QUERY_LEN);
+  const followUpValidated = normalizeQueryInput(String(req.query.followUp || ''), MAX_QUERY_LEN);
+  if (!queryValidated.ok) return res.status(queryValidated.status).json({ error: queryValidated.error });
+  if (!followUpValidated.ok) return res.status(followUpValidated.status).json({ error: followUpValidated.error });
+
+  const query = queryValidated.value;
+  const followUp = followUpValidated.value;
+  const existingDoc = String(req.query.existingDoc || '').slice(0, 3000);
+  const mode = String(req.query.mode || 'produire');
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const clientState = { closed: false };
+  req.on('close', () => { clientState.closed = true; });
+
+  const writeEvent = (obj) => {
+    if (clientState.closed || res.writableEnded || res.destroyed) return;
+    try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch (_) { clientState.closed = true; }
+  };
+  const end = () => {
+    if (res.writableEnded || res.destroyed) return;
+    try { res.end(); } catch (_) {}
+  };
+
+  (async () => {
+    try {
+      const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
+      const useGemini = USE_GEMINI_ENV && !breakerActive;
+
+      writeEvent({ type: "meta", title: query, videoUrl: "", source: "refine", deliveryMode: mode });
+
+      let refinedDoc = "";
+      if (useGemini && existingDoc.trim().length > 0) {
+        const refinePrompt = `Tu es un consultant senior. Voici le livrable produit pour le brief "${query}":\n\n${existingDoc}\n\nL'utilisateur demande la modification suivante : "${followUp}"\n\nProduis une VERSION AMÉLIORÉE du livrable en appliquant exactement cette modification. Conserve la structure et le format du document original. Le résultat doit être directement transmissible au client.`;
+        try {
+          refinedDoc = (await generateWithGemini(refinePrompt, 600)).trim();
+        } catch (e) {
+          console.warn("Gemini refine failed:", e.message);
+        }
+      }
+
+      if (!refinedDoc) {
+        const fallbackPrompt = buildGeminiPromptForMode({ mode, query: `${query}. ${followUp}`, context: {}, videoTitle: query });
+        if (useGemini) {
+          try {
+            refinedDoc = (await generateWithGemini(fallbackPrompt, 600)).trim();
+          } catch (e) {
+            console.warn("Gemini refine fallback failed:", e.message);
+          }
+        }
+      }
+
+      if (!refinedDoc) {
+        refinedDoc = buildReadyToSend({ mode, query: `${query}. ${followUp}`, title: query, objective: [], nextActions: [], timeline: [], acceptanceCriteria: [] });
+      }
+
+      const numberedLines = refinedDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[\.\)]\s/.test(l)).map(l => l.replace(/^\d+[\.\)]\s*/, ''));
+      const steps = numberedLines.length >= 2 ? numberedLines : heuristicSummary({ mode, query: `${query}. ${followUp}` }).split('\n').filter(Boolean);
+
+      const deliveryPlan = buildDeliveryPlan({ mode, query, title: query, steps, context: {}, geminiDeliverable: refinedDoc });
+
+      for (const s of steps) {
+        if (clientState.closed) return end();
+        writeEvent({ type: "partial", step: s });
+        await new Promise(r => setTimeout(r, 120));
+      }
+
+      writeEvent({ type: "final", citations: [], chapters: [], deliveryPlan });
+      writeEvent({ type: "done" });
+      end();
+    } catch (err) {
+      console.error("Refine stream error:", err?.message || err);
+      writeEvent({ type: "error", error: "Internal server error", detail: err?.message || "Unexpected error" });
+      end();
+    }
+  })();
+});
+
 // Transcript endpoint: /api/transcript?videoId=...&title=...
 app.get("/api/transcript", async (req, res) => {
   const videoId = String(req.query.videoId || '').trim();
