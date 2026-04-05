@@ -10,32 +10,11 @@ class RootTabs extends StatefulWidget {
 }
 
 class _RootTabsState extends State<RootTabs> {
-  final List<String> tabRoutes = [
-    '/',
-    '/library',
-  ];
-
   int _index = 0;
   final _navigatorKeys = [
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
   ];
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Synchronise l'onglet sélectionné avec la route actuelle
-    final route = ModalRoute.of(context)?.settings.name;
-    if (route != null) {
-      final tabIdx = tabRoutes.indexOf(route);
-      final legacyLibraryRoutes = {'/lessons', '/favorites', '/history'};
-      final resolvedIdx =
-          (tabIdx == -1 && legacyLibraryRoutes.contains(route)) ? 1 : tabIdx;
-      if (resolvedIdx != -1 && resolvedIdx != _index) {
-        setState(() => _index = resolvedIdx);
-      }
-    }
-  }
 
   Widget _buildTabNavigator(int tabIndex) {
     return Navigator(
@@ -97,11 +76,6 @@ class _RootTabsState extends State<RootTabs> {
           onDestinationSelected: (i) {
             if (i != _index) {
               setState(() => _index = i);
-              // Met à jour la route pour deep linking
-              final routeName = tabRoutes[i];
-              if (ModalRoute.of(context)?.settings.name != routeName) {
-                Navigator.of(context).pushReplacementNamed(routeName);
-              }
             }
           },
           destinations: const [

@@ -14,85 +14,139 @@ class LibraryScreen extends StatelessWidget {
     final history = context.watch<HistoryFavoritesProvider>().history;
     final lessons = context.watch<LessonsProvider>().lessons;
     final scheme = Theme.of(context).colorScheme;
+    final isEmpty = favorites.isEmpty && history.isEmpty && lessons.isEmpty;
 
     return Scaffold(
+      backgroundColor: scheme.surface,
       appBar: AppBar(
-        title: const Text('Pipeline'),
+        backgroundColor: scheme.surface,
+        elevation: 0,
+        title: const Text('Pipeline',
+            style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+                letterSpacing: -0.3)),
         centerTitle: false,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        children: [
-          _SectionHeader(
-            title: 'Favoris',
-            count: favorites.length,
-            emptyLabel: 'Aucun favori pour le moment.',
-          ),
-          ...favorites.take(8).map((item) => Card(
-                child: ListTile(
-                  leading:
-                      Icon(Icons.star_rounded, color: Colors.amber.shade600),
-                  title: Text(item.title.isEmpty ? 'Sans titre' : item.title),
-                  subtitle: Text(item.videoUrl ?? item.id,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: IconButton(
-                    icon: Icon(Icons.delete_outline, color: scheme.error),
-                    onPressed: () {
-                      context.read<HistoryFavoritesProvider>().toggleFavorite(
-                            videoId: item.id,
-                            title: item.title,
-                            videoUrl: item.videoUrl,
-                          );
-                    },
-                  ),
-                ),
-              )),
-          const SizedBox(height: 12),
-          _SectionHeader(
-            title: 'Historique',
-            count: history.length,
-            emptyLabel: 'Aucun historique.',
-          ),
-          ...history.take(8).map((item) => Card(
-                child: ListTile(
-                  leading: Icon(Icons.history_rounded, color: scheme.primary),
-                  title: Text((item.title?.isNotEmpty ?? false)
-                      ? item.title!
-                      : item.query),
-                  subtitle: Text(item.query,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: IconButton(
-                    icon: Icon(Icons.delete_outline, color: scheme.error),
-                    onPressed: () => context
-                        .read<HistoryFavoritesProvider>()
-                        .removeHistory(item.id),
-                  ),
-                ),
-              )),
-          const SizedBox(height: 12),
-          _SectionHeader(
-            title: 'Livrables sauvegardés',
-            count: lessons.length,
-            emptyLabel: 'Aucun livrable sauvegardé.',
-          ),
-          ...lessons.take(8).map((lesson) => Card(
-                child: ListTile(
-                  leading:
-                      Icon(Icons.menu_book_rounded, color: scheme.tertiary),
-                  title: Text(lesson.title),
-                  subtitle: Text(lesson.videoUrl,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => LessonDetailScreen(lesson: lesson),
+      body: isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(18),
                       ),
-                    );
-                  },
+                      child: Icon(Icons.collections_bookmark_outlined,
+                          size: 32, color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 18),
+                    Text('Rien ici pour l\'instant',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tes favoris, ton historique et tes livrables sauvegardés apparaîtront ici.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 13,
+                          height: 1.5,
+                          color: scheme.onSurface.withValues(alpha: 0.55)),
+                    ),
+                  ],
                 ),
-              )),
-        ],
-      ),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                if (favorites.isNotEmpty) ...[
+                  _SectionHeader(
+                    title: 'Favoris',
+                    count: favorites.length,
+                  ),
+                  ...favorites.take(8).map((item) => Card(
+                        child: ListTile(
+                          leading: Icon(Icons.star_rounded,
+                              color: Colors.amber.shade600),
+                          title: Text(
+                              item.title.isEmpty ? 'Sans titre' : item.title),
+                          subtitle: Text(item.videoUrl ?? item.id,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: IconButton(
+                            icon:
+                                Icon(Icons.delete_outline, color: scheme.error),
+                            onPressed: () {
+                              context
+                                  .read<HistoryFavoritesProvider>()
+                                  .toggleFavorite(
+                                    videoId: item.id,
+                                    title: item.title,
+                                    videoUrl: item.videoUrl,
+                                  );
+                            },
+                          ),
+                        ),
+                      )),
+                  const SizedBox(height: 12),
+                ],
+                if (history.isNotEmpty) ...[
+                  _SectionHeader(
+                    title: 'Historique',
+                    count: history.length,
+                  ),
+                  ...history.take(8).map((item) => Card(
+                        child: ListTile(
+                          leading: Icon(Icons.history_rounded,
+                              color: scheme.primary),
+                          title: Text((item.title?.isNotEmpty ?? false)
+                              ? item.title!
+                              : item.query),
+                          subtitle: Text(item.query,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: IconButton(
+                            icon:
+                                Icon(Icons.delete_outline, color: scheme.error),
+                            onPressed: () => context
+                                .read<HistoryFavoritesProvider>()
+                                .removeHistory(item.id),
+                          ),
+                        ),
+                      )),
+                  const SizedBox(height: 12),
+                ],
+                if (lessons.isNotEmpty) ...[
+                  _SectionHeader(
+                    title: 'Livrables sauvegardés',
+                    count: lessons.length,
+                  ),
+                  ...lessons.take(8).map((lesson) => Card(
+                        child: ListTile(
+                          leading: Icon(Icons.menu_book_rounded,
+                              color: scheme.tertiary),
+                          title: Text(lesson.title),
+                          subtitle: Text(lesson.videoUrl,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    LessonDetailScreen(lesson: lesson),
+                              ),
+                            );
+                          },
+                        ),
+                      )),
+                ],
+              ],
+            ),
     );
   }
 }
@@ -100,11 +154,9 @@ class LibraryScreen extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   final String title;
   final int count;
-  final String emptyLabel;
   const _SectionHeader({
     required this.title,
     required this.count,
-    required this.emptyLabel,
   });
 
   @override
@@ -139,12 +191,6 @@ class _SectionHeader extends StatelessWidget {
               ),
             ),
           ),
-          const Spacer(),
-          if (count == 0)
-            Text(
-              emptyLabel,
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-            ),
         ],
       ),
     );

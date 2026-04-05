@@ -23,6 +23,8 @@ class AppScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
     final scheme = Theme.of(context).colorScheme;
+    final appBarHeight =
+        subtitle != null ? kToolbarHeight + 16.0 : kToolbarHeight;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -31,6 +33,7 @@ class AppScaffold extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
+        toolbarHeight: appBarHeight,
         title: Row(
           children: [
             if (leadingIcon != null) ...[
@@ -113,7 +116,7 @@ class AppScaffold extends StatelessWidget {
             ),
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.only(top: kToolbarHeight),
+                padding: EdgeInsets.only(top: appBarHeight),
                 child: child,
               ),
             ),

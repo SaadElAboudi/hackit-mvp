@@ -224,8 +224,8 @@ class _ChatInputState extends State<ChatInput> {
                         ? Icons.tune_rounded
                         : Icons.tune_outlined),
                     label: Text(_showContextFields
-                        ? 'Masquer contexte client'
-                        : 'Ajouter contexte client (optionnel)'),
+                        ? 'Masquer le contexte'
+                        : 'Contexte client'),
                   ),
                 ),
                 if (_showContextFields) ...[
@@ -259,6 +259,7 @@ class _ChatInputState extends State<ChatInput> {
                   SizedBox(height: AdaptiveSpacing.small),
                 ],
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Expanded(
                       child: KeyboardListener(
@@ -272,14 +273,16 @@ class _ChatInputState extends State<ChatInput> {
                           style: TextStyle(
                               fontSize: SizeConfig.adaptiveFontSize(15),
                               color: Colors.black),
+                          minLines: 1,
+                          maxLines: 6,
                           decoration: InputDecoration(
                             hintText:
                                 'Décris le brief client ou le livrable à produire…',
-                            prefixIcon: const Icon(Icons.search_rounded),
                             suffixIcon: null,
                             filled: true,
                             fillColor: Colors.white,
-                            contentPadding: EdgeInsets.symmetric(vertical: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 14),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
                               borderSide: BorderSide.none,
@@ -326,7 +329,7 @@ class _ChatInputState extends State<ChatInput> {
                                 ? null
                                 : widget.onEditLast,
                             icon: const Icon(Icons.edit_rounded, size: 18),
-                            label: const Text('Modifier dernier prompt'),
+                            label: const Text('Modifier'),
                           ),
                         if (widget.onRegenerate != null)
                           OutlinedButton.icon(
