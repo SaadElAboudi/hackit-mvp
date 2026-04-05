@@ -18,12 +18,25 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = Provider.of<SearchProvider>(context);
+    final hasMessages = provider.messages.isNotEmpty;
     return AppScaffold(
       title: 'Hackit',
       subtitle: MediaQuery.of(context).size.width >= 600
           ? 'Du brief client au livrable actionnable'
           : null,
       leadingIcon: Icons.bolt_rounded,
+      actions: hasMessages
+          ? [
+              Tooltip(
+                message: 'Nouveau brief',
+                child: IconButton(
+                  icon: const Icon(Icons.add_comment_outlined),
+                  onPressed: () => provider.clearMessages(),
+                ),
+              ),
+            ]
+          : null,
       child: Column(
         children: [
           Expanded(child: _ChatMessagesList()),

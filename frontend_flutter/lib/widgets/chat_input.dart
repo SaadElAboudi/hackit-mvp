@@ -40,70 +40,59 @@ class _ChatInputState extends State<ChatInput> {
   // Feature flag: show/hide prompt template chips above the input.
   // Read from widget.showTemplates.
   final TextEditingController _controller = TextEditingController();
-  final TextEditingController _clientTypeController = TextEditingController();
-  final TextEditingController _budgetController = TextEditingController();
-  final TextEditingController _deadlineController = TextEditingController();
-  final TextEditingController _maturityController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  String? _selectedTemplate; // local UI state
+  String? _selectedTemplate;
+  String? _selectedDeadline;
   bool _restoredToastShown = false;
-  bool _showContextFields = false;
 
   @override
   void dispose() {
     _controller.dispose();
-    _clientTypeController.dispose();
-    _budgetController.dispose();
-    _deadlineController.dispose();
-    _maturityController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
   SearchContext _buildContext() {
-    String? norm(String value) {
-      final v = value.trim();
-      return v.isEmpty ? null : v;
-    }
-
+    final deadline = switch (_selectedDeadline) {
+      '1s' => '1 semaine',
+      '2s' => '2 semaines',
+      '1m' => '1 mois',
+      '3m' => '3 mois',
+      _ => null,
+    };
     return {
-      'clientType': norm(_clientTypeController.text),
-      'budget': norm(_budgetController.text),
-      'deadline': norm(_deadlineController.text),
-      'maturity': norm(_maturityController.text),
+      'clientType': null,
+      'budget': null,
+      'deadline': deadline,
+      'maturity': null,
     };
   }
 
   void _submit() {
-    String q = _controller.text.trim();
+    final q = _controller.text.trim();
     if (q.isNotEmpty && !widget.disabled) {
-      // Apply selected template at submission time to guarantee payload transformation.
+      // Apply mode template to enrich query without modifying the visible input.
+      String enhanced = q;
       try {
         final provider = Provider.of<SearchProvider>(context, listen: false);
         final id = _selectedTemplate ?? provider.lastTemplate;
         if (id != null) {
-          q = provider.applyTemplateText(id, q);
-          _controller.text = q;
-          _controller.selection =
-              TextSelection.collapsed(offset: _controller.text.length);
+          enhanced = provider.applyTemplateText(id, q);
+          provider.setLastTemplate(id);
         }
       } catch (_) {}
 
       final contextData = _buildContext();
       if (widget.onSearchWithContext != null) {
-        widget.onSearchWithContext!(q, contextData);
+        widget.onSearchWithContext!(enhanced, contextData);
       } else {
-        widget.onSearch(q);
+        widget.onSearch(enhanced);
       }
-      // Toujours vider le champ après envoi pour UX plus propre.
       _controller.clear();
       try {
-        // Si SearchProvider est disponible, vider aussi le draft global
         final p = Provider.of<SearchProvider>(context, listen: false);
         p.setDraft('');
       } catch (_) {}
-      _selectedTemplate = null; // reset template selection after send
-      // Optionnel: retirer le focus pour signaler la soumission
       _focusNode.unfocus();
     }
   }
@@ -171,93 +160,30 @@ class _ChatInputState extends State<ChatInput> {
         AdaptiveSpacing.medium,
       ),
       child: Material(
-        elevation: 6,
+        elevation: 3,
         borderRadius: BorderRadius.circular(22),
         shadowColor: Colors.black12,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: scheme.surface,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.25),
-              width: 1.1,
+              color: scheme.outlineVariant.withValues(alpha: 0.3),
+              width: 1,
             ),
           ),
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: AdaptiveSpacing.large,
-              vertical: AdaptiveSpacing.medium,
+            padding: EdgeInsets.fromLTRB(
+              AdaptiveSpacing.medium,
+              AdaptiveSpacing.medium,
+              AdaptiveSpacing.small,
+              AdaptiveSpacing.small,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (widget.showTemplates) ...[
-                  _TemplateChips(
-                    selected: _selectedTemplate ?? provider?.lastTemplate,
-                    onSelected: (id) {
-                      setState(() => _selectedTemplate = id);
-                      provider?.setLastTemplate(id);
-                      if (id != null) {
-                        final transformed =
-                            provider?.applyTemplateText(id, _controller.text) ??
-                                _controller.text;
-                        setState(() {
-                          _controller.text = transformed;
-                          _controller.selection = TextSelection.collapsed(
-                              offset: transformed.length);
-                        });
-                      }
-                      _focusNode.requestFocus();
-                    },
-                  ),
-                  SizedBox(height: AdaptiveSpacing.small),
-                ],
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: widget.disabled
-                        ? null
-                        : () => setState(
-                            () => _showContextFields = !_showContextFields),
-                    icon: Icon(_showContextFields
-                        ? Icons.tune_rounded
-                        : Icons.tune_outlined),
-                    label: Text(_showContextFields
-                        ? 'Masquer le contexte'
-                        : 'Contexte client'),
-                  ),
-                ),
-                if (_showContextFields) ...[
-                  SizedBox(height: AdaptiveSpacing.tiny),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _ContextField(
-                        controller: _clientTypeController,
-                        label: 'Type client',
-                        hint: 'Startup, PME, grand compte',
-                      ),
-                      _ContextField(
-                        controller: _budgetController,
-                        label: 'Budget',
-                        hint: 'Faible / Moyen / Élevé',
-                      ),
-                      _ContextField(
-                        controller: _deadlineController,
-                        label: 'Deadline',
-                        hint: 'Ex: 2 semaines',
-                      ),
-                      _ContextField(
-                        controller: _maturityController,
-                        label: 'Maturité',
-                        hint: 'Débutant / Intermédiaire / Avancé',
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: AdaptiveSpacing.small),
-                ],
+                // Input + send button
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -270,74 +196,83 @@ class _ChatInputState extends State<ChatInput> {
                           onChanged: (v) => provider?.setDraft(v),
                           onSubmitted: (_) => _submit(),
                           textInputAction: TextInputAction.newline,
-                          style: TextStyle(
-                              fontSize: SizeConfig.adaptiveFontSize(15),
-                              color: Colors.black),
                           minLines: 1,
                           maxLines: 6,
-                          decoration: InputDecoration(
-                            hintText:
-                                'Décris le brief client ou le livrable à produire…',
-                            suffixIcon: null,
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide.none,
-                            ),
+                          style: TextStyle(
+                            fontSize: SizeConfig.adaptiveFontSize(15),
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Décris le brief client ou le livrable…',
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 8),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: scheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 44,
+                      width: 44,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
-                        elevation: 2,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 12),
-                      ),
-                      onPressed: widget.disabled ? null : _submit,
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.send_rounded, size: 22),
-                          SizedBox(width: 8),
-                          Text('Générer',
-                              style: TextStyle(fontWeight: FontWeight.w600)),
-                        ],
+                        onPressed: widget.disabled ? null : _submit,
+                        child: const Icon(Icons.arrow_upward_rounded, size: 20),
                       ),
                     ),
+                    const SizedBox(width: 4),
                   ],
                 ),
+                SizedBox(height: AdaptiveSpacing.small),
+                // Context chips: mode + deadline in a single scrollable row
+                _ContextChips(
+                  selectedMode: _selectedTemplate,
+                  selectedDeadline: _selectedDeadline,
+                  disabled: widget.disabled,
+                  onModeSelected: (id) =>
+                      setState(() => _selectedTemplate = id),
+                  onDeadlineSelected: (d) =>
+                      setState(() => _selectedDeadline = d),
+                ),
+                // Edit / regenerate actions
                 if (widget.onRegenerate != null || widget.onEditLast != null)
                   Padding(
-                    padding: EdgeInsets.only(top: AdaptiveSpacing.small),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    padding: EdgeInsets.only(top: AdaptiveSpacing.tiny),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         if (widget.onEditLast != null)
-                          OutlinedButton.icon(
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                            ),
                             onPressed: (widget.disabled || !hasLastQuery)
                                 ? null
                                 : widget.onEditLast,
-                            icon: const Icon(Icons.edit_rounded, size: 18),
-                            label: const Text('Modifier'),
+                            icon: const Icon(Icons.edit_rounded, size: 15),
+                            label: const Text('Modifier',
+                                style: TextStyle(fontSize: 13)),
                           ),
                         if (widget.onRegenerate != null)
-                          OutlinedButton.icon(
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                            ),
                             onPressed: (widget.disabled || !hasLastQuery)
                                 ? null
                                 : widget.onRegenerate,
-                            icon: const Icon(Icons.refresh_rounded, size: 18),
-                            label: const Text('Relancer'),
+                            icon: const Icon(Icons.refresh_rounded, size: 15),
+                            label: const Text('Relancer',
+                                style: TextStyle(fontSize: 13)),
                           ),
                       ],
                     ),
@@ -351,62 +286,88 @@ class _ChatInputState extends State<ChatInput> {
   }
 }
 
-class _TemplateChips extends StatelessWidget {
-  final String? selected;
-  final void Function(String?) onSelected;
-  const _TemplateChips({required this.selected, required this.onSelected});
+// Single scrollable row combining mode chips + deadline chips.
+class _ContextChips extends StatelessWidget {
+  final String? selectedMode;
+  final String? selectedDeadline;
+  final bool disabled;
+  final void Function(String?) onModeSelected;
+  final void Function(String?) onDeadlineSelected;
 
-  @override
-  Widget build(BuildContext context) {
-    const templates = [
-      ('cadrer', 'Cadrer'),
-      ('produire', 'Produire'),
-      ('communiquer', 'Communiquer'),
-      ('audit', 'Audit 7j'),
-    ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      children: [
-        for (final (id, label) in templates)
-          ChoiceChip(
-            label: Text(label),
-            selected: selected == id,
-            onSelected: (v) => onSelected(v ? id : null),
-          ),
-      ],
-    );
-  }
-}
-
-class _ContextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final String hint;
-
-  const _ContextField({
-    required this.controller,
-    required this.label,
-    required this.hint,
+  const _ContextChips({
+    required this.selectedMode,
+    required this.selectedDeadline,
+    required this.disabled,
+    required this.onModeSelected,
+    required this.onDeadlineSelected,
   });
 
+  static const _modes = [
+    ('cadrer', '⚡ Cadrer'),
+    ('produire', '🔨 Produire'),
+    ('communiquer', '📣 Communiquer'),
+    ('audit', '🔍 Audit 7j'),
+  ];
+
+  static const _deadlines = [
+    ('1s', '1 sem'),
+    ('2s', '2 sem'),
+    ('1m', '1 mois'),
+    ('3m', '3 mois'),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final fieldWidth = width < 700 ? width - 96 : (width - 180) / 2;
-    return SizedBox(
-      width: fieldWidth.clamp(220.0, 420.0),
-      child: TextField(
-        controller: controller,
-        style: const TextStyle(fontSize: 13),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          isDense: true,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+    final scheme = Theme.of(context).colorScheme;
+    const chipText = TextStyle(fontSize: 12);
+    const chipPad = EdgeInsets.symmetric(horizontal: 6, vertical: 0);
+    const density = VisualDensity.compact;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final (id, label) in _modes) ...[
+            FilterChip(
+              label: Text(label, style: chipText),
+              selected: selectedMode == id,
+              onSelected:
+                  disabled ? null : (v) => onModeSelected(v ? id : null),
+              visualDensity: density,
+              padding: chipPad,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            const SizedBox(width: 5),
+          ],
+          // Divider
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            width: 1,
+            height: 18,
+            color: scheme.outlineVariant,
           ),
-        ),
+          Text(
+            'Délai',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: scheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ),
+          const SizedBox(width: 6),
+          for (final (id, label) in _deadlines) ...[
+            ChoiceChip(
+              label: Text(label, style: chipText),
+              selected: selectedDeadline == id,
+              onSelected:
+                  disabled ? null : (v) => onDeadlineSelected(v ? id : null),
+              visualDensity: density,
+              padding: chipPad,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            const SizedBox(width: 5),
+          ],
+        ],
       ),
     );
   }

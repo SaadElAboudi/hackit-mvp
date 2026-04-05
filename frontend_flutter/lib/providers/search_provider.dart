@@ -529,6 +529,17 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearMessages() {
+    messages = [];
+    lastQuery = null;
+    _lastContext = null;
+    error = null;
+    try {
+      _prefs?.remove(_messagesKey);
+    } catch (_) {}
+    notifyListeners();
+  }
+
   // Set a draft from an existing user message to allow editing in the input field.
   void setDraft(String text) {
     _draftText = text;

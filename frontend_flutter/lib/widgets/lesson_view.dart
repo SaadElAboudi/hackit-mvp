@@ -70,30 +70,28 @@ class LessonView extends StatelessWidget {
             deliveryPlan: deliveryPlan,
           ),
           SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerLow,
+          // Vidéo de référence: expandable to avoid cluttering the plan view
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
+              side: BorderSide(
                   color: scheme.outlineVariant.withValues(alpha: 0.25)),
             ),
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            color: scheme.surfaceContainerLow,
+            clipBehavior: Clip.antiAlias,
+            child: ExpansionTile(
+              leading: Icon(Icons.ondemand_video_rounded,
+                  color: scheme.primary, size: 20),
+              title: Text('Vidéo de référence',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: scheme.onSurface)),
+              tilePadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.ondemand_video_rounded,
-                        color: scheme.primary, size: 20),
-                    SizedBox(width: 8),
-                    Text('Vidéo',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            color: scheme.onSurface)),
-                  ],
-                ),
-                SizedBox(height: 10),
                 YouTubeEmbed(videoUrl: videoUrl),
                 SizedBox(height: 8),
                 VideoCard(title: title, videoUrl: videoUrl),
@@ -154,98 +152,43 @@ class LessonView extends StatelessWidget {
             ),
           ],
           SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: scheme.outlineVariant.withValues(alpha: 0.25)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Compact save row replacing the full save section card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.bookmark_add_rounded,
-                        size: 18, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Sauvegarde',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: scheme.onSurface),
-                    ),
-                    const Spacer(),
-                    if (alreadySaved)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: scheme.primaryContainer.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'Enregistrée',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: scheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  alreadySaved
-                      ? 'Ce livrable est déjà dans ton pipeline.'
-                      : 'Ajoute cette réponse à ton pipeline pour la retrouver et la réutiliser rapidement.',
-                  style:
-                      TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
-                ),
-                if (!canSave && !alreadySaved) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Impossible d\'enregistrer: lien vidéo invalide.',
-                    style: TextStyle(color: scheme.error, fontSize: 12),
-                  ),
-                ],
                 if (saveError != null &&
                     saveError.trim().isNotEmpty &&
-                    !alreadySaved) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    saveError,
-                    style: TextStyle(color: scheme.error, fontSize: 12),
+                    !alreadySaved)
+                  Expanded(
+                    child: Text(
+                      saveError,
+                      style: TextStyle(color: scheme.error, fontSize: 12),
+                    ),
                   ),
-                ],
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
+                Tooltip(
+                  message: alreadySaved
+                      ? 'Enregistré dans le pipeline'
+                      : 'Enregistrer dans le pipeline',
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact),
                     icon: lessons.loading
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : Icon(
                             alreadySaved
-                                ? Icons.check_rounded
-                                : Icons.bookmark_add_rounded,
+                                ? Icons.bookmark_rounded
+                                : Icons.bookmark_add_outlined,
+                            size: 18,
                           ),
                     label: Text(
-                      alreadySaved
-                          ? 'Livrable enregistré'
-                          : (lessons.loading
-                              ? 'Enregistrement...'
-                              : 'Enregistrer le livrable'),
+                      alreadySaved ? 'Sauvegardé' : 'Sauvegarder',
+                      style: const TextStyle(fontSize: 13),
                     ),
                     onPressed: (!alreadySaved && canSave && !lessons.loading)
                         ? () async {
@@ -264,7 +207,7 @@ class LessonView extends StatelessWidget {
                               messenger.showSnackBar(
                                 SnackBar(
                                   content: Text(lessons.error ??
-                                      'Échec de l\'enregistrement'),
+                                      "Échec de l'enregistrement"),
                                 ),
                               );
                             }

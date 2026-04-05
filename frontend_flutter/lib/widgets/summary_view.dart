@@ -272,129 +272,7 @@ class SummaryView extends StatelessWidget {
               final sc = _buildStrategyCards(context);
               return sc != null ? [sc] : <Widget>[];
             }(),
-            ...sections.asMap().entries.map(
-                  (sectionEntry) => Padding(
-                    padding: EdgeInsets.only(bottom: AdaptiveSpacing.medium),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (_iconForSection(sectionEntry.value.title) !=
-                                null) ...[
-                              Icon(
-                                _iconForSection(sectionEntry.value.title)!,
-                                size: 14,
-                                color: scheme.primary.withValues(alpha: 0.85),
-                              ),
-                              const SizedBox(width: 5),
-                            ],
-                            Flexible(
-                              child: Text(
-                                sectionEntry.value.title,
-                                style: TextStyle(
-                                  fontSize: SizeConfig.adaptiveFontSize(15),
-                                  fontWeight: FontWeight.w700,
-                                  color:
-                                      scheme.onSurface.withValues(alpha: 0.88),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: AdaptiveSpacing.small),
-                        ...sectionEntry.value.items.asMap().entries.map(
-                              (entry) => Padding(
-                                padding: EdgeInsets.only(
-                                  bottom: AdaptiveSpacing.tiny + 2,
-                                ),
-                                child: TweenAnimationBuilder<double>(
-                                  tween: Tween(begin: 0, end: 1),
-                                  duration: Duration(
-                                    milliseconds: 320 +
-                                        (sectionEntry.key * 70) +
-                                        (entry.key * 50),
-                                  ),
-                                  curve: Curves.easeOutCubic,
-                                  builder: (context, t, child) => Opacity(
-                                    opacity: t,
-                                    child: Transform.translate(
-                                      offset: Offset(0, (1 - t) * 12),
-                                      child: child,
-                                    ),
-                                  ),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeOut,
-                                    decoration: BoxDecoration(
-                                      color: scheme.surfaceContainerLowest,
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                        color: scheme.outlineVariant
-                                            .withValues(alpha: 0.25),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    padding: EdgeInsets.fromLTRB(
-                                      AdaptiveSpacing.small,
-                                      AdaptiveSpacing.small + 2,
-                                      AdaptiveSpacing.small,
-                                      AdaptiveSpacing.small + 4,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          width: 22.0,
-                                          height: 22.0,
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                const Color(0xFF111111),
-                                                scheme.primary
-                                                    .withValues(alpha: 0.85),
-                                              ],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(999),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            '${entry.key + 1}',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 12.0,
-                                            ),
-                                          ),
-                                        ),
-                                        SizedBox(width: AdaptiveSpacing.small),
-                                        Expanded(
-                                          child: Text(
-                                            entry.value,
-                                            style: TextStyle(
-                                              fontSize:
-                                                  SizeConfig.adaptiveFontSize(
-                                                      14),
-                                              height: 1.32,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                      ],
-                    ),
-                  ),
-                ),
+            _ExpandableSections(sections: sections),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -420,6 +298,151 @@ class SummaryView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Shows plan sections with progressive disclosure (first 4 visible, rest expandable).
+class _ExpandableSections extends StatefulWidget {
+  final List<_PlanSection> sections;
+  const _ExpandableSections({required this.sections});
+
+  @override
+  State<_ExpandableSections> createState() => _ExpandableSectionsState();
+}
+
+class _ExpandableSectionsState extends State<_ExpandableSections> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    SizeConfig.ensureInitialized(context);
+    final scheme = Theme.of(context).colorScheme;
+    final visible = _expanded
+        ? widget.sections
+        : widget.sections.take(4).toList();
+
+    Widget buildItem(int sectionIdx, _PlanSection section, int itemIdx,
+        String value) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: AdaptiveSpacing.tiny + 2),
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: Duration(
+              milliseconds: 320 + (sectionIdx * 60) + (itemIdx * 40)),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, child) => Opacity(
+            opacity: t,
+            child: Transform.translate(
+                offset: Offset(0, (1 - t) * 10), child: child),
+          ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.25),
+                  width: 1),
+            ),
+            padding: EdgeInsets.fromLTRB(AdaptiveSpacing.small,
+                AdaptiveSpacing.small + 2, AdaptiveSpacing.small,
+                AdaptiveSpacing.small + 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF111111),
+                        scheme.primary.withValues(alpha: 0.85),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${itemIdx + 1}',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12),
+                  ),
+                ),
+                SizedBox(width: AdaptiveSpacing.small),
+                Expanded(
+                  child: Text(value,
+                      style: TextStyle(
+                          fontSize: SizeConfig.adaptiveFontSize(14),
+                          height: 1.32)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...visible.asMap().entries.map((se) => Padding(
+              padding: EdgeInsets.only(bottom: AdaptiveSpacing.medium),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      if (_iconForSection(se.value.title) != null) ...[
+                        Icon(_iconForSection(se.value.title)!,
+                            size: 14,
+                            color: scheme.primary.withValues(alpha: 0.85)),
+                        const SizedBox(width: 5),
+                      ],
+                      Flexible(
+                        child: Text(
+                          se.value.title,
+                          style: TextStyle(
+                            fontSize: SizeConfig.adaptiveFontSize(15),
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface.withValues(alpha: 0.88),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: AdaptiveSpacing.small),
+                  ...se.value.items.asMap().entries.map(
+                        (ie) => buildItem(se.key, se.value, ie.key, ie.value),
+                      ),
+                ],
+              ),
+            )),
+        if (!_expanded && widget.sections.length > 4)
+          Padding(
+            padding: EdgeInsets.only(bottom: AdaptiveSpacing.medium),
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4)),
+              onPressed: () => setState(() => _expanded = true),
+              icon: const Icon(Icons.expand_more_rounded, size: 18),
+              label: Text(
+                'Voir ${widget.sections.length - 4} autres éléments',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
