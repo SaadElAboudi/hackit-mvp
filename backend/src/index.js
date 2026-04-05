@@ -426,6 +426,146 @@ function buildStrategyVariants({ mode, context }) {
   ];
 }
 
+// Builds a Gemini prompt that generates a COMPLETE professional deliverable (not just 5 bullets).
+// The output becomes the readyToSend document directly.
+function buildGeminiPromptForMode({ mode, query, context, videoTitle }) {
+  const ctx = normalizeDeliveryContext(context);
+  const ctxHint = [
+    ctx.clientType ? `Client : ${ctx.clientType}` : '',
+    ctx.budget    ? `Budget : ${ctx.budget}` : '',
+    ctx.deadline  ? `Deadline : ${ctx.deadline}` : '',
+    ctx.maturity  ? `Maturité : ${ctx.maturity}` : '',
+  ].filter(Boolean).join(' | ');
+  const ctxLine = ctxHint ? `\nContexte additionnel : ${ctxHint}` : '';
+  const refLine = videoTitle ? `\nRéférence vidéo : "${videoTitle}"` : '';
+
+  switch (mode) {
+    case 'communiquer':
+      return `Tu es un consultant senior.${ctxLine}${refLine}
+Brief client : "${query}"
+
+Rédige un email professionnel directement envoyable au client, en réponse à ce brief.
+
+FORMAT OBLIGATOIRE :
+OBJET : [objet email concis et lié au brief]
+
+Bonjour,
+
+[Phrase d'accroche contextualisée — 2 lignes max, mentionne le sujet du brief]
+
+[Développement en 3 points bullet courts et actionnables, spécifiques au brief]
+
+[Call to action clair — 1 phrase qui ouvre la suite]
+
+Cordialement,
+[Prénom]
+
+RÈGLES STRICTES : Email directement envoyable sans retouche. Zéro formule creuse. Tous les éléments doivent être spécifiques au brief, pas génériques. 15–20 lignes max.`;
+
+    case 'cadrer':
+      return `Tu es un consultant senior mandaté pour cadrer ce projet.${ctxLine}${refLine}
+Brief client : "${query}"
+
+Rédige une note de cadrage professionnelle directement transmissible au client.
+
+FORMAT OBLIGATOIRE :
+NOTE DE CADRAGE — [TITRE EN MAJUSCULES DÉRIVÉ DU BRIEF]
+
+CONTEXTE & ENJEUX
+[2–3 lignes qui résument le contexte et ce qui est en jeu pour CE brief spécifiquement]
+
+LIVRABLES ATTENDUS
+• [livrable 1 concret et mesurable]
+• [livrable 2 concret et mesurable]
+• [livrable 3 si pertinent]
+
+PÉRIMÈTRE
+Inclus : [éléments in-scope liés au brief]
+Exclu : [éléments hors scope à clarifier]
+
+RISQUES & DÉPENDANCES
+• [risque 1 spécifique au brief]
+• [risque 2 spécifique au brief]
+• [dépendance clé]
+
+PROCHAINES ÉTAPES
+1. [action concrète — J0–J1]
+2. [action concrète — J1–J2]
+3. [action concrète — J2–J3]
+
+RÈGLES STRICTES : Document directement transmissible. Tous les éléments font référence au brief, pas à un projet générique. 20–25 lignes.`;
+
+    case 'audit':
+      return `Tu es un auditeur senior.${ctxLine}${refLine}
+Brief client : "${query}"
+
+Rédige une synthèse d'audit flash directement partageable au client.
+
+FORMAT OBLIGATOIRE :
+SYNTHÈSE D'AUDIT — [TITRE EN MAJUSCULES DÉRIVÉ DU BRIEF]
+
+POINTS DIAGNOSTIQUÉS
+🔴 [point critique 1 — spécifique au brief]
+🔴 [point critique 2 si pertinent]
+🟡 [point à corriger 1]
+🟡 [point à corriger 2]
+🟢 [quick win identifié]
+
+QUICK WINS PRIORITAIRES
+1. [action immédiate 1 — impact élevé, effort faible — lié au brief]
+2. [action immédiate 2]
+3. [action immédiate 3]
+
+PLAN D'ACTION 7 JOURS
+J0–J1 : [focus spécifique]
+J2–J3 : [focus spécifique]
+J4–J5 : [focus spécifique]
+J6–J7 : [livraison rapport]
+
+CRITÈRES DE CLÔTURE
+☑ [critère 1 mesurable et lié au brief]
+☑ [critère 2 mesurable]
+☑ [critère 3]
+
+RÈGLES STRICTES : Synthèse directement partageable. Tous les éléments font référence au brief. 22–28 lignes.`;
+
+    default: // produire
+      return `Tu es un chef de projet senior.${ctxLine}${refLine}
+Brief client : "${query}"
+
+Rédige un plan de livraison professionnel directement transmissible au client.
+
+FORMAT OBLIGATOIRE :
+PLAN DE LIVRAISON — [TITRE EN MAJUSCULES DÉRIVÉ DU BRIEF]
+
+OBJECTIF
+[Objectif SMART en 1–2 lignes, directement lié au brief]
+
+TÂCHES PRIORITAIRES
+1. [tâche critique 1 — J0] ⚠ bloquante
+2. [tâche 2 — J1–J2]
+3. [tâche 3 — J2–J3]
+4. [tâche 4 — J3–J4]
+
+TIMELINE
+• J0 : [démarrage — action concrète]
+• J1–J2 : [exécution — focus]
+• J3 : [revue qualité]
+• J4 : [livraison finale]
+
+CRITÈRES D'ACCEPTATION
+☑ [critère 1 mesurable et lié au brief]
+☑ [critère 2 mesurable]
+☑ [critère 3]
+
+RISQUES
+⚠ [risque 1 spécifique au brief]
+⚠ [risque 2]
+
+RÈGLES STRICTES : Document directement transmissible. Tous les éléments font référence au brief, pas à un projet générique. 25–30 lignes.`;
+  }
+}
+
 function buildReadyToSend({ mode, query, title, objective, nextActions, timeline, acceptanceCriteria }) {
   const topic = extractTopicFromQuery(query) || String(title || '').trim().slice(0, 80);
   const T = topic || 'ce sujet';
@@ -499,7 +639,7 @@ function buildReadyToSend({ mode, query, title, objective, nextActions, timeline
   return lines.join('\n');
 }
 
-function buildDeliveryPlan({ mode, query, title, steps, context }) {
+function buildDeliveryPlan({ mode, query, title, steps, context, geminiDeliverable = null }) {
   const ctx = normalizeDeliveryContext(context);
   const items = Array.isArray(steps) ? steps.filter(Boolean).map((s) => String(s).trim()).filter(Boolean) : [];
   const pick = (from, count) => items.slice(from, from + count);
@@ -641,7 +781,7 @@ function buildDeliveryPlan({ mode, query, title, steps, context }) {
   const modeNames = { cadrer: 'Cadrage', produire: 'Production', communiquer: 'Communication', audit: 'Audit' };
   const bsTopic = extractTopicFromQuery(query) || String(title || '').trim().slice(0, 60);
   const briefSummary = `${modeNames[mode] || 'Plan'} pour "${bsTopic}". ${nextActions.length} actions prioritaires identifiées.`;
-  const readyToSend = buildReadyToSend({ mode, query, title, objective, nextActions, timeline, acceptanceCriteria });
+  const readyToSend = geminiDeliverable || buildReadyToSend({ mode, query, title, objective, nextActions, timeline, acceptanceCriteria });
 
   return {
     mode,
@@ -1040,6 +1180,7 @@ app.post("/api/search", async (req, res) => {
     }
 
     let summaryText = "";
+    let geminiDeliverablePost = null;
     const attemptGeminiSummary = useGemini && !reformulationTimedOut;
     const desiredSteps = extractDesiredSteps(query) || summaryConfig.stepsTarget;
     if (attemptGeminiSummary) {
@@ -1054,9 +1195,20 @@ app.post("/api/search", async (req, res) => {
       // Utilise le transcript comme input Gemini si disponible
       const summaryPrompt = transcriptText
         ? `Tu es un consultant expert. Génère un plan d'action en ${desiredSteps || 5} étapes concrètes et numérotées pour : "${query}"\n\nTranscription de référence :\n${transcriptText.slice(0, 1200)}\n\nRègles : une étape par ligne numérotée, concrète et directement actionnable, adaptée au brief décrit.`
-        : `Tu es un consultant expert. Génère un plan d'action en ${desiredSteps || 5} étapes concrètes et numérotées pour : "${query}"\n\nContexte : vidéo de référence "${videoTitle}"\n\nRègles : une étape par ligne numérotée, concrète et directement actionnable, adaptée au brief décrit.`;
+        : null;
       try {
-        summaryText = await generateWithGemini(summaryPrompt, 300);
+        // Always try to generate the full deliverable document first
+        const deliverablePrompt = buildGeminiPromptForMode({ mode: deliveryMode, query, context: requestContext, videoTitle });
+        const fullDoc = await generateWithGemini(deliverablePrompt, 600);
+        geminiDeliverablePost = fullDoc.trim();
+        // If we also have a transcript, use it to extract numbered steps for plan sections
+        if (summaryPrompt) {
+          const stepsOnly = await generateWithGemini(summaryPrompt, 300);
+          summaryText = stepsOnly;
+        } else {
+          const numberedLines = fullDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[\.\)]\s/.test(l)).map(l => l.replace(/^\d+[\.\)]\s*/, ''));
+          summaryText = numberedLines.length >= 2 ? numberedLines.join('\n') : heuristicSummary({ desiredSteps, mode: deliveryMode, query });
+        }
       } catch (e) {
         console.warn("Gemini summary failed:", e.message);
         summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode, query });
@@ -1066,7 +1218,7 @@ app.post("/api/search", async (req, res) => {
     }
 
     const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
-    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps, context: requestContext });
+    const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps, context: requestContext, geminiDeliverable: geminiDeliverablePost ?? null });
     const vid = videoId || extractYouTubeVideoId(videoUrl);
     const citations = vid ? await buildCitations({ videoId: vid, videoTitle, videoUrl, max: 3 }) : [];
     const desiredChapters = extractDesiredChapters(query);
@@ -1220,14 +1372,21 @@ app.get("/api/search/stream", async (req, res) => {
 
       // Summarize and stream steps one by one (Gemini returns full text; we simulate token streaming)
       let summaryText = "";
+      let geminiDeliverable = null;
       const attemptGeminiSummary = useGemini && !reformulationTimedOut;
       const desiredSteps = extractDesiredSteps(query);
       if (attemptGeminiSummary) {
-        const summaryPrompt = `Tu es un consultant expert. Génère un plan d'action en ${desiredSteps || 5} étapes concrètes et numérotées pour : "${query}"\n\nContexte : vidéo de référence "${videoTitle}"\n\nRègles : une étape par ligne numérotée, concrète et directement actionnable, adaptée au brief décrit.`;
+        const deliverablePrompt = buildGeminiPromptForMode({ mode: deliveryMode, query, context: requestContext, videoTitle });
         try {
-          summaryText = await generateWithGemini(summaryPrompt, 300);
+          const fullDoc = await generateWithGemini(deliverablePrompt, 600);
+          geminiDeliverable = fullDoc.trim();
+          // Extract numbered lines as steps so the plan sections are populated
+          const numberedLines = fullDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[\.\)]\s/.test(l)).map(l => l.replace(/^\d+[\.\)]\s*/, ''));
+          summaryText = numberedLines.length >= 2
+            ? numberedLines.join('\n')
+            : heuristicSummary({ desiredSteps, mode: deliveryMode, query });
         } catch (e) {
-          console.warn("Gemini summary (stream) failed:", e.message);
+          console.warn("Gemini deliverable (stream) failed:", e.message);
           summaryText = heuristicSummary({ desiredSteps, mode: deliveryMode, query });
         }
       } else {
@@ -1235,7 +1394,7 @@ app.get("/api/search/stream", async (req, res) => {
       }
 
       const steps = summaryText.split("\n").map(s => s.trim()).filter(Boolean);
-      const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps, context: requestContext });
+      const deliveryPlan = buildDeliveryPlan({ mode: deliveryMode, query, title: videoTitle, steps, context: requestContext, geminiDeliverable });
       for (const s of steps) {
         if (clientState.closed) return end();
         writeEvent({ type: "partial", step: s });

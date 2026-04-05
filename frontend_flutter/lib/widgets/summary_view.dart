@@ -114,24 +114,13 @@ class SummaryView extends StatelessWidget {
 
       final fromPlan = [
         _PlanSection(title: 'Objectif', items: listOf('objective')),
-        _PlanSection(title: 'Périmètre', items: listOf('scope')),
-        _PlanSection(title: 'Risques', items: listOf('risks')),
         _PlanSection(title: 'Prochaines actions', items: listOf('nextActions')),
         _PlanSection(title: 'Timeline', items: listOf('timeline')),
+        _PlanSection(title: "Critères d'acceptation", items: listOf('acceptanceCriteria')),
+        _PlanSection(title: 'Périmètre', items: listOf('scope')),
+        _PlanSection(title: 'Risques', items: listOf('risks')),
         _PlanSection(title: 'Effort', items: listOf('effort')),
         _PlanSection(title: 'Dépendances', items: listOf('dependencies')),
-        _PlanSection(
-            title: "Critères d'acceptation",
-            items: listOf('acceptanceCriteria')),
-        _PlanSection(title: 'Message client', items: listOf('clientMessage')),
-        _PlanSection(
-            title: 'Priorisation impact/effort', items: listOf('actionMatrix')),
-        _PlanSection(title: 'Score qualité', items: listOf('qualitySummary')),
-        _PlanSection(
-            title: 'Vérifications de cohérence',
-            items: listOf('coherenceChecks')),
-        _PlanSection(
-            title: 'Alertes de cohérence', items: listOf('coherenceIssues')),
       ].where((section) => section.items.isNotEmpty).toList();
 
       if (fromPlan.isNotEmpty) return fromPlan;
