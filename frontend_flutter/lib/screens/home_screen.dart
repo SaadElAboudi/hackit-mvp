@@ -314,11 +314,44 @@ class _ChatMessagesListState extends State<_ChatMessagesList> {
 }
 
 class _EmptyState extends StatelessWidget {
+  // (modeId, modeLabel, exampleText, outputHint)
   static const _examples = [
-    ('⚡ Cadrer', 'Cadrer un CRM pour une PME de 50 personnes'),
-    ('🔨 Produire', 'Rédiger les specs techniques d\'une API de paiement'),
-    ('📣 Pitcher', 'Préparer le pitch deck d\'une levée Série A'),
-    ('🔍 Audit 7j', 'Auditer et reprioriser le backlog produit en 7 jours'),
+    (
+      'cadrer',
+      '⚡ Cadrer',
+      'Cadrer le lancement d\'une app mobile B2B pour 200 utilisateurs',
+      'Note de cadrage complète + MECE',
+    ),
+    (
+      'produire',
+      '🔨 Produire',
+      'Livrer un plan de migration vers le cloud en 4 semaines',
+      'Plan MoSCoW + chemin critique',
+    ),
+    (
+      'communiquer',
+      '📣 Email',
+      'Relancer un client sur un projet en retard de 3 semaines',
+      'Email prêt à envoyer — Pyramid Principle',
+    ),
+    (
+      'audit',
+      '🔍 Audit 7j',
+      'Diagnostiquer pourquoi le taux de conversion est tombé à 1,2 %',
+      'Verdict P0/P1/P2 + causes racines',
+    ),
+    (
+      'cadrer',
+      '⚡ Cadrer',
+      'Structurer une présentation de roadmap Q2 pour les investisseurs',
+      'Answer First + recommandation ferme',
+    ),
+    (
+      'produire',
+      '🔨 Produire',
+      'Rédiger les specs techniques d\'une API de paiement Stripe',
+      'Definition of Done + risques',
+    ),
   ];
 
   @override
@@ -329,112 +362,219 @@ class _EmptyState extends StatelessWidget {
     return Center(
       child: SingleChildScrollView(
         padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 24 : 48,
+          horizontal: isMobile ? 20 : 48,
           vertical: 32,
         ),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
+          constraints: const BoxConstraints(maxWidth: 600),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Hero icon with gradient
               Container(
-                width: 72,
-                height: 72,
+                width: 76,
+                height: 76,
                 decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(20),
+                  gradient: LinearGradient(
+                    colors: [
+                      scheme.primary.withValues(alpha: 0.18),
+                      scheme.primaryContainer.withValues(alpha: 0.35),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.2),
+                    width: 1.5,
+                  ),
                 ),
-                child: Icon(Icons.bolt_rounded, size: 38, color: scheme.primary),
+                child: Icon(Icons.bolt_rounded, size: 40, color: scheme.primary),
               ),
               const SizedBox(height: 20),
               Text(
-                'Du brief au plan en quelques secondes',
+                'Du brief au livrable en 30 secondes',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: isMobile ? 22 : 26,
                   fontWeight: FontWeight.w800,
                   color: scheme.onSurface,
-                  letterSpacing: -0.4,
+                  letterSpacing: -0.5,
+                  height: 1.15,
                 ),
               ),
               const SizedBox(height: 10),
               Text(
-                'Décris ton défi ou ton livrable. Hackit structure un plan d\'action immédiatement actionnable.',
+                'Décris ton défi ou ton livrable. Hackit génère un document consultant immédiatement actionnable.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  height: 1.5,
-                  color: scheme.onSurface.withValues(alpha: 0.58),
+                  height: 1.55,
+                  color: scheme.onSurface.withValues(alpha: 0.55),
                 ),
+              ),
+              const SizedBox(height: 32),
+              // Mode pills
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _modePill('⚡ Cadrer', scheme),
+                  const SizedBox(width: 6),
+                  _modePill('🔨 Produire', scheme),
+                  const SizedBox(width: 6),
+                  _modePill('📣 Email', scheme),
+                  const SizedBox(width: 6),
+                  _modePill('🔍 Audit', scheme),
+                ],
               ),
               const SizedBox(height: 28),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'LANCER UN EXEMPLE',
+                  'EXEMPLES — CLIQUEZ POUR LANCER',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1.0,
-                    color: scheme.onSurface.withValues(alpha: 0.40),
+                    letterSpacing: 1.1,
+                    color: scheme.onSurface.withValues(alpha: 0.38),
                   ),
                 ),
               ),
               const SizedBox(height: 10),
-              ..._examples.map((e) {
-                final (modeLabel, text) = e;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Material(
-                    color: scheme.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () =>
-                          Provider.of<SearchProvider>(context, listen: false)
-                              .searchStreaming(text),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: scheme.primaryContainer
-                                    .withValues(alpha: 0.7),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                modeLabel,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: scheme.onPrimaryContainer),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                text,
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    color: scheme.onSurface
-                                        .withValues(alpha: 0.82)),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(Icons.play_arrow_rounded,
-                                size: 18,
-                                color: scheme.primary.withValues(alpha: 0.55)),
-                          ],
+              // Grid layout on wider screens
+              LayoutBuilder(builder: (ctx, constraints) {
+                final wide = constraints.maxWidth > 480;
+                final cards = _examples
+                    .map((e) => _ExampleCard(example: e))
+                    .toList();
+                if (wide) {
+                  return Column(
+                    children: [
+                      for (var i = 0; i < cards.length; i += 2)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(child: cards[i]),
+                              const SizedBox(width: 8),
+                              if (i + 1 < cards.length)
+                                Expanded(child: cards[i + 1])
+                              else
+                                const Expanded(child: SizedBox()),
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
+                    ],
+                  );
+                }
+                return Column(
+                  children: cards
+                      .map((c) =>
+                          Padding(padding: const EdgeInsets.only(bottom: 8), child: c))
+                      .toList(),
                 );
               }),
+              const SizedBox(height: 8),
+              Text(
+                'Résultats basés sur Gemini 2.0 + sources web en temps réel',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: scheme.onSurface.withValues(alpha: 0.30),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _modePill(String label, ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.5),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface.withValues(alpha: 0.7),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExampleCard extends StatelessWidget {
+  /// (modeId, modeLabel, exampleText, outputHint)
+  final (String, String, String, String) example;
+  const _ExampleCard({required this.example});
+
+  @override
+  Widget build(BuildContext context) {
+    final (modeId, modeLabel, text, hint) = example;
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Provider.of<SearchProvider>(context, listen: false)
+            .searchStreaming(text, context: {'mode': modeId}),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      modeLabel,
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onPrimaryContainer),
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.north_east_rounded,
+                      size: 14,
+                      color: scheme.primary.withValues(alpha: 0.45)),
+                ],
+              ),
+              const SizedBox(height: 7),
+              Text(
+                text,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1.35,
+                    color: scheme.onSurface.withValues(alpha: 0.88)),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '→ $hint',
+                style: TextStyle(
+                    fontSize: 11,
+                    height: 1.3,
+                    color: scheme.onSurface.withValues(alpha: 0.45)),
+              ),
             ],
           ),
         ),

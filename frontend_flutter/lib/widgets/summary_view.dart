@@ -691,7 +691,7 @@ class _ReadyToSendCard extends StatefulWidget {
 }
 
 class _ReadyToSendCardState extends State<_ReadyToSendCard> {
-  bool _expanded = false;
+  bool _collapsed = false;
   bool _copied = false;
 
   String get _title {
@@ -707,35 +707,263 @@ class _ReadyToSendCardState extends State<_ReadyToSendCard> {
     }
   }
 
+  /// Renders a single line as a styled widget based on its content.
+  Widget _renderLine(String line, ColorScheme scheme) {
+    final trimmed = line.trim();
+
+    // Separator lines — render as visual divider
+    if (trimmed.startsWith('═══') || trimmed.startsWith('───')) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Divider(
+          color: scheme.outlineVariant.withValues(alpha: 0.45),
+          thickness: 1,
+          height: 1,
+        ),
+      );
+    }
+
+    // Subsection headers (━━ P0, ━━ P1, etc.)
+    if (trimmed.startsWith('━━')) {
+      final text = trimmed.replaceAll('━', '').trim();
+      final isP0 = text.contains('P0') || text.contains('BLOQUANT');
+      final isP1 = text.contains('P1') || text.contains('IMPORTANT');
+      final color = isP0
+          ? Colors.red.shade700
+          : isP1
+              ? Colors.orange.shade700
+              : scheme.primary;
+      return Padding(
+        padding: const EdgeInsets.only(top: 10, bottom: 4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Empty lines — small spacing
+    if (trimmed.isEmpty) {
+      return const SizedBox(height: 4);
+    }
+
+    // RULES footer line (grayed out)
+    if (trimmed.startsWith('RÈGLES')) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Text(
+          trimmed,
+          style: TextStyle(
+            fontSize: 10.5,
+            height: 1.4,
+            color: scheme.onSurface.withValues(alpha: 0.35),
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      );
+    }
+
+    // ALL-CAPS section headers (e.g. DIAGNOSTIC, ANSWER FIRST, VERDICT GLOBAL)
+    final isAllCaps = trimmed.length > 2 &&
+        trimmed == trimmed.toUpperCase() &&
+        RegExp(r'[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ]').hasMatch(trimmed);
+    if (isAllCaps && !trimmed.startsWith('•') && !trimmed.startsWith('→')) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12, bottom: 3),
+        child: Text(
+          trimmed,
+          style: TextStyle(
+            fontSize: SizeConfig.adaptiveFontSize(12.5),
+            fontWeight: FontWeight.w800,
+            color: scheme.primary.withValues(alpha: 0.9),
+            letterSpacing: 0.8,
+          ),
+        ),
+      );
+    }
+
+    // Action arrows → (action items in accent color)
+    if (trimmed.startsWith('→')) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('→ ',
+                style: TextStyle(
+                  fontSize: SizeConfig.adaptiveFontSize(13.5),
+                  fontWeight: FontWeight.w700,
+                  color: scheme.primary,
+                  height: 1.45,
+                )),
+            Expanded(
+              child: Text(
+                trimmed.substring(1).trim(),
+                style: TextStyle(
+                  fontSize: SizeConfig.adaptiveFontSize(13.5),
+                  height: 1.45,
+                  color: scheme.onSurface.withValues(alpha: 0.9),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Checkmark items ☑
+    if (trimmed.startsWith('☑')) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1.5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('☑ ',
+                style: TextStyle(
+                  fontSize: SizeConfig.adaptiveFontSize(13.5),
+                  color: Colors.green.shade600,
+                  height: 1.45,
+                )),
+            Expanded(
+              child: Text(
+                trimmed.substring(1).trim(),
+                style: TextStyle(
+                  fontSize: SizeConfig.adaptiveFontSize(13.5),
+                  height: 1.45,
+                  color: scheme.onSurface.withValues(alpha: 0.88),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Bullet points •
+    if (trimmed.startsWith('•')) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1.5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('• ',
+                style: TextStyle(
+                  fontSize: SizeConfig.adaptiveFontSize(14),
+                  color: scheme.primary.withValues(alpha: 0.7),
+                  height: 1.45,
+                  fontWeight: FontWeight.w700,
+                )),
+            Expanded(
+              child: Text(
+                trimmed.substring(1).trim(),
+                style: TextStyle(
+                  fontSize: SizeConfig.adaptiveFontSize(13.5),
+                  height: 1.45,
+                  color: scheme.onSurface.withValues(alpha: 0.88),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Numbered items (1. 2. 3.)
+    final numberedMatch = RegExp(r'^(\d+)[.)]\s+(.+)$').firstMatch(trimmed);
+    if (numberedMatch != null) {
+      final num = numberedMatch.group(1)!;
+      final content = numberedMatch.group(2)!;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              margin: const EdgeInsets.only(right: 8, top: 1),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                num,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                content,
+                style: TextStyle(
+                  fontSize: SizeConfig.adaptiveFontSize(13.5),
+                  height: 1.45,
+                  color: scheme.onSurface.withValues(alpha: 0.88),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Default: plain paragraph text
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Text(
+        trimmed,
+        style: TextStyle(
+          fontSize: SizeConfig.adaptiveFontSize(13.5),
+          height: 1.5,
+          color: scheme.onSurface.withValues(alpha: 0.85),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     SizeConfig.ensureInitialized(context);
     final scheme = Theme.of(context).colorScheme;
     final lines = widget.text.split('\n');
-    final previewLines = lines.take(6).join('\n');
-    final hasMore = lines.length > 6;
-    final displayText = _expanded ? widget.text : previewLines;
 
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            scheme.primaryContainer.withValues(alpha: 0.35),
-            scheme.secondaryContainer.withValues(alpha: 0.2),
+            scheme.primaryContainer.withValues(alpha: 0.25),
+            scheme.secondaryContainer.withValues(alpha: 0.15),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: scheme.primary.withValues(alpha: 0.4),
+          color: scheme.primary.withValues(alpha: 0.35),
           width: 1.5,
         ),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row
           Row(
             children: [
               Expanded(
@@ -789,44 +1017,42 @@ class _ReadyToSendCardState extends State<_ReadyToSendCard> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerLowest.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(10),
+          const SizedBox(height: 12),
+          // Rich-rendered document body
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 300),
+            crossFadeState: _collapsed
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ...lines.take(8).map((l) => _renderLine(l, scheme)),
+                const SizedBox(height: 6),
+              ],
             ),
-            child: Text(
-              displayText,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: SizeConfig.adaptiveFontSize(12.5),
-                height: 1.55,
-                color: scheme.onSurface.withValues(alpha: 0.87),
-              ),
+            secondChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: lines.map((l) => _renderLine(l, scheme)).toList(),
             ),
           ),
-          if (hasMore) ...[
-            const SizedBox(height: 6),
-            TextButton.icon(
-              style: TextButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                visualDensity: VisualDensity.compact,
-              ),
-              onPressed: () => setState(() => _expanded = !_expanded),
-              icon: Icon(
-                  _expanded
-                      ? Icons.expand_less_rounded
-                      : Icons.expand_more_rounded,
-                  size: 16),
-              label: Text(
-                _expanded ? 'Réduire' : 'Voir le livrable complet',
-                style: const TextStyle(fontSize: 12),
-              ),
+          // Collapse toggle
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              visualDensity: VisualDensity.compact,
             ),
-          ],
+            onPressed: () => setState(() => _collapsed = !_collapsed),
+            icon: Icon(
+                _collapsed
+                    ? Icons.expand_more_rounded
+                    : Icons.expand_less_rounded,
+                size: 16),
+            label: Text(
+              _collapsed ? 'Voir le livrable complet' : 'Réduire',
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
         ],
       ),
     );
