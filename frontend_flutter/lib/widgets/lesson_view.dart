@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/lessons_provider.dart';
 // ...existing code...
 import '../services/pdf_export_service.dart';
+import '../widgets/action_tracker_button.dart';
 import '../widgets/challenge_section.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
@@ -171,6 +172,11 @@ class LessonView extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                ActionTrackerButton(
+                  deliverableTitle: title,
+                  deliveryPlan: deliveryPlan,
+                  steps: steps,
+                ),
                 _ExportPdfButton(
                   title: title,
                   steps: steps,

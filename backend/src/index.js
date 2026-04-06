@@ -157,6 +157,7 @@ const START_TIME = Date.now();
 const APP_VERSION = process.env.APP_VERSION || process.env.npm_package_version || '1.0.0';
 const MAX_QUERY_LEN = Number(process.env.MAX_QUERY_LEN || 500);
 const MAX_STREAM_QUERY_LEN = Number(process.env.MAX_STREAM_QUERY_LEN || 500);
+const TAVILY_API_KEY = process.env.TAVILY_API_KEY || '';
 
 function makeMockResponse() {
   return {
@@ -171,6 +172,36 @@ function makeMockResponse() {
     videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     source: "mock"
   };
+}
+
+/**
+ * Fetches up to 3 web snippets from Tavily for a given query.
+ * Returns [] gracefully if TAVILY_API_KEY is not set or the call fails.
+ */
+async function fetchWebSnippets(query) {
+  if (!TAVILY_API_KEY) return [];
+  try {
+    const resp = await axios.post(
+      'https://api.tavily.com/search',
+      {
+        api_key: TAVILY_API_KEY,
+        query: String(query).slice(0, 200),
+        search_depth: 'basic',
+        max_results: 3,
+        include_answer: false,
+        include_raw_content: false,
+      },
+      { timeout: 3000 }
+    );
+    const results = resp.data?.results || [];
+    return results
+      .map(r => `${r.title}: ${r.snippet || String(r.content || '').slice(0, 200)}`)
+      .filter(Boolean)
+      .slice(0, 3);
+  } catch (err) {
+    console.warn('[Tavily] web search failed:', err.message);
+    return [];
+  }
 }
 
 function heuristicSummary({ desiredSteps, mode, query } = {}) {
@@ -264,6 +295,7 @@ function normalizeDeliveryContext(raw = {}) {
     budget: normalize(raw.budget),
     deadline: normalize(raw.deadline),
     maturity: normalize(raw.maturity),
+    webSnippets: Array.isArray(raw.webSnippets) ? raw.webSnippets.slice(0, 3) : [],
   };
 }
 
@@ -438,6 +470,9 @@ function buildGeminiPromptForMode({ mode, query, context, videoTitle }) {
   ].filter(Boolean).join(' | ');
   const ctxLine = ctxHint ? `\nContexte additionnel : ${ctxHint}` : '';
   const refLine = videoTitle ? `\nRéférence vidéo : "${videoTitle}"` : '';
+  const webLine = ctx.webSnippets && ctx.webSnippets.length > 0
+    ? `\nSources web récentes :\n${ctx.webSnippets.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+    : '';
 
   // Core mandate present in all modes: fill every placeholder, be specific, be opinionated.
   const fillRule = `
@@ -452,7 +487,7 @@ RÈGLES ABSOLUES (non-négociables) :
 
     // ─── COMMUNIQUER — Pyramid Principle + Executive communication ───────────
     case 'communiquer':
-      return `Tu es un expert en communication executive, formé à la Pyramid Principle de Barbara Minto, avec 12 ans d'expérience en conseil stratégique.${ctxLine}${refLine}
+      return `Tu es un expert en communication executive, formé à la Pyramid Principle de Barbara Minto, avec 12 ans d'expérience en conseil stratégique.${ctxLine}${refLine}${webLine}
 Brief client : "${query}"
 ${fillRule}
 
@@ -497,7 +532,7 @@ RÈGLES : Pyramid Principle. Bottom line en premier. Une seule action demandée.
 
     // ─── CADRER — MECE decomposition + Answer First (Bain/BCG) ───────────────
     case 'cadrer':
-      return `Tu es un principal dans un cabinet de stratégie top-3, expert en cadrage de missions complexes. Tu appliques la décomposition MECE et l'Answer First.${ctxLine}${refLine}
+      return `Tu es un principal dans un cabinet de stratégie top-3, expert en cadrage de missions complexes. Tu appliques la décomposition MECE et l'Answer First.${ctxLine}${refLine}${webLine}
 Brief client : "${query}"
 ${fillRule}
 
@@ -558,7 +593,7 @@ RÈGLES : Answer First. MECE. Aucun placeholder non rempli. 45–55 lignes.`;
 
     // ─── AUDIT — Maturity scoring + Root cause + P0/P1/P2 ───────────────────
     case 'audit':
-      return `Tu es un auditeur senior avec 12 ans d'expérience en diagnostics organisationnels et techniques. Tu uses une grille de maturité à 5 niveaux et l'analyse des causes racines.${ctxLine}${refLine}
+      return `Tu es un auditeur senior avec 12 ans d'expérience en diagnostics organisationnels et techniques. Tu uses une grille de maturité à 5 niveaux et l'analyse des causes racines.${ctxLine}${refLine}${webLine}
 Brief client : "${query}"
 ${fillRule}
 
@@ -620,7 +655,7 @@ RÈGLES : Verdict dès la 1ère ligne. Chiffres précis. Causes racines identifi
 
     // ─── PRODUIRE — Critical path + MoSCoW + Definition of Done ─────────────
     default: // produire
-      return `Tu es un partner d'un cabinet de conseil avec 15 ans d'expérience en gestion de projets complexes et livraison client.${ctxLine}${refLine}
+      return `Tu es un partner d'un cabinet de conseil avec 15 ans d'expérience en gestion de projets complexes et livraison client.${ctxLine}${refLine}${webLine}
 Brief client : "${query}"
 ${fillRule}
 
@@ -1310,9 +1345,10 @@ app.post("/api/search", async (req, res) => {
       const summaryPrompt = transcriptText
         ? `Tu es un consultant expert. Génère un plan d'action en ${desiredSteps || 5} étapes concrètes et numérotées pour : "${query}"\n\nTranscription de référence :\n${transcriptText.slice(0, 1200)}\n\nRègles : une étape par ligne numérotée, concrète et directement actionnable, adaptée au brief décrit.`
         : null;
+      const webSnippets = await fetchWebSnippets(query);
       try {
         // Always try to generate the full deliverable document first
-        const deliverablePrompt = buildGeminiPromptForMode({ mode: deliveryMode, query, context: requestContext, videoTitle });
+        const deliverablePrompt = buildGeminiPromptForMode({ mode: deliveryMode, query, context: { ...requestContext, webSnippets }, videoTitle });
         const fullDoc = await generateWithGemini(deliverablePrompt, 1200);
         geminiDeliverablePost = fullDoc.trim();
         // If we also have a transcript, use it to extract numbered steps for plan sections
@@ -1489,8 +1525,9 @@ app.get("/api/search/stream", async (req, res) => {
       let geminiDeliverable = null;
       const attemptGeminiSummary = useGemini && !reformulationTimedOut;
       const desiredSteps = extractDesiredSteps(query);
+      const webSnippets = await fetchWebSnippets(query);
       if (attemptGeminiSummary) {
-        const deliverablePrompt = buildGeminiPromptForMode({ mode: deliveryMode, query, context: requestContext, videoTitle });
+        const deliverablePrompt = buildGeminiPromptForMode({ mode: deliveryMode, query, context: { ...requestContext, webSnippets }, videoTitle });
         try {
           const fullDoc = await generateWithGemini(deliverablePrompt, 1200);
           geminiDeliverable = fullDoc.trim();
