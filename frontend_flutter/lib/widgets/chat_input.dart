@@ -199,7 +199,7 @@ class _ChatInputState extends State<ChatInput> {
                           minLines: 1,
                           maxLines: 6,
                           style: TextStyle(
-                            fontSize: SizeConfig.adaptiveFontSize(15),
+                            fontSize: SizeConfig.adaptiveFontSize(13.5),
                           ),
                           decoration: const InputDecoration(
                             hintText: 'Décris le brief client ou le livrable…',

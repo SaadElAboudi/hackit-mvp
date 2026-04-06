@@ -83,6 +83,7 @@ class SearchProvider extends ChangeNotifier {
       DateTime.now().difference(lastUpdated!) > const Duration(minutes: 5);
   String? get draftText => _draftText;
   bool get draftRestored => _draftRestored;
+  Map<String, String?>? get lastContext => _lastContext;
   String? _lastTemplate;
   String? get lastTemplate => _lastTemplate;
 

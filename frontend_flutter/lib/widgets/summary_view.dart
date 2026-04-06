@@ -1,8 +1,10 @@
 // ignore_for_file: prefer_const_constructors
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../core/responsive/size_config.dart';
 import '../core/responsive/adaptive_spacing.dart';
+import '../providers/search_provider.dart';
 
 class SummaryView extends StatelessWidget {
   final String title;
@@ -41,60 +43,7 @@ class SummaryView extends StatelessWidget {
     if (raw is! List || raw.isEmpty) return null;
     final variants = raw.whereType<Map>().toList();
     if (variants.isEmpty) return null;
-    final scheme = Theme.of(ctx).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.compare_arrows_rounded,
-                size: 14, color: scheme.primary.withValues(alpha: 0.85)),
-            const SizedBox(width: 5),
-            Text(
-              '3 stratégies disponibles',
-              style: TextStyle(
-                fontSize: SizeConfig.adaptiveFontSize(15),
-                fontWeight: FontWeight.w700,
-                color: scheme.onSurface.withValues(alpha: 0.88),
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: AdaptiveSpacing.small),
-        LayoutBuilder(
-          builder: (_, constraints) {
-            final wide = constraints.maxWidth > 480;
-            final cards = variants
-                .map((v) => _StrategyCard(variant: v, scheme: scheme))
-                .toList();
-            if (wide) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: cards
-                    .asMap()
-                    .entries
-                    .map((e) => Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                                right: e.key < cards.length - 1 ? 8 : 0),
-                            child: e.value,
-                          ),
-                        ))
-                    .toList(),
-              );
-            }
-            return Column(
-              children: cards
-                  .map((c) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8), child: c))
-                  .toList(),
-            );
-          },
-        ),
-        SizedBox(height: AdaptiveSpacing.medium),
-      ],
-    );
+    return _StrategySection(variants: variants, deliveryMode: deliveryMode);
   }
 
   List<_PlanSection> _buildSections() {
@@ -487,10 +436,116 @@ IconData? _iconForSection(String title) {
   return map[title];
 }
 
+/// Stateful host for the 3-strategy section — holds selected key + triggers re-run.
+class _StrategySection extends StatefulWidget {
+  final List<Map> variants;
+  final String? deliveryMode;
+  const _StrategySection({required this.variants, this.deliveryMode});
+
+  @override
+  State<_StrategySection> createState() => _StrategySectionState();
+}
+
+class _StrategySectionState extends State<_StrategySection> {
+  String? _selectedKey;
+
+  void _onSelect(Map variant) {
+    final key = variant['key']?.toString();
+    if (key == null) return;
+    setState(() => _selectedKey = key);
+    final provider = Provider.of<SearchProvider>(context, listen: false);
+    final query = provider.lastQuery;
+    if (query == null || query.isEmpty) return;
+    final mergedCtx = <String, String?>{
+      ...?provider.lastContext,
+      'strategyKey': key,
+    };
+    provider.searchStreaming(query, context: mergedCtx);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    SizeConfig.ensureInitialized(context);
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.compare_arrows_rounded,
+                size: 14, color: scheme.primary.withValues(alpha: 0.85)),
+            const SizedBox(width: 5),
+            Text(
+              'Choisir une approche',
+              style: TextStyle(
+                fontSize: SizeConfig.adaptiveFontSize(15),
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface.withValues(alpha: 0.88),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '→ re-génère avec ce périmètre',
+              style: TextStyle(
+                fontSize: 11,
+                color: scheme.onSurface.withValues(alpha: 0.40),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: AdaptiveSpacing.small),
+        LayoutBuilder(
+          builder: (_, constraints) {
+            final wide = constraints.maxWidth > 480;
+            final cards = widget.variants
+                .map((v) => _StrategyCard(
+                      variant: v,
+                      scheme: scheme,
+                      selected: _selectedKey == v['key']?.toString(),
+                      onTap: () => _onSelect(v),
+                    ))
+                .toList();
+            if (wide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: cards
+                    .asMap()
+                    .entries
+                    .map((e) => Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                                right: e.key < cards.length - 1 ? 8 : 0),
+                            child: e.value,
+                          ),
+                        ))
+                    .toList(),
+              );
+            }
+            return Column(
+              children: cards
+                  .map((c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8), child: c))
+                  .toList(),
+            );
+          },
+        ),
+        SizedBox(height: AdaptiveSpacing.medium),
+      ],
+    );
+  }
+}
+
 class _StrategyCard extends StatelessWidget {
   final Map variant;
   final ColorScheme scheme;
-  const _StrategyCard({required this.variant, required this.scheme});
+  final bool selected;
+  final VoidCallback? onTap;
+  const _StrategyCard({
+    required this.variant,
+    required this.scheme,
+    this.selected = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -506,124 +561,174 @@ class _StrategyCard extends StatelessWidget {
             .toList() ??
         [];
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: recommended
-            ? scheme.primaryContainer.withValues(alpha: 0.25)
-            : scheme.surfaceContainerLowest,
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: recommended
-              ? scheme.primary.withValues(alpha: 0.4)
-              : scheme.outlineVariant.withValues(alpha: 0.3),
-          width: recommended ? 1.5 : 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primaryContainer.withValues(alpha: 0.45)
+                : recommended
+                    ? scheme.primaryContainer.withValues(alpha: 0.22)
+                    : scheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? scheme.primary
+                  : recommended
+                      ? scheme.primary.withValues(alpha: 0.4)
+                      : scheme.outlineVariant.withValues(alpha: 0.3),
+              width: selected ? 2 : recommended ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(variant['emoji']?.toString() ?? '',
-                  style: const TextStyle(fontSize: 16)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  variant['label']?.toString() ?? '',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: recommended ? scheme.primary : scheme.onSurface,
-                  ),
-                ),
-              ),
-              if (recommended)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '★ Recommandé',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.primary,
+              Row(
+                children: [
+                  Text(variant['emoji']?.toString() ?? '',
+                      style: const TextStyle(fontSize: 16)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      variant['label']?.toString() ?? '',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: (selected || recommended)
+                            ? scheme.primary
+                            : scheme.onSurface,
+                      ),
                     ),
                   ),
-                ),
+                  if (selected)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '↻ En cours…',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.primary,
+                        ),
+                      ),
+                    )
+                  else if (recommended)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '★ Recommandé',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                variant['description']?.toString() ?? '',
+                style: TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: scheme.onSurface.withValues(alpha: 0.72)),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '⏱ ${variant['effort'] ?? ''}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurface.withValues(alpha: 0.7)),
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.refresh_rounded,
+                      size: 13,
+                      color: scheme.primary.withValues(alpha: 0.35)),
+                  const SizedBox(width: 3),
+                  Text(
+                    'Regénérer',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: scheme.primary.withValues(alpha: 0.45),
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              if (gains.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ...gains.map((g) => Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('✓ ',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green.shade600,
+                                  fontWeight: FontWeight.bold)),
+                          Expanded(
+                              child: Text(g,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: scheme.onSurface
+                                          .withValues(alpha: 0.8)))),
+                        ],
+                      ),
+                    )),
+              ],
+              if (risks.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                ...risks.map((r) => Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('⚠ ',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.orange.shade600)),
+                          Expanded(
+                              child: Text(r,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: scheme.onSurface
+                                          .withValues(alpha: 0.65)))),
+                        ],
+                      ),
+                    )),
+              ],
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            variant['description']?.toString() ?? '',
-            style: TextStyle(
-                fontSize: 12,
-                height: 1.35,
-                color: scheme.onSurface.withValues(alpha: 0.72)),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '⏱ ${variant['effort'] ?? ''}',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurface.withValues(alpha: 0.7)),
-            ),
-          ),
-          if (gains.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ...gains.map((g) => Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('✓ ',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.green.shade600,
-                              fontWeight: FontWeight.bold)),
-                      Expanded(
-                          child: Text(g,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: scheme.onSurface
-                                      .withValues(alpha: 0.8)))),
-                    ],
-                  ),
-                )),
-          ],
-          if (risks.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            ...risks.map((r) => Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('⚠ ',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.orange.shade600)),
-                      Expanded(
-                          child: Text(r,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: scheme.onSurface
-                                      .withValues(alpha: 0.65)))),
-                    ],
-                  ),
-                )),
-          ],
-        ],
+        ),
       ),
     );
   }

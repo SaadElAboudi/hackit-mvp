@@ -295,6 +295,7 @@ function normalizeDeliveryContext(raw = {}) {
     budget: normalize(raw.budget),
     deadline: normalize(raw.deadline),
     maturity: normalize(raw.maturity),
+    strategyKey: normalize(raw.strategyKey), // 'rapide' | 'equilibre' | 'ambitieux'
     webSnippets: Array.isArray(raw.webSnippets) ? raw.webSnippets.slice(0, 3) : [],
   };
 }
@@ -414,48 +415,117 @@ function buildQualityAssessment({ mode, objective, scope, risks, nextActions, ti
 
 function buildStrategyVariants({ mode, context }) {
   const ctx = normalizeDeliveryContext(context);
-  const modeLabels = {
-    cadrer: { rapide: 'Cadrage express', equilibre: 'Cadrage structuré', ambitieux: 'Cadrage complet' },
-    produire: { rapide: 'MVP rapide', equilibre: 'Livraison équilibrée', ambitieux: 'Livraison complète' },
-    communiquer: { rapide: 'Message direct', equilibre: 'Communication structurée', ambitieux: 'Campagne complète' },
-    audit: { rapide: 'Audit flash', equilibre: 'Audit structuré', ambitieux: 'Audit approfondi' },
+  const hasDeadline = !!(ctx.deadline || ctx.budget);
+  const effortFromCtx = (base) => ctx.deadline ? `Pour: ${ctx.deadline}` : base;
+
+  const byMode = {
+    cadrer: [
+      {
+        key: 'rapide', emoji: '⚡', label: 'Cadrage flash',
+        description: 'Alignement rapide en 1 réunion, scope minimal, décisions sur hypothèses. Pour débloquer une équipe immédiatement sans attendre une note complète.',
+        estimatedGains: ['Équipe débloquée sous 24h', 'Décision prise sans délai', 'Zéro doc superflue'],
+        risks: ['Hypothèses non validées', 'Réajustements probables dès J3'],
+        effort: effortFromCtx('~4h'),
+        recommended: hasDeadline,
+      },
+      {
+        key: 'equilibre', emoji: '⚖️', label: 'Cadrage structuré',
+        description: 'Scope MECE, livrables précis, risques tracés, GO/NO-GO formalisé. Le standard consultant pour 80 % des missions de cadrage.',
+        estimatedGains: ['Périmètre documenté MECE', 'Risques P0/P1 identifiés', 'GO/NO-GO formalisé'],
+        risks: ['1–2 ateliers requis', 'Légèrement plus long'],
+        effort: '~1–2j',
+        recommended: !hasDeadline,
+      },
+      {
+        key: 'ambitieux', emoji: '🚀', label: 'Cadrage complet',
+        description: 'Note exhaustive, hypothèses structurantes validées, grille de décision, alignement C-level. Pour projets stratégiques ou transformations.',
+        estimatedGains: ['Documentation réutilisable', 'Alignement C-level', 'Hypothèses validées'],
+        risks: ['3–5 jours minimum', ctx.budget ? `Potentiellement hors budget: ${ctx.budget}` : 'Ressources senior requises'],
+        effort: '~3–5j',
+        recommended: false,
+      },
+    ],
+    produire: [
+      {
+        key: 'rapide', emoji: '⚡', label: 'MVP 48h',
+        description: 'MUST only, zéro perfectionnisme. Premier livrable sous 24h, feedback client dès J+2. Dette technique à planifier après coup.',
+        estimatedGains: ['First commit sous 24h', 'Feedback réel dès J+2', 'Coût technique minimal'],
+        risks: ['Dette technique à planifier', 'SHOULD non couverts'],
+        effort: effortFromCtx('~0.5–1j'),
+        recommended: hasDeadline,
+      },
+      {
+        key: 'equilibre', emoji: '⚖️', label: 'Livraison maîtrisée',
+        description: 'MUST + SHOULD couverts, tests essentiels inclus, qualité suffisante pour la production. Standard livraison pour satisfaire un client exigeant.',
+        estimatedGains: ['Qualité production', 'Tests de base inclus', 'Client satisfait'],
+        risks: ['Validation intermédiaire requise'],
+        effort: '~1–2j',
+        recommended: !hasDeadline,
+      },
+      {
+        key: 'ambitieux', emoji: '🚀', label: 'Livraison complète',
+        description: 'Tous MoSCoW couverts, doc exhaustive, critères de done stricts, zéro dette. Livrable production-ready et maintenable à long terme.',
+        estimatedGains: ['Zéro dette technique', 'Documentation complète', 'Score qualité > 9/10'],
+        risks: ['Délai ×2–3', ctx.budget ? `Potentiellement hors budget: ${ctx.budget}` : 'Risque de surqualité'],
+        effort: '~3–5j',
+        recommended: false,
+      },
+    ],
+    communiquer: [
+      {
+        key: 'rapide', emoji: '⚡', label: 'Message direct',
+        description: 'Bottom-line en 3 phrases, une seule action demandée. Taux de réponse maximal. Pour décision urgente ou validation rapide dans la journée.',
+        estimatedGains: ['Lu en 30 secondes', 'Taux de réponse élevé', 'Décision dès J+1'],
+        risks: ['Pas adapté aux sujets complexes', 'Risque de manque de contexte'],
+        effort: effortFromCtx('~30 min'),
+        recommended: hasDeadline,
+      },
+      {
+        key: 'equilibre', emoji: '⚖️', label: 'Communication structurée',
+        description: 'Pyramid Principle complète : conclusion + arguments + faits. Standard pour communications executives, directement envoyable sans retouche.',
+        estimatedGains: ['Arguments tracés', 'Compris à tous niveaux', 'Ton professionnel'],
+        risks: ['Peut sembler formel dans contextes informels'],
+        effort: '~1h',
+        recommended: !hasDeadline,
+      },
+      {
+        key: 'ambitieux', emoji: '🚀', label: 'Campagne complète',
+        description: 'Email + points de discussion + FAQ anticipée. Multi-audience, tous canaux. Pour sujets critiques ou validation en comité de direction.',
+        estimatedGains: ['Tous canaux couverts', 'Multi-audience adapté', 'Objections anticipées'],
+        risks: ['Surproduction si urgence simple', ctx.budget ? `Hors budget: ${ctx.budget}` : 'Effort ×3'],
+        effort: '~4h–1j',
+        recommended: false,
+      },
+    ],
+    audit: [
+      {
+        key: 'rapide', emoji: '⚡', label: 'Verdict flash',
+        description: 'P0 identifiés + 3 quick wins actionnables en 1h. Pour premier diagnostic ou réunion dans 2h qui nécessite des faits précis immédiatement.',
+        estimatedGains: ['Priorités claires sous 1h', '3 quick wins immédiats', 'Verdict communicable'],
+        risks: ['Causes racines non analysées', 'P1/P2 non couverts'],
+        effort: effortFromCtx('~2–4h'),
+        recommended: hasDeadline,
+      },
+      {
+        key: 'equilibre', emoji: '⚖️', label: 'Audit structuré 7j',
+        description: 'P0/P1/P2 complets, analyse causes racines, plan 7 jours et KPIs de succès. Le livrable standard partageable à un client ou à la direction.',
+        estimatedGains: ['Diagnostic exhaustif', "Plan d'action priorisé", 'KPIs de suivi définis'],
+        risks: ["2–3 jours d'analyse", 'Données internes requises'],
+        effort: '~2–3j',
+        recommended: !hasDeadline,
+      },
+      {
+        key: 'ambitieux', emoji: '🚀', label: 'Audit approfondi',
+        description: 'Score maturité par axe, benchmarks sectoriels, roadmap 30/60/90j + recommandations stratégiques. Rapport partageable au C-level.',
+        estimatedGains: ['Rapport 10+ pages', 'Benchmarks sectoriels', 'Roadmap 90 jours'],
+        risks: ['4–5 jours minimum', ctx.budget ? `Hors budget: ${ctx.budget}` : 'Données externes requises'],
+        effort: '~4–5j',
+        recommended: false,
+      },
+    ],
   };
-  const lbl = modeLabels[mode] || modeLabels.produire;
-  return [
-    {
-      key: 'rapide',
-      label: lbl.rapide,
-      emoji: '⚡',
-      description: 'Périmètre minimal, livraison en 24h–48h. Idéal si la deadline est serrée ou le budget limité.',
-      estimatedGains: ['Mise en route immédiate', 'Résultat visible rapidement', 'Coût minimal'],
-      risks: ['Périmètre réduit, itérations probables', 'Risque qualité si cornerscut'],
-      effort: ctx.deadline ? `Adapté à: ${ctx.deadline}` : '~0.5j',
-      recommended: !!(ctx.deadline || ctx.budget),
-    },
-    {
-      key: 'equilibre',
-      label: lbl.equilibre,
-      emoji: '⚖️',
-      description: 'Périmètre maîtrisé, qualité et vitesse en équilibre. Recommandé par défaut pour la majorité des missions.',
-      estimatedGains: ['Qualité livrable suffisante', 'Risques anticipés', 'Satisfaction client'],
-      risks: ['Validation intermédiaire requise', 'Légèrement plus long que le mode express'],
-      effort: '~1–2j',
-      recommended: !(ctx.deadline || ctx.budget),
-    },
-    {
-      key: 'ambitieux',
-      label: lbl.ambitieux,
-      emoji: '🚀',
-      description: 'Périmètre complet, documentation poussée, critères d\'acceptation stricts. Pour un impact maximal.',
-      estimatedGains: ['Impact maximal', 'Livrables réutilisables', 'Alignement long terme'],
-      risks: [
-        'Délai plus long',
-        ctx.budget ? `Potentiellement hors budget: ${ctx.budget}` : 'Risque de dépassement budgétaire',
-      ],
-      effort: '~3–5j',
-      recommended: false,
-    },
-  ];
+
+  return byMode[mode] || byMode.produire;
 }
 
 // Builds a Gemini prompt that generates a COMPLETE professional deliverable (not just 5 bullets).
@@ -473,6 +543,11 @@ function buildGeminiPromptForMode({ mode, query, context, videoTitle }) {
   const webLine = ctx.webSnippets && ctx.webSnippets.length > 0
     ? `\nSources web récentes :\n${ctx.webSnippets.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
     : '';
+  const strategyHint = ctx.strategyKey === 'rapide'
+    ? '\nMODE RAPIDE CHOISI : Périmètre minimal, livrable opérationnel en 24–48h. Priorise l\'essentiel absolu, coupe tout ce qui n\'est pas strictement nécessaire.'
+    : ctx.strategyKey === 'ambitieux'
+    ? '\nMODE AMBITIEUX CHOISI : Périmètre exhaustif, documentation complète, aucun compromis sur le détail. Rends ce livrable réutilisable à long terme et partageable C-level.'
+    : '';
 
   // Core mandate present in all modes: fill every placeholder, be specific, be opinionated.
   const fillRule = `
@@ -487,7 +562,7 @@ RÈGLES ABSOLUES (non-négociables) :
 
     // ─── COMMUNIQUER — Pyramid Principle + Executive communication ───────────
     case 'communiquer':
-      return `Tu es un expert en communication executive, formé à la Pyramid Principle de Barbara Minto, avec 12 ans d'expérience en conseil stratégique.${ctxLine}${refLine}${webLine}
+      return `Tu es un expert en communication executive, formé à la Pyramid Principle de Barbara Minto, avec 12 ans d'expérience en conseil stratégique.${ctxLine}${refLine}${webLine}${strategyHint}
 Brief client : "${query}"
 ${fillRule}
 
@@ -532,7 +607,7 @@ RÈGLES : Pyramid Principle. Bottom line en premier. Une seule action demandée.
 
     // ─── CADRER — MECE decomposition + Answer First (Bain/BCG) ───────────────
     case 'cadrer':
-      return `Tu es un principal dans un cabinet de stratégie top-3, expert en cadrage de missions complexes. Tu appliques la décomposition MECE et l'Answer First.${ctxLine}${refLine}${webLine}
+      return `Tu es un principal dans un cabinet de stratégie top-3, expert en cadrage de missions complexes. Tu appliques la décomposition MECE et l'Answer First.${ctxLine}${refLine}${webLine}${strategyHint}
 Brief client : "${query}"
 ${fillRule}
 
@@ -593,7 +668,7 @@ RÈGLES : Answer First. MECE. Aucun placeholder non rempli. 45–55 lignes.`;
 
     // ─── AUDIT — Maturity scoring + Root cause + P0/P1/P2 ───────────────────
     case 'audit':
-      return `Tu es un auditeur senior avec 12 ans d'expérience en diagnostics organisationnels et techniques. Tu uses une grille de maturité à 5 niveaux et l'analyse des causes racines.${ctxLine}${refLine}${webLine}
+      return `Tu es un auditeur senior avec 12 ans d'expérience en diagnostics organisationnels et techniques. Tu uses une grille de maturité à 5 niveaux et l'analyse des causes racines.${ctxLine}${refLine}${webLine}${strategyHint}
 Brief client : "${query}"
 ${fillRule}
 
@@ -655,7 +730,7 @@ RÈGLES : Verdict dès la 1ère ligne. Chiffres précis. Causes racines identifi
 
     // ─── PRODUIRE — Critical path + MoSCoW + Definition of Done ─────────────
     default: // produire
-      return `Tu es un partner d'un cabinet de conseil avec 15 ans d'expérience en gestion de projets complexes et livraison client.${ctxLine}${refLine}${webLine}
+      return `Tu es un partner d'un cabinet de conseil avec 15 ans d'expérience en gestion de projets complexes et livraison client.${ctxLine}${refLine}${webLine}${strategyHint}
 Brief client : "${query}"
 ${fillRule}
 

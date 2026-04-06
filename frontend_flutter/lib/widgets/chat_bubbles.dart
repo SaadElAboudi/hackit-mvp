@@ -47,7 +47,7 @@ class _UserBubbleState extends State<UserBubble> {
       child: Text(
         widget.text,
         style: TextStyle(
-          fontSize: SizeConfig.adaptiveFontSize(15),
+          fontSize: SizeConfig.adaptiveFontSize(13.5),
           height: 1.35,
           fontWeight: FontWeight.w500,
           color: scheme.onPrimary,
