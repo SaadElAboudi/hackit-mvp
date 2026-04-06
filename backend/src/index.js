@@ -788,6 +788,84 @@ function buildReadyToSend({ mode, query, title, objective, nextActions, timeline
   return lines.join('\n');
 }
 
+/**
+ * Builds a structured trust card explaining why the plan is valid,
+ * what assumptions it rests on, and its confidence level.
+ * If geminiDoc is provided, enriches with extracted hypothesis + insight.
+ */
+function buildTrustCard({ mode, context = {}, risks = [], query, geminiDoc = null }) {
+  const ctx = normalizeDeliveryContext(context);
+
+  const assumptionsByMode = {
+    cadrer: [
+      'Les parties prenantes sont disponibles et alignées sur les objectifs du cadrage.',
+      'Le périmètre reste modifiable — aucune décision irréversible n\'a été prise.',
+      'Le budget et le calendrier sont encore en cours de définition.',
+    ],
+    produire: [
+      'Le périmètre et les critères d\'acceptance sont partagés et validés par le client.',
+      'Les ressources nécessaires (temps, accès, outils) sont disponibles.',
+      'Un point de feedback intermédiaire est planifié avant la livraison finale.',
+    ],
+    communiquer: [
+      'L\'audience cible est identifiée et son contexte est connu de l\'émetteur.',
+      'Le message central est validé en interne avant envoi.',
+      'Le délai de réponse attendu est réaliste pour l\'audience visée.',
+    ],
+    audit: [
+      'L\'accès aux données, outils et interlocuteurs clés est garanti.',
+      'Le commanditaire de l\'audit est aligné sur les objectifs et la méthode.',
+      'Les équipes auditées joueront le jeu de la transparence.',
+    ],
+  };
+
+  const limitsByMode = {
+    cadrer: 'Ce cadrage est un point de départ — toute hypothèse non vérifiée doit être levée avant le lancement du projet.',
+    produire: 'Ce plan ne garantit pas la qualité finale sans un point de feedback intermédiaire avec le client.',
+    communiquer: 'L\'impact réel du message dépend de la relation préexistante avec l\'audience et du moment d\'envoi.',
+    audit: 'Les recommandations reposent sur les informations disponibles — des éléments non communiqués peuvent modifier les priorités.',
+  };
+
+  const whyThisPlanByMode = {
+    cadrer: 'Méthode MECE + Answer First pour structurer le périmètre sans ambiguïté.',
+    produire: 'Méthode MoSCoW + chemin critique pour maximiser la livraison de valeur dans les délais.',
+    communiquer: 'Pyramid Principle (Barbara Minto) pour une communication executive qui respecte le temps des décideurs.',
+    audit: 'Grille de maturité à 5 niveaux + analyse causes racines pour des diagnostics actionnables.',
+  };
+
+  // Confidence: based on context richness
+  const contextScore = [ctx.clientType, ctx.budget, ctx.deadline, ctx.maturity].filter(Boolean).length;
+  let confidence = contextScore >= 2 ? 'élevé' : contextScore >= 1 ? 'moyen' : 'faible';
+
+  let assumptions = (assumptionsByMode[mode] || assumptionsByMode.produire).slice(0, 3);
+  let keyInsight = null;
+
+  // Enrich with Gemini doc extraction
+  if (geminiDoc) {
+    const hypoMatch = geminiDoc.match(/Hypoth[eè]se directrice\s*:\s*(.{10,200})/i);
+    if (hypoMatch) {
+      const extracted = hypoMatch[1].trim().replace(/^\[|\]$/g, '');
+      if (extracted.length > 10 && !extracted.includes('[')) {
+        assumptions = [extracted, ...assumptions.slice(1)];
+      }
+    }
+    const insightMatch = geminiDoc.match(/INSIGHT CL[EÉ][^\n]*\n([^\n\[]{20,300})/i);
+    if (insightMatch) keyInsight = insightMatch[1].trim();
+    // Degrade confidence if alarm signals detected in deliverable
+    if (/signal d.alarme|risque critique|bloquant/i.test(geminiDoc) && confidence === 'élevé') {
+      confidence = 'moyen';
+    }
+  }
+
+  return {
+    confidence,
+    whyThisPlan: whyThisPlanByMode[mode] || whyThisPlanByMode.produire,
+    assumptions,
+    limits: limitsByMode[mode] || limitsByMode.produire,
+    ...(keyInsight ? { keyInsight } : {}),
+  };
+}
+
 function buildDeliveryPlan({ mode, query, title, steps, context, geminiDeliverable = null }) {
   const ctx = normalizeDeliveryContext(context);
   const items = Array.isArray(steps) ? steps.filter(Boolean).map((s) => String(s).trim()).filter(Boolean) : [];
@@ -931,6 +1009,7 @@ function buildDeliveryPlan({ mode, query, title, steps, context, geminiDeliverab
   const bsTopic = extractTopicFromQuery(query) || String(title || '').trim().slice(0, 60);
   const briefSummary = `${modeNames[mode] || 'Plan'} pour "${bsTopic}". ${nextActions.length} actions prioritaires identifiées.`;
   const readyToSend = geminiDeliverable || buildReadyToSend({ mode, query, title, objective, nextActions, timeline, acceptanceCriteria });
+  const trustCard = buildTrustCard({ mode, context: ctx, risks, query, geminiDoc: geminiDeliverable });
 
   return {
     mode,
@@ -948,6 +1027,7 @@ function buildDeliveryPlan({ mode, query, title, steps, context, geminiDeliverab
     strategyVariants,
     briefSummary,
     readyToSend,
+    trustCard,
     ...qualityAssessment,
   };
 }

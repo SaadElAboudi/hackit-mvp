@@ -6,6 +6,8 @@ import '../providers/lessons_provider.dart';
 import '../services/pdf_export_service.dart';
 import '../widgets/action_tracker_button.dart';
 import '../widgets/challenge_section.dart';
+import '../widgets/plan_feedback_widget.dart';
+import '../widgets/trust_card_view.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
 import '../widgets/youtube_embed.dart';
@@ -72,6 +74,10 @@ class LessonView extends StatelessWidget {
             deliveryMode: deliveryMode,
             deliveryPlan: deliveryPlan,
           ),
+          if (deliveryPlan?['trustCard'] != null) ...[  
+            SizedBox(height: 12),
+            TrustCardView(deliveryPlan: deliveryPlan),
+          ],
           SizedBox(height: 12),
           // Vidéo de référence: expandable to avoid cluttering the plan view
           Card(
@@ -167,6 +173,11 @@ class LessonView extends StatelessWidget {
           ),
           SizedBox(height: 8),
           // Compact action row: export PDF + save
+          if (deliveryMode != null)
+            PlanFeedbackWidget(
+              query: title,
+              mode: deliveryMode!,
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Row(
