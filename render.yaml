@@ -6,7 +6,7 @@ services:
     plan: free
     autoDeployTrigger: commit
     buildCommand: npm ci
-    startCommand: npm start
+    startCommand: node src/index.js
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
