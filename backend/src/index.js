@@ -1640,6 +1640,107 @@ RÈGLES ABSOLUES :
   })();
 });
 
+// Challenge (Devil's Advocate) stream endpoint: /api/challenge/stream?deliverable=...&query=...&mode=...
+// Streams a structured critique of an existing deliverable.
+app.get("/api/challenge/stream", (req, res) => {
+  const queryValidated = normalizeQueryInput(String(req.query.query || ''), MAX_QUERY_LEN);
+  if (!queryValidated.ok) return res.status(queryValidated.status).json({ error: queryValidated.error });
+  const query = queryValidated.value;
+  const deliverable = String(req.query.deliverable || '').slice(0, 2500);
+  const mode = String(req.query.mode || 'produire');
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const clientState = { closed: false };
+  req.on('close', () => { clientState.closed = true; });
+
+  const writeEvent = (obj) => {
+    if (clientState.closed || res.writableEnded || res.destroyed) return;
+    try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch (_) { clientState.closed = true; }
+  };
+  const end = () => {
+    if (res.writableEnded || res.destroyed) return;
+    try { res.end(); } catch (_) {}
+  };
+
+  (async () => {
+    try {
+      const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
+      const useGemini = USE_GEMINI_ENV && !breakerActive;
+
+      writeEvent({ type: "meta", title: query, videoUrl: "", source: "challenge", deliveryMode: mode });
+
+      const challengePrompt = `Tu es un associé senior d'un cabinet de conseil (McKinsey/BCG/Bain).
+Un consultant junior vient de te soumettre ce livrable pour validation avant envoi client.
+Ton rôle : jouer l'avocat du diable. Trouver ce qui ne tient pas avant que le client le trouve.
+
+BRIEF ORIGINAL : "${query}"
+MODE : ${mode}
+
+LIVRABLE SOUMIS :
+${deliverable}
+
+INSTRUCTIONS :
+- Ne juge pas la forme, juge le FOND et la solidité des recommandations.
+- Sois direct et sans ménagement — c'est une relecture interne, pas un feedback client.
+- Les failles doivent être spécifiques au livrable, pas génériques.
+- Chaque ligne doit commencer par le numéro et l'emoji correspondant.
+
+FORMAT OBLIGATOIRE (exactement 8 lignes numérotées, pas plus, pas moins) :
+1. 🔴 FAILLE 1 — [titre court] : [explication 1-2 phrases. Pourquoi c'est fatal si le client creuse.]
+2. 🔴 FAILLE 2 — [titre court] : [explication spécifique au livrable]
+3. 🔴 FAILLE 3 — [titre court] : [explication]
+4. ⚠️ HYPOTHÈSE 1 — [titre] : [ce qui est supposé vrai mais non vérifié. Ce qui pourrait invalider tout le plan.]
+5. ⚠️ HYPOTHÈSE 2 — [titre] : [idem, deuxième hypothèse critique]
+6. 💬 OBJECTION CFO : [la question EXACTE que le CFO va poser en salle. Formule-la comme une vraie question agressive, avec des chiffres si possible.]
+7. ✅ CE QUI TIENT : [ce qu'on garderait tel quel sans modification. 1 phrase précise.]
+8. ⚡ CORRECTION PRIORITAIRE : [la seule chose à corriger dans les 30 minutes pour que ce livrable soit défendable. 1 phrase d'action concrète.]`;
+
+      let critiqueText = "";
+      if (useGemini && deliverable.trim().length > 50) {
+        try {
+          critiqueText = (await generateWithGemini(challengePrompt, 900)).trim();
+        } catch (e) {
+          console.warn("Gemini challenge failed:", e.message);
+        }
+      }
+
+      if (!critiqueText) {
+        critiqueText = [
+          `1. 🔴 FAILLE 1 — Périmètre flou : Les frontières du livrable ne sont pas clairement délimitées, ce qui expose à un scope creep immédiat.`,
+          `2. 🔴 FAILLE 2 — Hypothèses non chiffrées : Les recommandations manquent de données quantitatives pour être défendables face au comité.`,
+          `3. 🔴 FAILLE 3 — Timeline irréaliste : Les délais proposés ne prennent pas en compte les contraintes organisationnelles habituelles.`,
+          `4. ⚠️ HYPOTHÈSE 1 — Alignement équipe : On suppose que les équipes sont disponibles et alignées — c'est rarement le cas.`,
+          `5. ⚠️ HYPOTHÈSE 2 — Budget validé : On suppose que le budget est déjà arbitré. Il ne l'est probablement pas.`,
+          `6. 💬 OBJECTION CFO : "Vous me dites que ça coûte X et ça dure Y mois — mais quel est le ROI précis et sur quelle base de calcul ?"`,
+          `7. ✅ CE QUI TIENT : La structure en phases logiques et la priorisation des actions immédiates sont solides.`,
+          `8. ⚡ CORRECTION PRIORITAIRE : Ajouter un tableau ROI chiffré avec hypothèses explicitées avant toute présentation au décideur.`,
+        ].join('\n');
+      }
+
+      const lines = critiqueText.split('\n').map(l => l.trim()).filter(l => /^\d+[.)\s]/.test(l) || l.startsWith('🔴') || l.startsWith('⚠️') || l.startsWith('💬') || l.startsWith('✅') || l.startsWith('⚡'));
+      const critLines = lines.length >= 4 ? lines : critiqueText.split('\n').map(l => l.trim()).filter(Boolean);
+
+      for (const line of critLines) {
+        if (clientState.closed) return end();
+        writeEvent({ type: "partial", step: line });
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      writeEvent({ type: "final", citations: [], chapters: [], deliveryPlan: {} });
+      writeEvent({ type: "done" });
+      end();
+    } catch (err) {
+      console.error("Challenge stream error:", err?.message || err);
+      writeEvent({ type: "error", error: "Internal server error", detail: err?.message || "Unexpected error" });
+      end();
+    }
+  })();
+});
+
 // Transcript endpoint: /api/transcript?videoId=...&title=...
 app.get("/api/transcript", async (req, res) => {
   const videoId = String(req.query.videoId || '').trim();

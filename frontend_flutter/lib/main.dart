@@ -7,6 +7,7 @@ import 'providers/theme_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/history_favorites_provider.dart';
 import 'providers/lessons_provider.dart';
+import 'providers/project_provider.dart';
 import 'services/cache_manager.dart';
 import 'screens/root_tabs.dart';
 import 'screens/result_screen.dart';
@@ -43,6 +44,9 @@ class _MyAppState extends State<MyApp> {
       providers: [
         ChangeNotifierProvider(
           create: (_) => ThemeProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ProjectProvider(getIt<SharedPreferences>()),
         ),
         ChangeNotifierProvider(
           create: (_) => HistoryFavoritesProvider(getIt<SharedPreferences>()),

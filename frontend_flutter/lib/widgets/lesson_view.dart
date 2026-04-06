@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/lessons_provider.dart';
 // ...existing code...
 import '../services/pdf_export_service.dart';
+import '../widgets/challenge_section.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
 import '../widgets/youtube_embed.dart';
@@ -153,6 +154,17 @@ class LessonView extends StatelessWidget {
             ),
           ],
           SizedBox(height: 12),
+          // Devil's Advocate: challenge the plan in-place
+          ChallengeSection(
+            deliverable: (() {
+              final rts = deliveryPlan?['readyToSend'];
+              if (rts is String && rts.trim().isNotEmpty) return rts.trim();
+              return steps.join('\n');
+            })(),
+            query: title,
+            mode: deliveryMode ?? 'produire',
+          ),
+          SizedBox(height: 8),
           // Compact action row: export PDF + save
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),

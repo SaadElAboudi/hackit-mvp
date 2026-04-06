@@ -264,6 +264,57 @@ class ApiService {
     }
   }
 
+  // Challenge (Devil's Advocate) stream: critiques an existing deliverable.
+  // Returns streaming StreamEvents with partial critique lines.
+  Stream<StreamEvent> challengeStream(
+      String deliverable, String query, String mode) async* {
+    final truncated =
+        deliverable.substring(0, deliverable.length.clamp(0, 2000));
+    final queryParameters = <String, String>{
+      'deliverable': truncated,
+      'query': query,
+      'mode': mode,
+    };
+    final uri = Uri.parse('$baseUrl/api/challenge/stream')
+        .replace(queryParameters: queryParameters);
+    final request = http.Request('GET', uri);
+    final streamed = await _client.send(request);
+    if (streamed.statusCode != 200) {
+      await streamed.stream.bytesToString();
+      throw ApiException(
+          'Challenge stream error: HTTP ${streamed.statusCode}',
+          statusCode: streamed.statusCode);
+    }
+    final decoder = utf8.decoder.bind(streamed.stream);
+    final buffer = StringBuffer();
+    await for (final chunk in decoder) {
+      buffer.write(chunk);
+      var text = buffer.toString();
+      int idx;
+      while ((idx = text.indexOf('\n\n')) != -1) {
+        final eventBlock = text.substring(0, idx);
+        text = text.substring(idx + 2);
+        final lines = eventBlock.split('\n');
+        final dataLine = lines.firstWhere(
+          (l) => l.startsWith('data:'),
+          orElse: () => '',
+        );
+        if (dataLine.isNotEmpty) {
+          final jsonStr = dataLine.substring(5).trim();
+          if (jsonStr.isNotEmpty) {
+            try {
+              final map = jsonDecode(jsonStr);
+              if (map is Map<String, dynamic>) yield StreamEvent.fromJson(map);
+            } catch (_) {}
+          }
+        }
+      }
+      buffer
+        ..clear()
+        ..write(text);
+    }
+  }
+
   // Simple health ping to detect backend availability and meta info.
   Future<Map<String, dynamic>> pingHealth(
       {Duration timeout = const Duration(seconds: 5)}) async {
