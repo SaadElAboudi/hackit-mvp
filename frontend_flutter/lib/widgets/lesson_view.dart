@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/lessons_provider.dart';
 // ...existing code...
+import '../services/pdf_export_service.dart';
 import '../widgets/summary_view.dart';
 import '../widgets/video_card.dart';
 import '../widgets/youtube_embed.dart';
@@ -152,12 +153,19 @@ class LessonView extends StatelessWidget {
             ),
           ],
           SizedBox(height: 12),
-          // Compact save row replacing the full save section card
+          // Compact action row: export PDF + save
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                _ExportPdfButton(
+                  title: title,
+                  steps: steps,
+                  deliveryMode: deliveryMode,
+                  deliveryPlan: deliveryPlan,
+                  source: source,
+                ),
                 if (saveError != null &&
                     saveError.trim().isNotEmpty &&
                     !alreadySaved)
@@ -219,6 +227,70 @@ class LessonView extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ExportPdfButton extends StatefulWidget {
+  final String title;
+  final List<String> steps;
+  final String? deliveryMode;
+  final Map<String, dynamic>? deliveryPlan;
+  final String? source;
+
+  const _ExportPdfButton({
+    required this.title,
+    required this.steps,
+    required this.deliveryMode,
+    required this.deliveryPlan,
+    required this.source,
+  });
+
+  @override
+  State<_ExportPdfButton> createState() => _ExportPdfButtonState();
+}
+
+class _ExportPdfButtonState extends State<_ExportPdfButton> {
+  bool _exporting = false;
+
+  Future<void> _export() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      await PdfExportService.exportAndShare(
+        title: widget.title,
+        steps: widget.steps,
+        deliveryMode: widget.deliveryMode,
+        deliveryPlan: widget.deliveryPlan,
+        source: widget.source,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export PDF échoué : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Exporter en PDF',
+      child: TextButton.icon(
+        style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+        icon: _exporting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+        label: const Text('Export PDF', style: TextStyle(fontSize: 13)),
+        onPressed: _exporting ? null : _export,
       ),
     );
   }
