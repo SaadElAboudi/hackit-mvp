@@ -439,132 +439,188 @@ function buildGeminiPromptForMode({ mode, query, context, videoTitle }) {
   const ctxLine = ctxHint ? `\nContexte additionnel : ${ctxHint}` : '';
   const refLine = videoTitle ? `\nRéférence vidéo : "${videoTitle}"` : '';
 
+  const fillRule = `\nRÈGLE ABSOLUE : Complète CHAQUE placeholder entre crochets avec du contenu réel et spécifique déduit du brief. Aucun crochet [...] ne doit apparaître dans ta réponse finale. Si une information est absente du brief, déduis une valeur plausible et professionnelle.`;
+
   switch (mode) {
     case 'communiquer':
-      return `Tu es un consultant senior.${ctxLine}${refLine}
+      return `Tu es un consultant senior expert en communication professionnelle.${ctxLine}${refLine}
 Brief client : "${query}"
+${fillRule}
 
-Rédige un email professionnel directement envoyable au client, en réponse à ce brief.
+Rédige un email de communication professionnelle directement envoyable au client. Chaque élément DOIT être déduit du brief — aucun terme générique.
 
-FORMAT OBLIGATOIRE :
-OBJET : [objet email concis et lié au brief]
+═══════════════════════════════════════
+OBJET : [objet email percutant et spécifique au brief — 8 mots max, impactant]
 
 Bonjour,
 
-[Phrase d'accroche contextualisée — 2 lignes max, mentionne le sujet du brief]
+SYNTHÈSE — CE QU'IL FAUT RETENIR
+[1 à 2 phrases qui disent l'essentiel : la décision clé, le résultat produit, ou l'action requise — déduit du brief. Style direct, BLUF (Bottom Line Up Front).]
 
-[Développement en 3 points bullet courts et actionnables, spécifiques au brief]
+FAITS CLÉS
+• [fait concret 1 : livrable, chiffre ou avancement mesurable déduit du brief]
+• [fait concret 2 : autre résultat ou point d'attention spécifique]
+• [fait concret 3 : risque actif ou obstacle identifié, s'il y en a un]
 
-[Call to action clair — 1 phrase qui ouvre la suite]
+STATUT DU DOSSIER : [🟢 EN BONNE VOIE / 🟡 POINT D'ATTENTION / 🔴 ACTION REQUISE — choisis le plus adapté]
+[1 phrase de justification du statut, liée au brief]
 
-Cordialement,
-[Prénom]
+CE QUE J'ATTENDS DE VOUS
+[Action précise demandée au client — validation, décision ou retour — avec la date attendue déduite du contexte]
 
-RÈGLES STRICTES : Email directement envoyable sans retouche. Zéro formule creuse. Tous les éléments doivent être spécifiques au brief, pas génériques. 15–20 lignes max.`;
+PROCHAINE ACTION DE MON CÔTÉ
+[Ce que tu vas faire et dans quel délai — déduit du brief]
+
+Je reste disponible pour un point de 15 min si vous le souhaitez — [proposition de créneau plausible].
+
+Cordialement
+═══════════════════════════════════════
+RÈGLES STRICTES : Email directement envoyable. Zéro formule creuse. Le client sait exactement quoi faire après lecture. 22–28 lignes.`;
 
     case 'cadrer':
       return `Tu es un consultant senior mandaté pour cadrer ce projet.${ctxLine}${refLine}
 Brief client : "${query}"
+${fillRule}
 
-Rédige une note de cadrage professionnelle directement transmissible au client.
+Rédige une note de cadrage professionnelle directement transmissible au client. Déduis intelligemment les éléments manquants — ne laisse rien en blanc.
 
-FORMAT OBLIGATOIRE :
+═══════════════════════════════════════
 NOTE DE CADRAGE — [TITRE EN MAJUSCULES DÉRIVÉ DU BRIEF]
 
 CONTEXTE & ENJEUX
-[2–3 lignes qui résument le contexte et ce qui est en jeu pour CE brief spécifiquement]
+[2–3 lignes : quel problème business ce brief adresse, quels sont les enjeux réels, et ce qui se passe si ce n'est pas traité correctement. Ex : "Le client cherche à X car Y crée un risque Z sur le chiffre d'affaires / la relation client / la livraison."]
 
-LIVRABLES ATTENDUS
-• [livrable 1 concret et mesurable]
-• [livrable 2 concret et mesurable]
-• [livrable 3 si pertinent]
+OBJECTIF SMART
+• Spécifique : [quoi exactement doit être produit ou décidé]
+• Mesurable : [KPI ou critère de validation — chiffre ou livrable tangible]
+• Délai : [estimation réaliste déduite du brief ou du contexte]
 
 PÉRIMÈTRE
-Inclus : [éléments in-scope liés au brief]
-Exclu : [éléments hors scope à clarifier]
+✅ Inclus : [éléments clairement dans le scope, spécifiques au brief]
+❌ Exclu : [sujets à ne PAS traiter pour rester focalisé]
+❓ À trancher avant J1 : [1–2 questions bloquantes qui nécessitent une décision]
+
+LIVRABLES ATTENDUS
+1. [livrable principal — format précis + critère de complétude]
+2. [livrable secondaire ou validation intermédiaire]
+
+HYPOTHÈSES PRISES EN COMPTE
+• [hypothèse 1 : présupposé structurant — à invalider si faux, le projet change]
+• [hypothèse 2 : autre présupposé important]
 
 RISQUES & DÉPENDANCES
-• [risque 1 spécifique au brief]
-• [risque 2 spécifique au brief]
-• [dépendance clé]
+🔴 [risque critique 1 — impact potentiel si non traité]
+🟡 [risque secondaire — à surveiller]
+🔗 [dépendance clé : ce qui doit être en place AVANT de démarrer]
 
 PROCHAINES ÉTAPES
-1. [action concrète — J0–J1]
-2. [action concrète — J1–J2]
-3. [action concrète — J2–J3]
+J0–J1 : [action très concrète — qui fait quoi]
+J1–J2 : [action suivante ou atelier de validation]
+J2–J3 : [livraison de la note cadrée ou validation périmètre]
 
-RÈGLES STRICTES : Document directement transmissible. Tous les éléments font référence au brief, pas à un projet générique. 20–25 lignes.`;
+CRITÈRES DE SUCCÈS
+☑ [critère 1 — mesurable, spécifique au brief]
+☑ [critère 2 — mesurable]
+☑ [GO / NO-GO final : condition pour passer à la phase suivante]
+═══════════════════════════════════════
+RÈGLES STRICTES : Document directement transmissible. Chaque section apporte une information que le client ne pouvait pas déduire seul. 32–40 lignes.`;
 
     case 'audit':
       return `Tu es un auditeur senior.${ctxLine}${refLine}
 Brief client : "${query}"
+${fillRule}
 
-Rédige une synthèse d'audit flash directement partageable au client.
+Rédige une synthèse d'audit flash directement partageable au client. Sois précis, direct, factuel — style "rapport de conseil haut de gamme".
 
-FORMAT OBLIGATOIRE :
+═══════════════════════════════════════
 SYNTHÈSE D'AUDIT — [TITRE EN MAJUSCULES DÉRIVÉ DU BRIEF]
 
-POINTS DIAGNOSTIQUÉS
-🔴 [point critique 1 — spécifique au brief]
-🔴 [point critique 2 si pertinent]
-🟡 [point à corriger 1]
-🟡 [point à corriger 2]
-🟢 [quick win identifié]
+ÉVALUATION GLOBALE : [score /10 — ex: 5,5/10] | [une phrase de verdict direct]
 
-QUICK WINS PRIORITAIRES
-1. [action immédiate 1 — impact élevé, effort faible — lié au brief]
-2. [action immédiate 2]
+DIAGNOSTIC PAR CRITICITÉ
+🔴 P0 — BLOQUANT (traitement immédiat)
+• [problème critique 1 — conséquence concrète si non corrigé]
+• [problème critique 2 si identifié]
+
+🟡 P1 — IMPORTANT (traiter dans les 7 jours)
+• [point à corriger 1 — impact sur qualité / délai / budget]
+• [point à corriger 2]
+
+🟢 P2 — AMÉLIORATION (quick wins sans risque)
+• [point d'amélioration rapide 1]
+• [point d'amélioration rapide 2]
+
+QUICK WINS PRIORITAIRES (effort faible, impact élevé)
+1. [action immédiate 1 — résultat attendu en 24–48h — ROI estimé]
+2. [action immédiate 2 — pourquoi ça débloque le reste]
 3. [action immédiate 3]
 
-PLAN D'ACTION 7 JOURS
-J0–J1 : [focus spécifique]
-J2–J3 : [focus spécifique]
-J4–J5 : [focus spécifique]
-J6–J7 : [livraison rapport]
+PLAN D'ACTION
+J0–J1 : [focus P0 — traitement bloquants]
+J2–J3 : [quick wins P2 + début P1]
+J4–J5 : [P1 structurants]
+J6–J7 : [livraison rapport d'audit finalisé + recommandations]
+
+ROADMAP 30-60-90 JOURS
+• 30j : [objectif de stabilisation / correction principale]
+• 60j : [consolidation et mesure d'impact]
+• 90j : [suivi des indicateurs et validation définitive]
 
 CRITÈRES DE CLÔTURE
-☑ [critère 1 mesurable et lié au brief]
-☑ [critère 2 mesurable]
-☑ [critère 3]
-
-RÈGLES STRICTES : Synthèse directement partageable. Tous les éléments font référence au brief. 22–28 lignes.`;
+☑ [critère 1 — mesurable et lié au brief]
+☑ [critère 2 — mesurable]
+☑ [critère 3 — condition pour clore l'audit]
+═══════════════════════════════════════
+RÈGLES STRICTES : Synthèse directement partageable. Tous les points font référence au brief. Zéro phrase générique. 38–45 lignes.`;
 
     default: // produire
       return `Tu es un chef de projet senior.${ctxLine}${refLine}
 Brief client : "${query}"
+${fillRule}
 
-Rédige un plan de livraison professionnel directement transmissible au client.
+Rédige un plan de livraison professionnel directement transmissible au client. Sois précis, structuré, immédiatement actionnable.
 
-FORMAT OBLIGATOIRE :
+═══════════════════════════════════════
 PLAN DE LIVRAISON — [TITRE EN MAJUSCULES DÉRIVÉ DU BRIEF]
 
 OBJECTIF
-[Objectif SMART en 1–2 lignes, directement lié au brief]
+[Objectif SMART en 1–2 lignes, directement lié au brief : quoi livrer, comment mesurer le succès, pour quand]
 
-TÂCHES PRIORITAIRES
-1. [tâche critique 1 — J0] ⚠ bloquante
-2. [tâche 2 — J1–J2]
-3. [tâche 3 — J2–J3]
-4. [tâche 4 — J3–J4]
+PRIORISATION MoSCoW
+🔴 MUST (bloquant — sans ça le livrable est incomplet)
+• [tâche must 1]
+• [tâche must 2]
+
+🟠 SHOULD (important — à inclure si le temps le permet)
+• [tâche should 1]
+• [tâche should 2]
+
+🟡 COULD (optionnel — valeur ajoutée si budget/temps disponible)
+• [tâche could 1]
+
+CHEMIN CRITIQUE & DÉPENDANCES
+⚠ [tâche bloquante 1] → dépend de [prérequis explicite]
+⚠ [tâche bloquante 2] si pertinent
 
 TIMELINE
-• J0 : [démarrage — action concrète]
-• J1–J2 : [exécution — focus]
-• J3 : [revue qualité]
-• J4 : [livraison finale]
+• J0 : [démarrage — action concrète + validation périmètre]
+• J1–J2 : [exécution MUST — focus sur les bloquants]
+• J3 : [point qualité + ajustements]
+• J4 : [livraison finale + feedback client]
 
-CRITÈRES D'ACCEPTATION
-☑ [critère 1 mesurable et lié au brief]
-☑ [critère 2 mesurable]
-☑ [critère 3]
+DEFINITION OF DONE
+☑ [critère 1 — binaire : fait ou pas fait]
+☑ [critère 2 — binaire]
+☑ [critère 3 — condition de validation client]
 
-RISQUES
-⚠ [risque 1 spécifique au brief]
-⚠ [risque 2]
-
-RÈGLES STRICTES : Document directement transmissible. Tous les éléments font référence au brief, pas à un projet générique. 25–30 lignes.`;
+RISQUES & MITIGATIONS
+⚠ [risque 1 spécifique au brief] → mitigation : [action concrète]
+⚠ [risque 2] → mitigation : [action concrète]
+═══════════════════════════════════════
+RÈGLES STRICTES : Document directement transmissible. Tous les éléments font référence au brief. Zéro item générique. 35–42 lignes.`;
   }
 }
+
 
 function buildReadyToSend({ mode, query, title, objective, nextActions, timeline, acceptanceCriteria }) {
   const topic = extractTopicFromQuery(query) || String(title || '').trim().slice(0, 80);
@@ -1199,7 +1255,7 @@ app.post("/api/search", async (req, res) => {
       try {
         // Always try to generate the full deliverable document first
         const deliverablePrompt = buildGeminiPromptForMode({ mode: deliveryMode, query, context: requestContext, videoTitle });
-        const fullDoc = await generateWithGemini(deliverablePrompt, 600);
+        const fullDoc = await generateWithGemini(deliverablePrompt, 1000);
         geminiDeliverablePost = fullDoc.trim();
         // If we also have a transcript, use it to extract numbered steps for plan sections
         if (summaryPrompt) {
@@ -1378,7 +1434,7 @@ app.get("/api/search/stream", async (req, res) => {
       if (attemptGeminiSummary) {
         const deliverablePrompt = buildGeminiPromptForMode({ mode: deliveryMode, query, context: requestContext, videoTitle });
         try {
-          const fullDoc = await generateWithGemini(deliverablePrompt, 600);
+          const fullDoc = await generateWithGemini(deliverablePrompt, 1000);
           geminiDeliverable = fullDoc.trim();
           // Extract numbered lines as steps so the plan sections are populated
           const numberedLines = fullDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[\.\)]\s/.test(l)).map(l => l.replace(/^\d+[\.\)]\s*/, ''));
@@ -1458,7 +1514,7 @@ app.get("/api/refine/stream", (req, res) => {
       if (useGemini && existingDoc.trim().length > 0) {
         const refinePrompt = `Tu es un consultant senior. Voici le livrable produit pour le brief "${query}":\n\n${existingDoc}\n\nL'utilisateur demande la modification suivante : "${followUp}"\n\nProduis une VERSION AMÉLIORÉE du livrable en appliquant exactement cette modification. Conserve la structure et le format du document original. Le résultat doit être directement transmissible au client.`;
         try {
-          refinedDoc = (await generateWithGemini(refinePrompt, 600)).trim();
+          refinedDoc = (await generateWithGemini(refinePrompt, 1000)).trim();
         } catch (e) {
           console.warn("Gemini refine failed:", e.message);
         }
@@ -1468,7 +1524,7 @@ app.get("/api/refine/stream", (req, res) => {
         const fallbackPrompt = buildGeminiPromptForMode({ mode, query: `${query}. ${followUp}`, context: {}, videoTitle: query });
         if (useGemini) {
           try {
-            refinedDoc = (await generateWithGemini(fallbackPrompt, 600)).trim();
+            refinedDoc = (await generateWithGemini(fallbackPrompt, 1000)).trim();
           } catch (e) {
             console.warn("Gemini refine fallback failed:", e.message);
           }
