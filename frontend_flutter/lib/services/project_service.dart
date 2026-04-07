@@ -103,7 +103,7 @@ class ProjectService {
           headers: await _headers(),
           body: jsonEncode(body),
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(const Duration(seconds: 60));
     return _parse(r);
   }
 

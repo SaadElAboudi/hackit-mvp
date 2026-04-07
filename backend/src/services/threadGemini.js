@@ -25,7 +25,7 @@ import { broadcastMessage, broadcastVersion, broadcastTyping } from './threadRoo
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.0-flash-lite';
-const GEMINI_TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || '25000', 10);
+const GEMINI_TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || '30000', 10);
 const MAX_HISTORY_MESSAGES = 20; // how many past messages are fed to Gemini as context
 
 /**
