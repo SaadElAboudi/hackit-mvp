@@ -21,7 +21,7 @@ import axios from 'axios';
 import Project from '../models/Project.js';
 import Thread from '../models/Thread.js';
 import Version from '../models/Version.js';
-import { broadcastMessage, broadcastVersion } from './threadRooms.js';
+import { broadcastMessage, broadcastVersion, broadcastTyping } from './threadRooms.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.0-flash-lite';
@@ -76,6 +76,9 @@ export async function sendThreadMessage(req, res) {
   const fullPrompt = history
     ? `${systemPreamble}\n\n${history}\n\n[user]: ${prompt.trim()}`
     : `${systemPreamble}\n\n[user]: ${prompt.trim()}`;
+
+  // Notify other room members that Gemini is processing (they'll show a typing bubble)
+  broadcastTyping(threadId, userId);
 
   // ── 5. Call Gemini ──────────────────────────────────────────────────────────
   const t0 = Date.now();

@@ -18,6 +18,9 @@ class ProjectService {
   // Active WebSocket subscriptions keyed by threadId
   final Map<String, WebSocketChannel> _channels = {};
   final Map<String, StreamController<WsEvent>> _controllers = {};
+  final Map<String, Timer> _timers = {};
+  final Map<String, int> _reconnectAttempts = {};
+  final Map<String, String> _wsUserIds = {};
 
   ProjectService({http.Client? client})
       : _http = client ?? http.Client(),
@@ -282,58 +285,85 @@ class ProjectService {
   // ── WebSocket (room) ──────────────────────────────────────────────────────────
 
   /// Connect to a thread room. Returns a broadcast [Stream<WsEvent>].
+  /// Auto-reconnects on disconnect with exponential backoff (1s → 30s).
   /// Calling again with the same [threadId] returns the existing stream.
   Stream<WsEvent> subscribeToThread(String threadId, String userId) {
     if (_controllers.containsKey(threadId)) {
       return _controllers[threadId]!.stream;
     }
 
-    final wsBase = _base
-        .replaceFirst('https://', 'wss://')
-        .replaceFirst('http://', 'ws://');
-    final uri = Uri.parse('$wsBase/ws/threads/$threadId');
-
-    final channel = WebSocketChannel.connect(uri);
     final controller = StreamController<WsEvent>.broadcast();
-
-    _channels[threadId] = channel;
     _controllers[threadId] = controller;
+    _wsUserIds[threadId] = userId;
+    _reconnectAttempts[threadId] = 0;
 
-    // Send join frame after connection
-    channel.sink.add(
-        jsonEncode({'type': 'join', 'threadId': threadId, 'userId': userId}));
+    _connectWs(threadId);
 
-    // Keepalive ping every 25s
-    Timer.periodic(const Duration(seconds: 25), (t) {
-      if (!_channels.containsKey(threadId)) {
-        t.cancel();
-        return;
-      }
+    // Keepalive ping every 25s (reuses the latest channel)
+    _timers[threadId] = Timer.periodic(const Duration(seconds: 25), (_) {
+      final ch = _channels[threadId];
+      if (ch == null || !_controllers.containsKey(threadId)) return;
       try {
-        channel.sink.add(jsonEncode({'type': 'ping'}));
-      } catch (_) {
-        t.cancel();
-      }
+        ch.sink.add(jsonEncode({'type': 'ping'}));
+      } catch (_) {}
     });
 
-    channel.stream.listen(
-      (raw) {
-        try {
-          final json = jsonDecode(raw.toString()) as Map<String, dynamic>;
-          controller.add(WsEvent.fromJson(json));
-        } catch (_) {}
-      },
-      onDone: () {
-        _cleanupChannel(threadId);
-        if (!controller.isClosed) controller.close();
-      },
-      onError: (e) {
-        _cleanupChannel(threadId);
-        if (!controller.isClosed) controller.close();
-      },
-    );
-
     return controller.stream;
+  }
+
+  /// Internal: open a WebSocket connection for [threadId] and wire listeners.
+  void _connectWs(String threadId) {
+    if (!_controllers.containsKey(threadId)) return;
+    final userId = _wsUserIds[threadId];
+    if (userId == null) return;
+
+    try {
+      final wsBase = _base
+          .replaceFirst('https://', 'wss://')
+          .replaceFirst('http://', 'ws://');
+      final uri = Uri.parse('$wsBase/ws/threads/$threadId');
+      final channel = WebSocketChannel.connect(uri);
+      _channels[threadId] = channel;
+
+      // Identify ourselves immediately after connection
+      channel.sink.add(
+          jsonEncode({'type': 'join', 'threadId': threadId, 'userId': userId}));
+
+      channel.stream.listen(
+        (raw) {
+          // Any received frame means the connection is healthy — reset backoff
+          _reconnectAttempts[threadId] = 0;
+          try {
+            final json =
+                jsonDecode(raw.toString()) as Map<String, dynamic>;
+            _controllers[threadId]?.add(WsEvent.fromJson(json));
+          } catch (_) {}
+        },
+        onDone: () => _scheduleReconnect(threadId),
+        onError: (_) => _scheduleReconnect(threadId),
+        cancelOnError: true,
+      );
+    } catch (_) {
+      _scheduleReconnect(threadId);
+    }
+  }
+
+  /// Schedule a reconnection with exponential backoff, notify stream consumers.
+  void _scheduleReconnect(String threadId) {
+    _channels.remove(threadId);
+    final ctrl = _controllers[threadId];
+    if (ctrl == null || ctrl.isClosed) return;
+
+    final attempts = _reconnectAttempts[threadId] ?? 0;
+    _reconnectAttempts[threadId] = attempts + 1;
+    const delays = [1, 2, 4, 8, 16, 30];
+    final seconds = delays[attempts.clamp(0, delays.length - 1)];
+
+    // Emit a synthetic reconnecting event so the UI can show a banner
+    ctrl.add(const WsEvent(
+        type: WsEventType.reconnecting, payload: {}));
+    Future.delayed(
+        Duration(seconds: seconds), () => _connectWs(threadId));
   }
 
   void unsubscribeFromThread(String threadId) {
@@ -343,6 +373,10 @@ class ProjectService {
   void _cleanupChannel(String threadId) {
     _channels[threadId]?.sink.close();
     _channels.remove(threadId);
+    _timers[threadId]?.cancel();
+    _timers.remove(threadId);
+    _reconnectAttempts.remove(threadId);
+    _wsUserIds.remove(threadId);
     _controllers[threadId]?.close();
     _controllers.remove(threadId);
   }

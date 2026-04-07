@@ -54,12 +54,21 @@ class _CollabThreadScreenState extends State<CollabThreadScreen> {
     if (!mounted) return;
     final prov = context.read<CollabProvider>();
     switch (event.type) {
+      case WsEventType.joined:
+        // Successful (re)connection — clear reconnecting state
+        prov.onWsConnected();
       case WsEventType.message:
         final msgJson = event.payload['message'];
         if (msgJson is Map<String, dynamic>) {
           prov.onWsNewMessage(ThreadMessage.fromJson(msgJson));
           _scrollToBottom();
         }
+      case WsEventType.typing:
+        final uid = event.payload['userId'] as String?;
+        prov.onWsTyping(uid);
+        _scrollToBottom();
+      case WsEventType.reconnecting:
+        prov.onWsReconnecting();
       case WsEventType.presence:
         final ids = (event.payload['userIds'] as List? ?? [])
             .map((e) => e.toString())
@@ -128,6 +137,33 @@ class _CollabThreadScreenState extends State<CollabThreadScreen> {
       appBar: _buildAppBar(scheme),
       body: Column(
         children: [
+          // Reconnection banner
+          Consumer<CollabProvider>(
+            builder: (_, prov, __) => prov.wsReconnecting
+                ? Container(
+                    color: Colors.orange.shade800,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 5),
+                    child: const Row(
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Reconnexion en cours…',
+                          style: TextStyle(
+                              color: Colors.white, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
           Expanded(child: _buildMessageList(scheme)),
           _buildInputBar(scheme),
         ],
@@ -208,7 +244,7 @@ class _CollabThreadScreenState extends State<CollabThreadScreen> {
         return ListView.builder(
           controller: _scrollCtrl,
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-          itemCount: msgs.length + (prov.sendingMessage ? 1 : 0),
+        itemCount: msgs.length + (prov.sendingMessage || prov.remoteTyping ? 1 : 0),
           itemBuilder: (ctx, i) {
             if (i == msgs.length) {
               return _TypingIndicator(scheme: scheme);

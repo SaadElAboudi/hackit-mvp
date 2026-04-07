@@ -110,6 +110,10 @@ class CollabProvider extends ChangeNotifier {
   bool sendingMessage = false;
   String? threadError;
   List<String> presenceUserIds = [];
+  /// True when a remote participant triggered a Gemini call (typing indicator).
+  bool remoteTyping = false;
+  /// True while the WebSocket is reconnecting.
+  bool wsReconnecting = false;
 
   Future<void> openThread(String slug, String threadId) async {
     threadState = CollabLoadState.loading;
@@ -153,13 +157,12 @@ class CollabProvider extends ChangeNotifier {
       final aiMsg =
           ThreadMessage.fromJson(r['aiMessage'] as Map<String, dynamic>);
 
+      // Remove optimistic placeholder AND any WS-pre-received copies of these
+      // two messages (race: WS broadcast can arrive before the HTTP response).
       final msgs = List<ThreadMessage>.from(activeThread?.messages ?? []);
-      final idx = msgs.indexWhere((m) => m.id == tmpId);
-      if (idx >= 0) {
-        msgs[idx] = userMsg;
-      } else {
-        msgs.add(userMsg);
-      }
+      msgs.removeWhere(
+          (m) => m.id == tmpId || m.id == userMsg.id || m.id == aiMsg.id);
+      msgs.add(userMsg);
       msgs.add(aiMsg);
 
       activeThread = _rebuildThread(activeThread!, msgs);
@@ -182,12 +185,37 @@ class CollabProvider extends ChangeNotifier {
   void onWsNewMessage(ThreadMessage msg) {
     if (activeThread == null) return;
     if (activeThread!.messages.any((m) => m.id == msg.id)) return;
+    // When an AI message arrives, the remote typing indicator is no longer needed
+    if (msg.isAi) remoteTyping = false;
     activeThread = _appendMessage(activeThread, msg);
     notifyListeners();
   }
 
   void onWsPresence(List<String> userIds) {
     presenceUserIds = userIds;
+    notifyListeners();
+  }
+
+  /// Called when backend broadcasts that a user triggered a Gemini call.
+  void onWsTyping(String? fromUserId) {
+    // Only show for other participants (sender has their own sendingMessage flag)
+    if (fromUserId != null &&
+        fromUserId != ProjectService.currentUserId) {
+      remoteTyping = true;
+      notifyListeners();
+    }
+  }
+
+  /// Called when the WS connection is lost and a reconnect attempt starts.
+  void onWsReconnecting() {
+    wsReconnecting = true;
+    notifyListeners();
+  }
+
+  /// Called when the WS reconnects successfully (joined frame received).
+  void onWsConnected() {
+    wsReconnecting = false;
+    remoteTyping = false; // clear stale typing indicator from before disconnect
     notifyListeners();
   }
 

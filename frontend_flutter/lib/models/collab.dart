@@ -205,7 +205,7 @@ class CollabVersion {
 
 // ─── WebSocket events ─────────────────────────────────────────────────────────
 
-enum WsEventType { joined, message, version, approval, presence, pong, error, unknown }
+enum WsEventType { joined, message, version, approval, presence, typing, reconnecting, pong, error, unknown }
 
 class WsEvent {
   final WsEventType type;
@@ -221,6 +221,7 @@ class WsEvent {
       'version' => WsEventType.version,
       'approval' => WsEventType.approval,
       'presence' => WsEventType.presence,
+      'typing' => WsEventType.typing,
       'pong' => WsEventType.pong,
       'error' => WsEventType.error,
       _ => WsEventType.unknown,

@@ -117,6 +117,16 @@ export function broadcastApproval(threadId, versionId, approval) {
 }
 
 /**
+ * Broadcast a typing/thinking indicator — someone submitted a prompt,
+ * Gemini is being called. Other participants can show a "Gemini is thinking" UI.
+ * @param {string} threadId
+ * @param {string} userId — the user who triggered the call
+ */
+export function broadcastTyping(threadId, userId) {
+  _broadcast(threadId, { type: 'typing', threadId, userId });
+}
+
+/**
  * Returns a snapshot of currently connected userIds for a thread.
  * @param {string} threadId
  * @returns {string[]}
