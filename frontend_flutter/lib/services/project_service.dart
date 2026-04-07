@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -23,35 +24,58 @@ class ProjectService {
         _base = ApiService.baseUrl;
 
   // ── Auth header ─────────────────────────────────────────────────────────────
-  // The backend uses x-user-id (same as ApiService) — not JWT Bearer.
-  // The userId is stored in SharedPreferences under key 'user_id'.
+  // Identity: reuses the stable per-device UUID written by LessonsService under
+  // 'hackit:v1:userId'. If it doesn't exist yet (first launch before any lesson),
+  // we generate and persist it here so collab works independently.
+
+  static const _kUserIdKey = 'hackit:v1:userId';
 
   Future<Map<String, String>> _headers() async {
-    final userId = await _readUserId();
+    final userId = await _resolveUserId();
     return {
       'Content-Type': 'application/json',
-      if (userId != null && userId.isNotEmpty) 'x-user-id': userId,
+      'x-user-id': userId,
     };
   }
 
-  Future<String?> _readUserId() async {
-    // Check in-memory cache first to avoid repeated disk reads
-    if (_cachedUserId != null) return _cachedUserId;
+  /// Returns the stable per-device userId, creating it on first call if needed.
+  Future<String> _resolveUserId() async {
+    if (_cachedUserId != null) return _cachedUserId!;
     try {
       final prefs = await SharedPreferences.getInstance();
-      _cachedUserId = prefs.getString('user_id');
-      return _cachedUserId;
+      String? id = prefs.getString(_kUserIdKey);
+      if (id == null || id.isEmpty) {
+        id = _generateUserId();
+        await prefs.setString(_kUserIdKey, id);
+      }
+      _cachedUserId = id;
+      return id;
     } catch (_) {
-      return null;
+      // Fallback: use an in-memory id for this session
+      _cachedUserId ??= _generateUserId();
+      return _cachedUserId!;
     }
+  }
+
+  static String _generateUserId() {
+    final rnd = Random();
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final salt = List.generate(6, (_) => rnd.nextInt(36))
+        .map((n) => n.toRadixString(36))
+        .join();
+    return 'u_${ts}_$salt';
   }
 
   static String? _cachedUserId;
 
-  /// Call this when the backend assigns a userId (anon cookie or login) to avoid
-  /// repeated SharedPreferences reads.
-  static void cacheUserId(String userId) => _cachedUserId = userId;
-  static void clearUserId() => _cachedUserId = null;
+  /// Pre-warm the cache (call once at app startup).
+  static Future<void> init() async {
+    await projectService._resolveUserId();
+  }
+
+  static void clearUserId() {
+    _cachedUserId = null;
+  }
 
   /// Returns the cached userId for WS presence tracking.
   static String? get currentUserId => _cachedUserId;

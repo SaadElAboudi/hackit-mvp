@@ -12,6 +12,7 @@ import 'providers/plan_feedback_provider.dart';
 import 'providers/project_provider.dart';
 import 'providers/collab_provider.dart';
 import 'services/cache_manager.dart';
+import 'services/project_service.dart';
 import 'screens/root_tabs.dart';
 import 'screens/result_screen.dart';
 import 'utils/page_transitions.dart';
@@ -28,6 +29,10 @@ void main() async {
   // Initialize cache manager
   final cacheManager = CacheManager(prefs);
   getIt.registerSingleton<CacheManager>(cacheManager);
+
+  // Resolve and persist the stable per-device userId used by ProjectService.
+  // This ensures a consistent identity is ready before any collab call is made.
+  await ProjectService.init();
 
   runApp(const MyApp());
 }
