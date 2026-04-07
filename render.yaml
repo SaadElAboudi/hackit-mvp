@@ -24,10 +24,16 @@ services:
           type: web
           name: hackit-frontend
           envVarKey: RENDER_EXTERNAL_URL
-      # MongoDB Atlas connection string — set this in the Render dashboard
-      # (Environment > Add environment variable > MONGODB_URI)
+      # ── Secrets: set these manually in Render dashboard ──────────────────────
+      # MongoDB Atlas connection string (required for all collab features)
       - key: MONGODB_URI
         sync: false
+      # Gemini API key (required for AI responses in threads)
+      - key: GEMINI_API_KEY
+        sync: false
+      # Enable Gemini for the main search flow too
+      - key: USE_GEMINI
+        value: "true"
 
   - type: web
     name: hackit-frontend
