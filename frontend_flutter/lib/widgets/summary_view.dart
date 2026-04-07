@@ -812,215 +812,388 @@ class _ReadyToSendCardState extends State<_ReadyToSendCard> {
     }
   }
 
+  /// Parses inline markdown within a string and returns a [TextSpan] tree.
+  /// Supports **bold**, *italic*, and `code`.
+  TextSpan _parseInline(String text, TextStyle base, ColorScheme scheme) {
+    final spans = <InlineSpan>[];
+    final pattern = RegExp(r'\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`');
+    int last = 0;
+    for (final m in pattern.allMatches(text)) {
+      if (m.start > last) {
+        spans.add(TextSpan(text: text.substring(last, m.start), style: base));
+      }
+      if (m.group(1) != null) {
+        spans.add(TextSpan(
+          text: m.group(1),
+          style: base.copyWith(
+            fontWeight: FontWeight.w700,
+            color: scheme.onSurface,
+          ),
+        ));
+      } else if (m.group(2) != null) {
+        spans.add(TextSpan(
+          text: m.group(2),
+          style: base.copyWith(fontStyle: FontStyle.italic),
+        ));
+      } else if (m.group(3) != null) {
+        spans.add(TextSpan(
+          text: ' ${m.group(3)} ',
+          style: base.copyWith(
+            fontFamily: 'monospace',
+            fontSize: (base.fontSize ?? 13) - 0.5,
+            color: scheme.primary,
+            backgroundColor: scheme.primaryContainer.withValues(alpha: 0.35),
+          ),
+        ));
+      }
+      last = m.end;
+    }
+    if (last < text.length) {
+      spans.add(TextSpan(text: text.substring(last), style: base));
+    }
+    return TextSpan(children: spans, style: base);
+  }
+
+  Widget _rich(String text, TextStyle base, ColorScheme scheme) {
+    return Text.rich(_parseInline(text, base, scheme));
+  }
+
   /// Renders a single line as a styled widget based on its content.
   Widget _renderLine(String line, ColorScheme scheme) {
     final trimmed = line.trim();
+    final baseStyle = TextStyle(
+      fontSize: SizeConfig.adaptiveFontSize(13.5),
+      height: 1.5,
+      color: scheme.onSurface.withValues(alpha: 0.87),
+    );
 
-    // Separator lines — render as visual divider
+    // ── Separator lines ─────────────────────────────────────────────────────
     if (trimmed.startsWith('═══') || trimmed.startsWith('───')) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Divider(
-          color: scheme.outlineVariant.withValues(alpha: 0.45),
+          color: scheme.outlineVariant.withValues(alpha: 0.4),
           thickness: 1,
           height: 1,
         ),
       );
     }
 
-    // Subsection headers (━━ P0, ━━ P1, etc.)
+    // ── ━━ Subsection badges (P0 / P1 / P2) ────────────────────────────────
     if (trimmed.startsWith('━━')) {
-      final text = trimmed.replaceAll('━', '').trim();
+      final text = trimmed.replaceAll(RegExp(r'━+'), '').trim();
       final isP0 = text.contains('P0') || text.contains('BLOQUANT');
       final isP1 = text.contains('P1') || text.contains('IMPORTANT');
       final color = isP0
           ? Colors.red.shade700
           : isP1
-              ? Colors.orange.shade700
-              : scheme.primary;
+              ? Colors.orange.shade600
+              : Colors.green.shade700;
       return Padding(
-        padding: const EdgeInsets.only(top: 10, bottom: 4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: color,
-              letterSpacing: 0.2,
+        padding: const EdgeInsets.only(top: 12, bottom: 4),
+        child: Row(
+          children: [
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: color.withValues(alpha: 0.35)),
+              ),
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  letterSpacing: 0.3,
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       );
     }
 
-    // Empty lines — small spacing
-    if (trimmed.isEmpty) {
-      return const SizedBox(height: 4);
-    }
+    // ── Empty lines ─────────────────────────────────────────────────────────
+    if (trimmed.isEmpty) return const SizedBox(height: 5);
 
-    // RULES footer line (grayed out)
+    // ── RÈGLES footer (dimmed) ───────────────────────────────────────────────
     if (trimmed.startsWith('RÈGLES')) {
       return Padding(
-        padding: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.only(top: 8),
         child: Text(
           trimmed,
           style: TextStyle(
             fontSize: 10.5,
             height: 1.4,
-            color: scheme.onSurface.withValues(alpha: 0.35),
+            color: scheme.onSurface.withValues(alpha: 0.28),
             fontStyle: FontStyle.italic,
           ),
         ),
       );
     }
 
-    // ALL-CAPS section headers (e.g. DIAGNOSTIC, ANSWER FIRST, VERDICT GLOBAL)
-    final isAllCaps = trimmed.length > 2 &&
-        trimmed == trimmed.toUpperCase() &&
-        RegExp(r'[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ]').hasMatch(trimmed);
-    if (isAllCaps && !trimmed.startsWith('•') && !trimmed.startsWith('→')) {
+    // ── ## / ### markdown headings ──────────────────────────────────────────
+    final mdHeading = RegExp(r'^(#{2,3})\s+(.+)$').firstMatch(trimmed);
+    if (mdHeading != null) {
+      final level = mdHeading.group(1)!.length;
+      final text = mdHeading.group(2)!;
       return Padding(
-        padding: const EdgeInsets.only(top: 12, bottom: 3),
-        child: Text(
-          trimmed,
-          style: TextStyle(
-            fontSize: SizeConfig.adaptiveFontSize(12.5),
+        padding: const EdgeInsets.only(top: 14, bottom: 2),
+        child: _rich(
+          text,
+          TextStyle(
+            fontSize:
+                SizeConfig.adaptiveFontSize(level == 2 ? 14.5 : 13),
             fontWeight: FontWeight.w800,
             color: scheme.primary.withValues(alpha: 0.9),
-            letterSpacing: 0.8,
+            letterSpacing: 0.3,
           ),
+          scheme,
         ),
       );
     }
 
-    // Action arrows → (action items in accent color)
-    if (trimmed.startsWith('→')) {
+    // ── ALL-CAPS section headers ─────────────────────────────────────────────
+    final isAllCaps = trimmed.length > 3 &&
+        trimmed == trimmed.toUpperCase() &&
+        RegExp(r'[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ]').hasMatch(trimmed) &&
+        !trimmed.startsWith('•') &&
+        !trimmed.startsWith('→');
+    if (isAllCaps) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 3,
+              height: 15,
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                trimmed,
+                style: TextStyle(
+                  fontSize: SizeConfig.adaptiveFontSize(12),
+                  fontWeight: FontWeight.w800,
+                  color: scheme.primary.withValues(alpha: 0.9),
+                  letterSpacing: 0.7,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Status-emoji lines (🔴 🟡 🟢 🔵) ────────────────────────────────────
+    final statusEmoji = trimmed.startsWith('🔴')
+        ? Colors.red.shade700
+        : trimmed.startsWith('🟡')
+            ? Colors.orange.shade600
+            : trimmed.startsWith('🟢')
+                ? Colors.green.shade700
+                : trimmed.startsWith('🔵')
+                    ? Colors.blue.shade700
+                    : null;
+    if (statusEmoji != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                  color: statusEmoji.withValues(alpha: 0.6), width: 3),
+            ),
+            color: statusEmoji.withValues(alpha: 0.05),
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(6),
+              bottomRight: Radius.circular(6),
+            ),
+          ),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: _rich(trimmed, baseStyle, scheme),
+        ),
+      );
+    }
+
+    // ── ✅ / ❌ / ❓ scope lines ──────────────────────────────────────────────
+    final scopeColor = trimmed.startsWith('✅')
+        ? Colors.green.shade700
+        : trimmed.startsWith('❌')
+            ? Colors.red.shade700
+            : trimmed.startsWith('❓')
+                ? Colors.orange.shade600
+                : null;
+    if (scopeColor != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(width: 2),
+            Expanded(
+              child: _rich(
+                trimmed,
+                baseStyle.copyWith(
+                  color: scheme.onSurface.withValues(alpha: 0.85),
+                ),
+                scheme,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── → key : value ───────────────────────────────────────────────────────
+    if (trimmed.startsWith('→')) {
+      final body = trimmed.substring(1).trim();
+      final colonIdx = body.indexOf(' : ');
+      if (colonIdx > 0) {
+        final key = body.substring(0, colonIdx).trim();
+        final value = body.substring(colonIdx + 3).trim();
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 3,
+                height: 18,
+                margin: const EdgeInsets.only(right: 8, top: 2),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '$key : ',
+                        style: baseStyle.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.primary,
+                        ),
+                      ),
+                      _parseInline(value, baseStyle, scheme),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      // plain arrow line
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2.5),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Text('→ ',
-                style: TextStyle(
-                  fontSize: SizeConfig.adaptiveFontSize(13.5),
+                style: baseStyle.copyWith(
                   fontWeight: FontWeight.w700,
                   color: scheme.primary,
-                  height: 1.45,
                 )),
-            Expanded(
-              child: Text(
-                trimmed.substring(1).trim(),
-                style: TextStyle(
-                  fontSize: SizeConfig.adaptiveFontSize(13.5),
-                  height: 1.45,
-                  color: scheme.onSurface.withValues(alpha: 0.9),
-                ),
-              ),
-            ),
+            Expanded(child: _rich(body, baseStyle, scheme)),
           ],
         ),
       );
     }
 
-    // Checkmark items ☑
+    // ── ☑ checkmarks ─────────────────────────────────────────────────────────
     if (trimmed.startsWith('☑')) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1.5),
+        padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('☑ ',
-                style: TextStyle(
-                  fontSize: SizeConfig.adaptiveFontSize(13.5),
-                  color: Colors.green.shade600,
-                  height: 1.45,
-                )),
+            Icon(Icons.check_circle_rounded,
+                size: 16,
+                color: Colors.green.shade600),
+            const SizedBox(width: 7),
             Expanded(
-              child: Text(
-                trimmed.substring(1).trim(),
-                style: TextStyle(
-                  fontSize: SizeConfig.adaptiveFontSize(13.5),
-                  height: 1.45,
-                  color: scheme.onSurface.withValues(alpha: 0.88),
-                ),
-              ),
-            ),
+                child: _rich(
+                    trimmed.substring(1).trim(), baseStyle, scheme)),
           ],
         ),
       );
     }
 
-    // Bullet points •
-    if (trimmed.startsWith('•')) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1.5),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('• ',
-                style: TextStyle(
-                  fontSize: SizeConfig.adaptiveFontSize(14),
-                  color: scheme.primary.withValues(alpha: 0.7),
-                  height: 1.45,
-                  fontWeight: FontWeight.w700,
-                )),
-            Expanded(
-              child: Text(
-                trimmed.substring(1).trim(),
-                style: TextStyle(
-                  fontSize: SizeConfig.adaptiveFontSize(13.5),
-                  height: 1.45,
-                  color: scheme.onSurface.withValues(alpha: 0.88),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Numbered items (1. 2. 3.)
-    final numberedMatch = RegExp(r'^(\d+)[.)]\s+(.+)$').firstMatch(trimmed);
-    if (numberedMatch != null) {
-      final num = numberedMatch.group(1)!;
-      final content = numberedMatch.group(2)!;
+    // ── • bullets ────────────────────────────────────────────────────────────
+    if (trimmed.startsWith('•') ||
+        trimmed.startsWith('- ') ||
+        (trimmed.startsWith('* ') && !trimmed.startsWith('**'))) {
+      final content = trimmed.startsWith('•')
+          ? trimmed.substring(1).trim()
+          : trimmed.substring(2).trim();
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 20,
-              height: 20,
-              margin: const EdgeInsets.only(right: 8, top: 1),
+              width: 5,
+              height: 5,
+              margin: const EdgeInsets.only(right: 9, top: 7),
               decoration: BoxDecoration(
-                color: scheme.primaryContainer.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(999),
+                color: scheme.primary.withValues(alpha: 0.65),
+                shape: BoxShape.circle,
+              ),
+            ),
+            Expanded(child: _rich(content, baseStyle, scheme)),
+          ],
+        ),
+      );
+    }
+
+    // ── H1 (numbered items 1. / 2.) ──────────────────────────────────────────
+    final numberedMatch =
+        RegExp(r'^(\d+)[.)]\s+(.+)$').firstMatch(trimmed);
+    if (numberedMatch != null) {
+      final num = numberedMatch.group(1)!;
+      final content = numberedMatch.group(2)!;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              margin: const EdgeInsets.only(right: 10, top: 1),
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                borderRadius: BorderRadius.circular(7),
               ),
               alignment: Alignment.center,
               child: Text(
                 num,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onPrimaryContainer,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  height: 1,
                 ),
               ),
             ),
             Expanded(
-              child: Text(
+              child: _rich(
                 content,
-                style: TextStyle(
-                  fontSize: SizeConfig.adaptiveFontSize(13.5),
-                  height: 1.45,
-                  color: scheme.onSurface.withValues(alpha: 0.88),
-                ),
+                baseStyle.copyWith(
+                    color: scheme.onSurface.withValues(alpha: 0.9)),
+                scheme,
               ),
             ),
           ],
@@ -1028,17 +1201,10 @@ class _ReadyToSendCardState extends State<_ReadyToSendCard> {
       );
     }
 
-    // Default: plain paragraph text
+    // ── Default paragraph ────────────────────────────────────────────────────
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
-      child: Text(
-        trimmed,
-        style: TextStyle(
-          fontSize: SizeConfig.adaptiveFontSize(13.5),
-          height: 1.5,
-          color: scheme.onSurface.withValues(alpha: 0.85),
-        ),
-      ),
+      child: _rich(trimmed, baseStyle, scheme),
     );
   }
 
