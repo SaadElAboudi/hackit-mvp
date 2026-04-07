@@ -168,6 +168,10 @@ class CollabProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       threadError = e.toString();
+      // Remove the orphaned optimistic user message
+      final msgs = List<ThreadMessage>.from(activeThread?.messages ?? []);
+      msgs.removeWhere((m) => m.id == tmpId);
+      if (activeThread != null) activeThread = _rebuildThread(activeThread!, msgs);
       sendingMessage = false;
       notifyListeners();
       return false;

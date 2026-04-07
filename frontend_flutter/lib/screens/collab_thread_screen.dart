@@ -96,14 +96,28 @@ class _CollabThreadScreenState extends State<CollabThreadScreen> {
     if (text.isEmpty) return;
     _inputCtrl.clear();
     final prov = context.read<CollabProvider>();
-    await prov.sendMessage(
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await prov.sendMessage(
       widget.project.slug,
       widget.thread.id,
       prompt: text,
       pin: _pinNext,
     );
+    if (!mounted) return;
     setState(() => _pinNext = false);
-    _scrollToBottom();
+    if (ok) {
+      _scrollToBottom();
+    } else {
+      final errMsg = prov.threadError ?? 'Erreur inconnue';
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(errMsg),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   @override
