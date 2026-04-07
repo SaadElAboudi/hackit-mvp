@@ -85,22 +85,44 @@ class _CollabProjectsScreenState extends State<CollabProjectsScreen> {
     );
   }
 
-  void _showCreateSheet(BuildContext context) {
-    showModalBottomSheet(
+  void _showCreateSheet(BuildContext context) async {
+    final prov = context.read<CollabProvider>();
+    final nav = Navigator.of(context);
+    final p = await showModalBottomSheet<CollabProject>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _CreateProjectSheet(),
     );
+    if (p != null && mounted) {
+      prov.openProject(p.slug);
+      nav.push(MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider.value(
+          value: prov,
+          child: CollabThreadListScreen(project: p),
+        ),
+      ));
+    }
   }
 
-  void _showJoinSheet(BuildContext context) {
-    showModalBottomSheet(
+  void _showJoinSheet(BuildContext context) async {
+    final prov = context.read<CollabProvider>();
+    final nav = Navigator.of(context);
+    final p = await showModalBottomSheet<CollabProject>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _JoinProjectSheet(),
     );
+    if (p != null && mounted) {
+      prov.openProject(p.slug);
+      nav.push(MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider.value(
+          value: prov,
+          child: CollabThreadListScreen(project: p),
+        ),
+      ));
+    }
   }
 }
 
@@ -473,6 +495,14 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -487,6 +517,24 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
               controller: _descCtrl,
               hint: 'Description (optionnelle)',
               maxLines: 2),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      size: 14, color: Colors.red),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style:
+                          const TextStyle(color: Colors.red, fontSize: 12.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -508,23 +556,25 @@ class _CreateProjectSheetState extends State<_CreateProjectSheet> {
   Future<void> _submit() async {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) return;
-    setState(() => _loading = true);
-    final p = await context.read<CollabProvider>().createProject(
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final prov = context.read<CollabProvider>();
+    final p = await prov.createProject(
           title: title,
           description: _descCtrl.text.trim(),
         );
-    if (mounted) {
-      Navigator.pop(context);
-      if (p != null) {
-        context.read<CollabProvider>().openProject(p.slug);
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => ChangeNotifierProvider.value(
-            value: context.read<CollabProvider>(),
-            child: CollabThreadListScreen(project: p),
-          ),
-        ));
-      }
+    if (!mounted) return;
+    if (p == null) {
+      setState(() {
+        _loading = false;
+        _error = prov.projectsError ?? 'Erreur lors de la création du projet';
+      });
+      return;
     }
+    // Return the project to the caller so it can navigate
+    Navigator.pop(context, p);
   }
 }
 
@@ -588,15 +638,14 @@ class _JoinProjectSheetState extends State<_JoinProjectSheet> {
       _error = null;
     });
     final p = await context.read<CollabProvider>().joinByToken(token);
-    if (mounted) {
-      if (p == null) {
-        setState(() {
-          _error = 'Lien invalide ou expiré';
-          _loading = false;
-        });
-      } else {
-        Navigator.pop(context);
-      }
+    if (!mounted) return;
+    if (p == null) {
+      setState(() {
+        _error = 'Lien invalide ou expiré';
+        _loading = false;
+      });
+    } else {
+      Navigator.pop(context, p);  // Return project so caller can navigate
     }
   }
 }

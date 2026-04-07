@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/collab.dart';
 import '../services/api_service.dart';
@@ -22,40 +23,38 @@ class ProjectService {
         _base = ApiService.baseUrl;
 
   // ── Auth header ─────────────────────────────────────────────────────────────
+  // The backend uses x-user-id (same as ApiService) — not JWT Bearer.
+  // The userId is stored in SharedPreferences under key 'user_id'.
 
   Future<Map<String, String>> _headers() async {
-    // Reuse the JWT stored by ApiService
-    final token = await _readToken();
+    final userId = await _readUserId();
     return {
       'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
+      if (userId != null && userId.isNotEmpty) 'x-user-id': userId,
     };
   }
 
-  Future<String?> _readToken() async {
+  Future<String?> _readUserId() async {
+    // Check in-memory cache first to avoid repeated disk reads
+    if (_cachedUserId != null) return _cachedUserId;
     try {
-      // ApiService stores the JWT under 'jwt_token'
-      final prefs = await _sharedPrefs();
-      return prefs['jwt_token'];
+      final prefs = await SharedPreferences.getInstance();
+      _cachedUserId = prefs.getString('user_id');
+      return _cachedUserId;
     } catch (_) {
       return null;
     }
   }
 
-  // Minimal SharedPreferences access without a direct import
-  Future<Map<String, String?>> _sharedPrefs() async {
-    // We need SharedPreferences but we can't re-import. Use a simple cache.
-    return _tokenCache;
-  }
+  static String? _cachedUserId;
 
-  static final Map<String, String?> _tokenCache = {};
+  /// Call this when the backend assigns a userId (anon cookie or login) to avoid
+  /// repeated SharedPreferences reads.
+  static void cacheUserId(String userId) => _cachedUserId = userId;
+  static void clearUserId() => _cachedUserId = null;
 
-  /// Call this after a successful login to cache the token for WS auth.
-  static void cacheToken(String token) => _tokenCache['jwt_token'] = token;
-  static void clearToken() => _tokenCache.remove('jwt_token');
-
-  /// Returns the cached JWT token (used as a user identifier for WS presence).
-  static String? get currentToken => _tokenCache['jwt_token'];
+  /// Returns the cached userId for WS presence tracking.
+  static String? get currentUserId => _cachedUserId;
 
   // ── HTTP helpers ─────────────────────────────────────────────────────────────
 

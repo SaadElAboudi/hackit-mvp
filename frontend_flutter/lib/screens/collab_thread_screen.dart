@@ -44,8 +44,8 @@ class _CollabThreadScreenState extends State<CollabThreadScreen> {
   }
 
   void _connectWs() {
-    // Reuse the token as userId for presence tracking
-    final userId = ProjectService.currentToken ?? 'anon';
+    // Reuse the userId for presence tracking (reads from SharedPreferences cache)
+    final userId = ProjectService.currentUserId ?? 'anon';
     final stream = projectService.subscribeToThread(widget.thread.id, userId);
     _wsSub = stream.listen(_onWsEvent);
   }

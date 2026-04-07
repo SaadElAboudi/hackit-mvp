@@ -19,8 +19,12 @@ import {
     updateProject,
 } from '../controllers/projectsController.js';
 import { sendThreadMessage } from '../services/threadGemini.js';
+import { userIdMiddleware } from '../utils/userIdMiddleware.js';
 
 const router = Router();
+
+// Attach userId (from x-user-id header, cookie, or generate anon) on every request
+router.use(userIdMiddleware);
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 router.post('/', createProject);
