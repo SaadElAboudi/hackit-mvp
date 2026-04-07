@@ -19,9 +19,18 @@ import {
     updateProject,
 } from '../controllers/projectsController.js';
 import { sendThreadMessage } from '../services/threadGemini.js';
+import mongoose from 'mongoose';
 import { userIdMiddleware } from '../utils/userIdMiddleware.js';
 
 const router = Router();
+
+// Fail fast if MongoDB is not connected — avoids 10 s buffer timeout
+router.use((_req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ error: 'Database not available. Set MONGODB_URI on the server.' });
+  }
+  next();
+});
 
 // Attach userId (from x-user-id header, cookie, or generate anon) on every request
 router.use(userIdMiddleware);

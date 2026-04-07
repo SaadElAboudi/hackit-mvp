@@ -24,6 +24,10 @@ services:
           type: web
           name: hackit-frontend
           envVarKey: RENDER_EXTERNAL_URL
+      # MongoDB Atlas connection string — set this in the Render dashboard
+      # (Environment > Add environment variable > MONGODB_URI)
+      - key: MONGODB_URI
+        sync: false
 
   - type: web
     name: hackit-frontend
