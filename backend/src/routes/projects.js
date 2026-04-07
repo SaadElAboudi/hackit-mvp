@@ -19,6 +19,24 @@ import {
     updateProject,
 } from '../controllers/projectsController.js';
 import { sendThreadMessage } from '../services/threadGemini.js';
+
+const router = Router();
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+router.post('/', createProject);
+router.get('/', listProjects);
+router.get('/:slug', getProject);
+router.patch('/:slug', updateProject);
+router.delete('/:slug', archiveProject);
+
+// ── Invite ────────────────────────────────────────────────────────────────────
+router.post('/join/:token', joinProject);
+router.post('/:slug/invite/regenerate', regenerateInvite);
+
+// ── Members ───────────────────────────────────────────────────────────────────
+router.patch('/:slug/members/:memberId', updateMemberRole);
+router.delete('/:slug/members/:memberId', removeMember);
+
 // ── Threads ───────────────────────────────────────────────────────────────────
 router.post('/:slug/threads', createThread);
 router.get('/:slug/threads', listThreads);
