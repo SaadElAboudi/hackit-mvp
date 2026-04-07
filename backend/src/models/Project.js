@@ -11,7 +11,7 @@ import { randomBytes } from 'crypto';
  */
 const MemberSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: String, required: true },
     role: { type: String, enum: ['owner', 'editor', 'viewer'], default: 'editor' },
     joinedAt: { type: Date, default: Date.now },
   },

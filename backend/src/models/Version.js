@@ -14,7 +14,7 @@ import mongoose from 'mongoose';
  */
 const ApprovalSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: String, required: true },
     decision: { type: String, enum: ['approved', 'rejected'], required: true },
     comment: { type: String, maxlength: 500, default: '' },
     decidedAt: { type: Date, default: Date.now },
@@ -24,7 +24,7 @@ const ApprovalSchema = new mongoose.Schema(
 
 const CommentSchema = new mongoose.Schema(
   {
-    authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    authorId: { type: String, required: true },
     // Optional: anchored to a specific section heading in the content
     sectionAnchor: { type: String, default: null },
     text: { type: String, required: true, maxlength: 2000 },
@@ -55,7 +55,7 @@ const VersionSchema = new mongoose.Schema(
     // Prompt that produced this version
     prompt: { type: String, required: true },
     // Member who pinned / created this version
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    createdBy: { type: String, required: true },
     status: {
       type: String,
       enum: ['draft', 'approved', 'rejected', 'merged'],
