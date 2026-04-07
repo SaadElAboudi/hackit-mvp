@@ -11,6 +11,8 @@ import morgan from 'morgan';
 
 import { getFeatureFlags } from './config/featureFlags.js';
 import lessonsRouter from './routes/lessons.js';
+import projectsRouter from './routes/projects.js';
+import { attachWebSocketServer } from './services/threadRooms.js';
 import { validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
 import { getChapters, extractDesiredChapters } from './services/chapters.js';
 import { getTranscript } from './services/transcript.js';
@@ -1997,6 +1999,9 @@ if (isDirectRun) {
     console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
   });
 
+  // Attach WebSocket server for real-time thread collaboration
+  attachWebSocketServer(server);
+
   server.on('error', (err) => {
     console.error('Server listen error:', err?.message || err);
   });
@@ -2121,8 +2126,9 @@ app.post("/api/generateLesson", userIdMiddleware, async (req, res) => {
   }
 });
 
-// Mount lessons and users routers.
+// Mount lessons, projects routers.
 app.use('/api/lessons', lessonsRouter);
+app.use('/api/projects', projectsRouter);
 
 app.use((req, res) => {
   return res.status(404).json({ error: 'Not found' });
