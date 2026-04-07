@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../screens/home_screen.dart';
 import '../screens/library_screen.dart';
+import '../screens/collab_projects_screen.dart';
 import '../providers/search_provider.dart';
 
 class RootTabs extends StatefulWidget {
@@ -14,6 +15,7 @@ class RootTabs extends StatefulWidget {
 class _RootTabsState extends State<RootTabs> {
   int _index = 0;
   final _navigatorKeys = [
+    GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
   ];
@@ -51,6 +53,9 @@ class _RootTabsState extends State<RootTabs> {
             case 1:
               page = const LibraryScreen();
               break;
+            case 2:
+              page = const CollabProjectsScreen();
+              break;
             default:
               page = const HomeScreen();
           }
@@ -62,6 +67,9 @@ class _RootTabsState extends State<RootTabs> {
               break;
             case 1:
               page = const LibraryScreen();
+              break;
+            case 2:
+              page = const CollabProjectsScreen();
               break;
             default:
               page = const HomeScreen();
@@ -89,7 +97,7 @@ class _RootTabsState extends State<RootTabs> {
       child: Scaffold(
         body: IndexedStack(
           index: _index,
-          children: List.generate(2, (i) => _buildTabNavigator(i)),
+          children: List.generate(3, (i) => _buildTabNavigator(i)),
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
@@ -108,6 +116,11 @@ class _RootTabsState extends State<RootTabs> {
               icon: Icon(Icons.collections_bookmark_outlined),
               selectedIcon: Icon(Icons.collections_bookmark_rounded),
               label: 'Pipeline',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.workspaces_outlined),
+              selectedIcon: Icon(Icons.workspaces_rounded),
+              label: 'Projets',
             ),
           ],
         ),

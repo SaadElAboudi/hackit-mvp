@@ -24,6 +24,7 @@ dependencies:
   hive: ^2.2.3
   cached_network_image: ^3.3.1
   http: ^1.2.0
+  web_socket_channel: ^2.4.0
   connectivity_plus: ^5.0.2
   
   # Analytics & Monitoring

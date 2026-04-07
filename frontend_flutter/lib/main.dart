@@ -10,6 +10,7 @@ import 'providers/lessons_provider.dart';
 import 'providers/action_task_provider.dart';
 import 'providers/plan_feedback_provider.dart';
 import 'providers/project_provider.dart';
+import 'providers/collab_provider.dart';
 import 'services/cache_manager.dart';
 import 'screens/root_tabs.dart';
 import 'screens/result_screen.dart';
@@ -46,6 +47,9 @@ class _MyAppState extends State<MyApp> {
       providers: [
         ChangeNotifierProvider(
           create: (_) => ThemeProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => CollabProvider(),
         ),
         ChangeNotifierProvider(
           create: (_) => ProjectProvider(getIt<SharedPreferences>()),
