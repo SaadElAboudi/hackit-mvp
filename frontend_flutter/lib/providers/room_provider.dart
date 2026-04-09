@@ -111,28 +111,36 @@ class RoomProvider extends ChangeNotifier {
         final msg = event.message;
         if (msg == null) return;
 
-        // 1. Already present by real id (most common — WS arrives after HTTP)
+        // 1. Already present by real id (WS after HTTP — most common).
         final idxById = messages.indexWhere((m) => m.id == msg.id);
         if (idxById >= 0) {
+          debugPrint('$_tag WS message: update in-place id=${msg.id}');
           messages[idxById] = msg;
           if (msg.isAI) aiThinking = false;
           notifyListeners();
           return;
         }
 
-        // 2. WS arrived BEFORE HTTP response — replace the optimistic tmp_ entry
-        //    so HTTP response won't create a duplicate.
-        final idxByOptimistic = messages.indexWhere(
-          (m) =>
-              m.id.startsWith('tmp_') &&
-              m.senderId == msg.senderId &&
-              m.content == msg.content,
-        );
-        if (idxByOptimistic >= 0) {
-          messages[idxByOptimistic] = msg;
-        } else {
-          messages.add(msg);
+        // 2. WS arrived BEFORE HTTP — replace the optimistic tmp_ entry.
+        //    Only for non-AI messages (AI never has a tmp_ entry).
+        if (!msg.isAI) {
+          final idxByOptimistic = messages.indexWhere(
+            (m) =>
+                m.id.startsWith('tmp_') &&
+                m.content == msg.content &&
+                (m.senderId == msg.senderId || m.senderId.isEmpty),
+          );
+          if (idxByOptimistic >= 0) {
+            debugPrint('$_tag WS message: replaced tmp_ at $idxByOptimistic id=${msg.id}');
+            messages[idxByOptimistic] = msg;
+            notifyListeners();
+            return;
+          }
         }
+
+        // 3. New message from another participant.
+        debugPrint('$_tag WS message: added id=${msg.id} isAI=${msg.isAI}');
+        messages.add(msg);
         if (msg.isAI) aiThinking = false;
         notifyListeners();
 
@@ -197,16 +205,22 @@ class RoomProvider extends ChangeNotifier {
     try {
       final saved =
           await _svc.sendMessage(room.id, content, displayName: displayName);
-      // Replace optimistic with persisted version.
-      // Case A (normal): tmp_ still in list — HTTP arrived before WS.
-      final idx = messages.indexWhere((m) => m.id == tmpId);
-      if (idx >= 0) {
-        messages[idx] = saved;
+
+      final tmpIdx = messages.indexWhere((m) => m.id == tmpId);
+      if (tmpIdx >= 0) {
+        // Normal case: HTTP arrived before WS → replace the optimistic entry.
+        messages[tmpIdx] = saved;
+        // Belt-and-suspenders: if WS also added the real message in parallel,
+        // remove the duplicate (scan backward to keep indices stable).
+        for (var i = messages.length - 1; i >= 0; i--) {
+          if (i != tmpIdx && messages[i].id == saved.id) {
+            debugPrint('$_tag sendMessage: removing WS duplicate at $i for id=${saved.id}');
+            messages.removeAt(i);
+          }
+        }
       } else {
-        // Case B: WS arrived first and already replaced tmp_ with the real message.
-        // Only add if the real id is not already in the list.
-        final alreadyPresent = messages.any((m) => m.id == saved.id);
-        if (!alreadyPresent) {
+        // WS arrived first and already replaced tmp_ → just ensure real id present.
+        if (!messages.any((m) => m.id == saved.id)) {
           messages.add(saved);
         }
       }
