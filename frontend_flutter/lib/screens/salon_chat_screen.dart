@@ -29,6 +29,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   final _scrollCtrl = ScrollController();
   bool _directivesOpen = false;
   late final TextEditingController _directivesCtrl;
+  bool _isAtBottom = true; // track whether user is near the bottom
   String get _myUserId => ProjectService.currentUserId ?? '';
   String get _displayName {
     final uid = _myUserId;
@@ -39,6 +40,11 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   void initState() {
     super.initState();
     _directivesCtrl = TextEditingController();
+    _scrollCtrl.addListener(() {
+      if (!_scrollCtrl.hasClients) return;
+      final pos = _scrollCtrl.position;
+      _isAtBottom = pos.pixels >= pos.maxScrollExtent - 100;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<RoomProvider>();
       await prov.openRoom(widget.room);
@@ -83,6 +89,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     final ok = await prov.sendMessage(text, displayName: _displayName);
 
     if (ok) {
+      _isAtBottom = true; // always scroll to own outgoing message
       _scrollToBottom(animated: true);
     } else {
       messenger.showSnackBar(
@@ -167,9 +174,10 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     final prov = context.watch<RoomProvider>();
     final room = prov.currentRoom ?? widget.room;
 
-    // Scroll to bottom whenever new messages arrive
+    // Auto-scroll only when the user is already at the bottom
+    // (prevents hijacking scroll when user reads old messages)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (prov.messages.isNotEmpty && !prov.loadingMessages) {
+      if (_isAtBottom && prov.messages.isNotEmpty && !prov.loadingMessages) {
         _scrollToBottom();
       }
     });

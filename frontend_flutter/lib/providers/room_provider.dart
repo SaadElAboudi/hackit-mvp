@@ -78,6 +78,7 @@ class RoomProvider extends ChangeNotifier {
     onlineUserIds = [];
     currentRoom = room;
     messages = [];
+    messagesError = null;
     loadingMessages = true;
     notifyListeners();
 
@@ -109,10 +110,26 @@ class RoomProvider extends ChangeNotifier {
       case WsRoomEventType.message:
         final msg = event.message;
         if (msg == null) return;
-        // Dedup: replace if same id already present (e.g. from optimistic insert)
-        final idx = messages.indexWhere((m) => m.id == msg.id);
-        if (idx >= 0) {
-          messages[idx] = msg;
+
+        // 1. Already present by real id (most common — WS arrives after HTTP)
+        final idxById = messages.indexWhere((m) => m.id == msg.id);
+        if (idxById >= 0) {
+          messages[idxById] = msg;
+          if (msg.isAI) aiThinking = false;
+          notifyListeners();
+          return;
+        }
+
+        // 2. WS arrived BEFORE HTTP response — replace the optimistic tmp_ entry
+        //    so HTTP response won't create a duplicate.
+        final idxByOptimistic = messages.indexWhere(
+          (m) =>
+              m.id.startsWith('tmp_') &&
+              m.senderId == msg.senderId &&
+              m.content == msg.content,
+        );
+        if (idxByOptimistic >= 0) {
+          messages[idxByOptimistic] = msg;
         } else {
           messages.add(msg);
         }
@@ -180,12 +197,18 @@ class RoomProvider extends ChangeNotifier {
     try {
       final saved =
           await _svc.sendMessage(room.id, content, displayName: displayName);
-      // Replace optimistic with persisted version
+      // Replace optimistic with persisted version.
+      // Case A (normal): tmp_ still in list — HTTP arrived before WS.
       final idx = messages.indexWhere((m) => m.id == tmpId);
       if (idx >= 0) {
         messages[idx] = saved;
       } else {
-        messages.add(saved);
+        // Case B: WS arrived first and already replaced tmp_ with the real message.
+        // Only add if the real id is not already in the list.
+        final alreadyPresent = messages.any((m) => m.id == saved.id);
+        if (!alreadyPresent) {
+          messages.add(saved);
+        }
       }
 
       // If @ia was mentioned, show AI thinking indicator
