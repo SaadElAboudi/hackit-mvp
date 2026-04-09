@@ -24,4 +24,3 @@ flags:
 
 ignore:
   - "**/test/**"
-  - "backend/src/index_old.js"

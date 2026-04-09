@@ -8,8 +8,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
   firebase_core
   flutter_secure_storage_windows
-  flutter_tts
-  printing
   sentry_flutter
   share_plus
   url_launcher_windows

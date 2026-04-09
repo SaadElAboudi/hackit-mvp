@@ -1,34 +1,40 @@
-# Guide d'utilisation rapide Hackit MVP
+# Guide d'utilisation rapide — Hackit MVP
 
-## 1. Démarrage
-- Installez les dépendances :
-  - Backend : `npm ci` dans le dossier `backend`
-  - Frontend Flutter : `flutter pub get` dans `frontend_flutter`
-- Configurez vos clés API dans `.env` (voir `docs/secrets.md`).
-- Lancez le backend : `npm start` dans `backend`
-- Lancez le frontend : `flutter run -d chrome` ou sur mobile
+## Démarrage
 
-## 2. Fonctionnalités principales
-- **Recherche** : Posez une question dans le chat, obtenez une réponse AI + vidéos pertinentes.
-- **Favoris** : Ajoutez/supprimez des vidéos en favoris (badge AppBar, accès rapide).
-- **Historique** : Consultez et gérez vos recherches passées.
-- **Mode invité** : Utilisation sans compte, userId anonyme sauvegardé localement.
-- **Mode démo** : Test complet avec un JWT pour le user demo.
+**Backend :**
+```bash
+cd backend && npm ci
+cp .env.example .env   # configurer YT_API_KEY, GEMINI_API_KEY, MONGODB_URI
+npm run dev
+```
 
-## 3. Navigation
-- Accès direct aux écrans Home, Leçons, Favoris, Historique via la barre de navigation.
-- Headers premium sur chaque écran pour une expérience cohérente.
+**Frontend Flutter :**
+```bash
+cd frontend_flutter && flutter pub get
+flutter run -d chrome --web-port 8080
+```
 
-## 4. Bonnes pratiques
-- Utilisez des commits clairs et explicites.
-- Respectez la structure du projet et les conventions de code.
-- Pour contribuer, ouvrez une pull request avec description et tests si possible.
+Paramétrage des clés API → [docs/secrets.md](docs/secrets.md)
 
-## 5. Dépannage
-- Consultez les logs backend et frontend en cas de problème.
-- Vérifiez la configuration des clés API et du `.env`.
-- Pour toute question, ouvrez une issue sur GitHub.
+## Navigation
 
----
+L'application comporte **2 onglets** :
 
-Pour plus de détails, consultez le README principal et les fichiers du dossier `docs/`.
+| Onglet | Description |
+|--------|-------------|
+| **Recherche** | Saisissez un brief professionnel → l'IA génère un plan structuré en streaming (cadrer, produire, communiquer, audit) avec vidéos sources et mode défi |
+| **Salons** | Créez ou rejoignez un salon d'équipe — l'IA participe comme collaboratrice (`@ia`), peut défier des documents, respecte des directives |
+
+## Fonctionnalités principales
+
+- **Recherche structurée** : plan en 4 axes, sources vidéo YouTube, mode chall- **Recherche structurée** : plan en 4 axes, sources vidéo YouTube, mode chall- **Rechercheme- **Recherche structurée** : plan en 4 axnti- **Rechenyme généré localement — aucune inscription - **Recherche structurée** : plan en 4 axes, sources vidéo YouTube, moden - **Reche�gradati- **Recherche structues
+
+- Commits explicites et atomiques
+- Tests requis pour les modifications backend (`npm test`)
+- Pour contribuer : fork → branche → pull request avec description claire
+
+## Dépannage
+
+- Vérifier les logs backend (`npm run dev`) et - Vérifier les logs b Confirmer les clés API dans `.env` (voir [docs/secrets.md](docs/secrets.md))
+- Pour toute question : ouvrir une issue GitHub

@@ -10,8 +10,6 @@ import mongoose from 'mongoose';
 import morgan from 'morgan';
 
 import { getFeatureFlags } from './config/featureFlags.js';
-import lessonsRouter from './routes/lessons.js';
-import projectsRouter from './routes/projects.js';
 import roomsRouter from './routes/rooms.js';
 import { attachWebSocketServer } from './services/threadRooms.js';
 import { validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
@@ -1360,28 +1358,6 @@ app.post('/api/analytics/ttv', async (req, res) => {
   return res.json({ ok: true });
 });
 
-app.get('/api/recommendations', userIdMiddleware, async (req, res) => {
-  try {
-    const Lesson = (await import('./models/lesson.js')).default;
-    const userId = req.userId;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized user context' });
-    const history = await Lesson.find({ userId }).sort({ lastViewedAt: -1, updatedAt: -1 }).limit(20).lean();
-    const seedWords = new Set();
-    history.forEach((l) => String(l.title || '').toLowerCase().split(/\W+/).filter((w) => w.length > 3).forEach((w) => seedWords.add(w)));
-    const candidates = await Lesson.find({ userId: { $ne: userId } }).sort({ favorite: -1, views: -1, createdAt: -1 }).limit(100).lean();
-    const scored = candidates.map((l) => {
-      const words = String(l.title || '').toLowerCase().split(/\W+/);
-      const overlap = words.filter((w) => seedWords.has(w)).length;
-      const score = overlap * 3 + (l.favorite ? 2 : 0) + Math.min(5, Math.floor((l.views || 0) / 10));
-      return { ...l, score };
-    }).sort((a, b) => b.score - a.score).slice(0, 10);
-    return res.json({ items: scored });
-  } catch (e) {
-    return res.status(500).json({ error: 'Failed to build recommendations', detail: e?.message || 'Unknown error' });
-  }
-});
-
-
 app.post("/api/search", async (req, res) => {
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
@@ -2031,105 +2007,7 @@ if (shouldConnectMongo) {
   console.warn('MongoDB: no MONGODB_URI configured — lessons persistence disabled.');
 }
 
-// ============ LESSON GENERATION & PERSISTENCE ============
-// POST /api/generateLesson { query } (userId via middleware)
-app.post("/api/generateLesson", userIdMiddleware, async (req, res) => {
-  console.log('[POST /api/generateLesson] Authorization:', req.headers.authorization, 'userId:', req.userId);
-  const validation = normalizeQueryInput(req.body?.query, MAX_QUERY_LEN);
-  if (!validation.ok) return res.status(validation.status).json({ error: validation.error });
-  const query = validation.value;
-  const userId = req.userId;
-  if (!userId) return res.status(400).json({ error: 'query and userId are required' });
-
-  try {
-    // 1) Find a video for the query (reuse same logic as /api/search)
-    let searchTerm = query;
-    const breakerActive = Date.now() < GEMINI_BREAKER_UNTIL;
-    const useGemini = USE_GEMINI_ENV && !breakerActive && (req.body?.useGemini !== false);
-    let reformulationTimedOut = false;
-    if (useGemini && USE_GEMINI_REFORMULATION) {
-      const reformPrompt = `You are a YouTube search assistant. Convert the user question into ONE short English search query suitable for YouTube. Rules:\n- Max 6 words\n- No quotes, bullets, markdown, or explanations\n- Output ONLY the query.\n\nQuestion: ${query}\nQuery:`;
-      try {
-        let reform = await generateWithGemini(reformPrompt, 32);
-        reform = String(reform)
-          .split(/\r?\n/)[0]
-          .replace(/^[-*•\s>"]+/, "")
-          .replace(/["`]+/g, "")
-          .trim();
-        if (reform && reform.length <= 80) searchTerm = reform;
-      } catch (e) {
-        if (/timeout/i.test(e.message || "")) reformulationTimedOut = true;
-        console.warn("Gemini reformulation (generateLesson) failed:", e.message);
-      }
-    }
-
-    let videoTitle, videoUrl;
-    try {
-      const video = await searchYouTube(searchTerm);
-      videoTitle = video.title;
-      videoUrl = video.url;
-    } catch (e) {
-      console.warn("Video search (generateLesson) failed:", e.message);
-      if ((process.env.ALLOW_FALLBACK || "true") === "true") {
-        const mock = makeMockResponse();
-        videoTitle = mock.title; videoUrl = mock.videoUrl;
-      } else {
-        throw e;
-      }
-    }
-
-    // 2) Summarize into steps and summary text
-    let summaryText = "";
-    const desiredSteps = extractDesiredSteps(query);
-    const attemptGeminiSummary = useGemini && !reformulationTimedOut;
-    if (attemptGeminiSummary) {
-      const summaryPrompt = desiredSteps
-        ? `Résume cette vidéo YouTube en ${desiredSteps} étapes claires: ${videoTitle}`
-        : `Résume cette vidéo YouTube en étapes claires: ${videoTitle}`;
-      try {
-        summaryText = await generateWithGemini(summaryPrompt, 300);
-      } catch (e) {
-        console.warn("Gemini summary (generateLesson) failed:", e.message);
-        summaryText = heuristicSummary({ desiredSteps });
-      }
-    } else {
-      summaryText = heuristicSummary({ desiredSteps });
-    }
-    const steps = String(summaryText).split("\n").map(s => s.trim()).filter(Boolean);
-
-    // 3) Persist lesson
-    // Use Mongoose Lesson model directly
-    const Lesson = (await import('./models/lesson.js')).default;
-    const User = (await import('./models/User.js')).default;
-    const mongoose = (await import('mongoose')).default;
-    const lesson = await Lesson.create({ userId, title: videoTitle, steps, videoUrl, summary: summaryText });
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      await User.findByIdAndUpdate(userId, { $push: { savedLessons: lesson._id } });
-    }
-    // 4) Shape response
-    return res.json({
-      id: lesson._id?.toString() ?? '',
-      userId: lesson.userId?.toString() ?? '',
-      title: lesson.title?.toString() ?? '',
-      summary: lesson.summary?.toString() ?? '',
-      steps: Array.isArray(lesson.steps) ? lesson.steps.map(s => s?.toString() ?? '') : [],
-      videoUrl: lesson.videoUrl?.toString() ?? '',
-      favorite: !!lesson.favorite,
-      views: typeof lesson.views === 'number' ? lesson.views : 0,
-      createdAt: lesson.createdAt?.toISOString?.() ?? new Date().toISOString(),
-      updatedAt: lesson.updatedAt?.toISOString?.() ?? new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error("generateLesson error:", err?.response?.data || err.message || err);
-    const statusCode = err?.status || err?.response?.status || 500;
-    const detail = err?.message || "Unexpected error";
-    return res.status(statusCode).json({ error: statusCode === 404 ? "Not found" : "Internal server error", detail });
-  }
-});
-
-// Mount lessons, projects, and rooms routers.
-app.use('/api/lessons', lessonsRouter);
-app.use('/api/projects', projectsRouter);
+// Mount rooms router.
 app.use('/api/rooms', roomsRouter);
 
 app.use((req, res) => {

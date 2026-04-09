@@ -1,9 +1,9 @@
 # Nouveautés 2025
-- Refonte UX/UI premium sur tous les écrans (headers cohérents, cards arrondies, typographie bold, couleurs modernes)
-- Navigation simplifiée et fluide (Home, Leçons, Favoris, Historique)
-- Gestion locale des favoris et historique (SharedPreferences, badge AppBar, suppression rapide)
-- Feedback utilisateur amélioré (SnackBar, suppression, favoris)
-- Mode invité (userId anonyme, sauvegarde locale) et user demo (JWT)
+- Architecture épurée : 2 onglets (Recherche + Salons), suppression de toutes les vues et services morts
+- **Salons** : salons d'équipe temps réel via WebSocket, IA comme collaboratrice (`@ia`), directives, défi de documents
+- **Recherche structurée** : plan en streaming 4 axes (cadrer, produire, communiquer, audit), mode challenge adversarial
+- Circuit breaker Gemini + fallback heuristique
+- Mode invité : identifiant anonyme généré localement, aucune inscription requise
 - Conventions de code et process de contribution mis à jour
 # Hackit MVP — Liste des fonctionnalités
 

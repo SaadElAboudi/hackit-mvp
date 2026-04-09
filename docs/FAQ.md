@@ -11,17 +11,17 @@
 - Dans `frontend_flutter`, lancez `flutter pub get` puis `flutter run -d chrome` ou sur mobile.
 
 ## 2. Fonctionnalités
-**Q : Comment ajouter une vidéo en favori ?**
-- Cliquez sur l’icône étoile sur la carte vidéo. Un badge s’affiche dans l’AppBar.
+**Q : Comment sauvegarder une réponse ?**
+- Les résultats de l'onglet Recherche sont disponibles pendant la session. Pour conserver une réponse, copiez le texte ou partagez-le depuis l'interface.
 
-**Q : Comment supprimer une recherche de l’historique ?**
-- Allez dans l’écran Historique, cliquez sur l’icône poubelle à côté de l’élément.
+**Q : Comment effacer l'historique de recherche ?**
+- L'historique est stocké localement. Utilisez le bouton « Nouveau brief » dans l'onglet Recherche pour démarrer une nouvelle session, ou appuyez sur ✕ sur un message de la liste.
 
 **Q : Puis-je utiliser l’app sans compte ?**
 - Oui, le mode invité est disponible (userId anonyme sauvegardé localement).
 
 **Q : Comment tester toutes les fonctionnalités sans inscription ?**
-- Utilisez le mode démo avec le user demo (JWT fourni).
+- Aucune inscription requise. L'application génère automatiquement un identifiant anonyme au premier lancement.
 
 ## 3. Dépannage
 **Q : J’ai une erreur API ou clé manquante.**
