@@ -102,16 +102,16 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
   } catch (err) {
     const errStatus = err?.response?.status;
     const errData = err?.response?.data;
-    const errMsg = err?.message;
+    const errMessage = err?.message;
     const errCode = err?.code; // e.g. ECONNABORTED for timeout
     console.error('[roomGemini] GEMINI CALL FAILED:', {
       status: errStatus,
       code: errCode,
-      message: errMsg,
+      message: errMessage,
       geminiError: errData?.error ?? errData,
     });
     // Notify the room so users know something went wrong
-    const errMsg = await RoomMessage.create({
+    const fallbackMsg = await RoomMessage.create({
       roomId,
       senderId: 'ai',
       senderName: 'IA',
@@ -120,6 +120,6 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
         "Désolé, je n'ai pas pu répondre pour l'instant. Réessayez dans un moment.",
       type: 'text',
     });
-    broadcastRoomMessage(roomId, errMsg.toObject());
+    broadcastRoomMessage(roomId, fallbackMsg.toObject());
   }
 }
