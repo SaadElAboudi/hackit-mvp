@@ -33,7 +33,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   String get _myUserId => ProjectService.currentUserId ?? '';
   String get _displayName {
     final uid = _myUserId;
-    return 'User_${uid.isEmpty ? '????' : uid.substring(uid.length - 4)}';
+    return ProjectService.currentDisplayName ??
+        'User_${uid.isEmpty ? '????' : uid.substring(uid.length - 4)}';
   }
 
   @override
@@ -353,6 +354,12 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
         ),
       ),
       actions: [
+        // Change display name
+        IconButton(
+          icon: const Icon(Icons.person_outline_rounded),
+          tooltip: 'Mon pseudo',
+          onPressed: _showSetNameDialog,
+        ),
         // Members panel
         IconButton(
           icon: const Icon(Icons.group_rounded),
@@ -375,6 +382,56 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           onPressed: () => setState(() => _directivesOpen = !_directivesOpen),
         ),
       ],
+    );
+  }
+
+  Future<void> _showSetNameDialog() async {
+    if (!mounted) return;
+    final ctrl = TextEditingController(
+      text: ProjectService.currentDisplayName ?? '',
+    );
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: ProjectService.currentDisplayName != null,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Votre pseudo'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Ce nom sera visible dans le salon.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Pseudo',
+                hintText: 'Ex\u00a0: Alice, Marc\u2026',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (ProjectService.currentDisplayName != null)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler'),
+            ),
+          FilledButton(
+            onPressed: () async {
+              if (ctrl.text.trim().isNotEmpty) {
+                await ProjectService.setDisplayName(ctrl.text.trim());
+                if (ctx.mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Confirmer'),
+          ),
+        ],
+      ),
     );
   }
 

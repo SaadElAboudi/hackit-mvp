@@ -110,37 +110,14 @@ class RoomProvider extends ChangeNotifier {
       case WsRoomEventType.message:
         final msg = event.message;
         if (msg == null) return;
-
-        // 1. Already present by real id (WS after HTTP — most common).
-        final idxById = messages.indexWhere((m) => m.id == msg.id);
-        if (idxById >= 0) {
-          debugPrint('$_tag WS message: update in-place id=${msg.id}');
-          messages[idxById] = msg;
-          if (msg.isAI) aiThinking = false;
-          notifyListeners();
-          return;
+        // Dedup by real id: update in-place if already present (WS after HTTP),
+        // otherwise append (other participant, AI, or WS before HTTP).
+        final idx = messages.indexWhere((m) => m.id == msg.id);
+        if (idx >= 0) {
+          messages[idx] = msg;
+        } else {
+          messages.add(msg);
         }
-
-        // 2. WS arrived BEFORE HTTP — replace the optimistic tmp_ entry.
-        //    Only for non-AI messages (AI never has a tmp_ entry).
-        if (!msg.isAI) {
-          final idxByOptimistic = messages.indexWhere(
-            (m) =>
-                m.id.startsWith('tmp_') &&
-                m.content == msg.content &&
-                (m.senderId == msg.senderId || m.senderId.isEmpty),
-          );
-          if (idxByOptimistic >= 0) {
-            debugPrint('$_tag WS message: replaced tmp_ at $idxByOptimistic id=${msg.id}');
-            messages[idxByOptimistic] = msg;
-            notifyListeners();
-            return;
-          }
-        }
-
-        // 3. New message from another participant.
-        debugPrint('$_tag WS message: added id=${msg.id} isAI=${msg.isAI}');
-        messages.add(msg);
         if (msg.isAI) aiThinking = false;
         notifyListeners();
 
@@ -185,44 +162,16 @@ class RoomProvider extends ChangeNotifier {
 
     sendingMessage = true;
     sendError = null;
-
-    // Optimistic insert so the sender sees their message immediately
-    final tmpId = 'tmp_${DateTime.now().millisecondsSinceEpoch}';
-    final optimistic = RoomMessage(
-      id: tmpId,
-      roomId: room.id,
-      senderId: myUserId ?? '',
-      senderName: displayName ?? 'Moi',
-      isAI: false,
-      content: content,
-      type: 'text',
-      challenges: [],
-      createdAt: DateTime.now(),
-    );
-    messages.add(optimistic);
     notifyListeners();
 
     try {
       final saved =
           await _svc.sendMessage(room.id, content, displayName: displayName);
 
-      final tmpIdx = messages.indexWhere((m) => m.id == tmpId);
-      if (tmpIdx >= 0) {
-        // Normal case: HTTP arrived before WS → replace the optimistic entry.
-        messages[tmpIdx] = saved;
-        // Belt-and-suspenders: if WS also added the real message in parallel,
-        // remove the duplicate (scan backward to keep indices stable).
-        for (var i = messages.length - 1; i >= 0; i--) {
-          if (i != tmpIdx && messages[i].id == saved.id) {
-            debugPrint('$_tag sendMessage: removing WS duplicate at $i for id=${saved.id}');
-            messages.removeAt(i);
-          }
-        }
-      } else {
-        // WS arrived first and already replaced tmp_ → just ensure real id present.
-        if (!messages.any((m) => m.id == saved.id)) {
-          messages.add(saved);
-        }
+      // Add the confirmed message. If the WS broadcast arrived first it's
+      // already in the list (deduped by id in _onWsEvent) — don't add twice.
+      if (!messages.any((m) => m.id == saved.id)) {
+        messages.add(saved);
       }
 
       // If @ia was mentioned, show AI thinking indicator
@@ -234,8 +183,6 @@ class RoomProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      // Remove optimistic message on failure
-      messages.removeWhere((m) => m.id == tmpId);
       sendError = e.toString().replaceFirst('Exception: ', '');
       sendingMessage = false;
       notifyListeners();

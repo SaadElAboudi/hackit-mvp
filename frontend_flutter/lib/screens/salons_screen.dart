@@ -17,8 +17,11 @@ class _SalonsScreenState extends State<SalonsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<RoomProvider>().loadRooms();
+      if (ProjectService.currentDisplayName == null) {
+        await _showSetNameDialog();
+      }
     });
   }
 
@@ -37,6 +40,11 @@ class _SalonsScreenState extends State<SalonsScreen> {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.person_outline_rounded),
+            tooltip: 'Mon pseudo',
+            onPressed: _showSetNameDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Actualiser',
@@ -150,6 +158,56 @@ class _SalonsScreenState extends State<SalonsScreen> {
     );
   }
 
+  Future<void> _showSetNameDialog() async {
+    if (!mounted) return;
+    final ctrl = TextEditingController(
+      text: ProjectService.currentDisplayName ?? '',
+    );
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: ProjectService.currentDisplayName != null,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Votre pseudo'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Ce nom sera visible dans les salons par les autres participants.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Pseudo',
+                hintText: 'Ex\u00a0: Alice, Marc, AnneSo…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (ProjectService.currentDisplayName != null)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Annuler'),
+            ),
+          FilledButton(
+            onPressed: () async {
+              if (ctrl.text.trim().isNotEmpty) {
+                await ProjectService.setDisplayName(ctrl.text.trim());
+                if (ctx.mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Confirmer'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _openRoom(BuildContext context, Room room) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -160,7 +218,8 @@ class _SalonsScreenState extends State<SalonsScreen> {
 
   String _displayName() {
     final uid = ProjectService.currentUserId ?? '';
-    return 'User_${uid.isEmpty ? '????' : uid.substring(uid.length - 4)}';
+    return ProjectService.currentDisplayName ??
+        'User_${uid.isEmpty ? '????' : uid.substring(uid.length - 4)}';
   }
 }
 
