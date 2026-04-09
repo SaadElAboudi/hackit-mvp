@@ -30,16 +30,132 @@ function parseRetryDelayMs(errData) {
   return Math.max(1000, Math.ceil(seconds * 1000));
 }
 
-async function persistAndBroadcastAIMessage(roomId, content) {
+async function persistAndBroadcastAIMessage(roomId, content, { isDocument = false, documentTitle } = {}) {
   const msg = await RoomMessage.create({
     roomId,
     senderId: 'ai',
     senderName: 'IA',
     isAI: true,
     content,
-    type: 'text',
+    type: isDocument ? 'document' : 'text',
+    ...(documentTitle ? { documentTitle } : {}),
   });
   broadcastRoomMessage(roomId, msg.toObject());
+}
+
+// ── Local heuristic fallback ──────────────────────────────────────────────────
+// Used when Gemini is unavailable (quota / API key missing / timeout).
+// Reads the triggering message + room context to produce a structured,
+// context-aware response. Not AI quality, but always useful.
+
+function _capitalize(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+}
+
+function buildHeuristicResponse(room, recentMessages) {
+  // Find the last human message that mentioned @ia
+  const triggerMsg = [...recentMessages]
+    .reverse()
+    .find((m) => !m.isAI && /@ia\b/i.test(m.content));
+
+  const rawQuery = (triggerMsg?.content ?? '')
+    .replace(/@ia\b/gi, '')
+    .replace(/[?!.]+$/, '')
+    .trim();
+
+  const roomName = room.name || 'Salon';
+
+  // ── Intent detection ────────────────────────────────────────────────────────
+  const isDocRequest = /r[eé]dig|[eé]cri[st]|g[eé]n[eè]re?|cr[eé][eé]?|produ[it]s?|plan\b|rapport\b|brief\b|cahier\b|compte.rendu|note\b|fiche\b|analyse\b|synth[eè]se|livrable|template|modèle/i.test(rawQuery);
+  const isBrainstorm = /id[eé]e[s]?|suggestion[s]?|approche[s]?|option[s]?|alternative[s]?|piste[s]?|propose[sz]?|brainstorm/i.test(rawQuery);
+  const isQuestion = /\?/.test(rawQuery) || /^(comment|pourquoi|qu['\s]est|quoi|quand|qui|o[uù]|combien|lequel|laquelle|lesquels|expliqu|d[eé]fin|montre)/i.test(rawQuery);
+
+  // ── Response by intent ──────────────────────────────────────────────────────
+  if (isDocRequest) {
+    const title = rawQuery.length > 4 ? _capitalize(rawQuery) : `Document — ${roomName}`;
+    return {
+      content: [
+        `# ${title}`,
+        '',
+        `## Contexte`,
+        `Salon : **${roomName}**`,
+        '',
+        `## Objectifs`,
+        `- Définir le périmètre et les enjeux`,
+        `- Identifier les parties prenantes`,
+        `- Lister les livrables attendus`,
+        '',
+        `## Plan proposé`,
+        `1. **Cadrage** — Comprendre les contraintes et critères de succès`,
+        `2. **Diagnostic** — État de l'existant et points de blocage`,
+        `3. **Solutions** — Options identifiées et recommandations`,
+        `4. **Plan d'action** — Étapes, responsables, délais`,
+        '',
+        `## Prochaines étapes`,
+        `- Valider ce plan avec l'équipe`,
+        `- Affiner chaque section selon le contexte`,
+        '',
+        `> *Mode hors-ligne (quota Gemini épuisé) — structure générique à compléter. Réessayez @ia pour une version IA complète.*`,
+      ].join('\n'),
+      isDocument: true,
+      documentTitle: title,
+    };
+  }
+
+  if (isBrainstorm) {
+    const topic = rawQuery
+      .replace(/id[eé]e[s]?\s*(sur|pour|de|à propos)?|suggestion[s]?\s*(sur|pour)?|approche[s]?\s*(pour)?|propose[sz]?\s*/gi, '')
+      .trim() || roomName;
+    return {
+      content: [
+        `Quelques pistes sur **${topic}** :`,
+        '',
+        `1. **Explorer l'existant** — Recenser ce qui a déjà été tenté, identifier les écueils.`,
+        `2. **Impliquer les parties prenantes** — Consulter ceux qui seront impactés en premier.`,
+        `3. **Prioriser par impact/effort** — Matrice impact vs effort pour choisir par où commencer.`,
+        `4. **Prototyper rapidement** — Tester une version minimale avant de généraliser.`,
+        `5. **Itérer en équipe** — Cycles courts de feedback pour corriger le tir.`,
+        '',
+        `> *Mode hors-ligne (quota Gemini épuisé) — idées génériques. Réessayez @ia pour une génération contextuelle complète.*`,
+      ].join('\n'),
+      isDocument: false,
+    };
+  }
+
+  if (isQuestion) {
+    const topic = rawQuery
+      .replace(/^(comment|pourquoi|qu['\s]est-ce|quoi|quand|qui|o[uù]|combien|expliqu[eé]r?|d[eé]finir?|montre[rz]?)\s*/i, '')
+      .trim() || rawQuery;
+    return {
+      content: [
+        `Concernant **${topic || 'votre question'}** :`,
+        '',
+        `- Clarifier avec l'équipe pour s'aligner sur le périmètre exact`,
+        `- Identifier les sources disponibles (documents, experts, données)`,
+        `- Distinguer ce qui est certain de ce qui est à valider`,
+        `- Définir une hypothèse de travail pour avancer sans attendre`,
+        '',
+        `> *Mode hors-ligne (quota Gemini épuisé) — réponse générique. Réessayez @ia pour une analyse IA.*`,
+      ].join('\n'),
+      isDocument: false,
+    };
+  }
+
+  // Generic acknowledgement
+  const preview = rawQuery ? `*"${rawQuery.slice(0, 80)}"*` : '*(mention @ia)*';
+  return {
+    content: [
+      `Message reçu : ${preview}`,
+      '',
+      `En mode hors-ligne (quota Gemini épuisé), je peux vous aider à structurer :`,
+      `- **Questions clés** à résoudre en équipe`,
+      `- **Plan d'action** à décomposer en tâches`,
+      `- **Document** à rédiger (utilisez "@ia rédige …" pour générer un livrable)`,
+      '',
+      `Réessayez avec @ia dans quelques instants pour une réponse IA complète.`,
+    ].join('\n'),
+    isDocument: false,
+  };
 }
 
 /**
@@ -51,11 +167,9 @@ async function persistAndBroadcastAIMessage(roomId, content) {
  */
 export async function triggerRoomAI(room, recentMessages, roomId) {
   if (!GEMINI_API_KEY) {
-    console.warn('[roomGemini] GEMINI_API_KEY not set — skipping AI response');
-    await persistAndBroadcastAIMessage(
-      roomId,
-      "Je ne suis pas configuree (GEMINI_API_KEY manquante). Contactez l'administrateur."
-    );
+    console.warn('[roomGemini] GEMINI_API_KEY not set — using heuristic fallback');
+    const fallback = buildHeuristicResponse(room, recentMessages);
+    await persistAndBroadcastAIMessage(roomId, fallback.content, fallback);
     return;
   }
 
@@ -63,11 +177,11 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
   const blockedUntil = roomRetryAfterUntil.get(roomId) || 0;
   if (blockedUntil > now) {
     const waitSec = Math.max(1, Math.ceil((blockedUntil - now) / 1000));
-    console.warn(`[roomGemini] cooldown active room=${roomId}, skip external call for ${waitSec}s`);
-    await persistAndBroadcastAIMessage(
-      roomId,
-      `Quota IA temporairement depasse. Reessayez dans environ ${waitSec}s.`
-    );
+    console.warn(`[roomGemini] cooldown active room=${roomId} (${waitSec}s left) — using heuristic fallback`);
+    const fallback = buildHeuristicResponse(room, recentMessages);
+    // Append cooldown note to fallback content
+    const note = `\n> *(Quota Gemini épuisé — réponse disponible dans ~${waitSec}s)*`;
+    await persistAndBroadcastAIMessage(roomId, fallback.content + note, fallback);
     return;
   }
 
@@ -154,20 +268,19 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
     // Respect server-advised retry window on quota/rate limits.
     if (errStatus === 429) {
       const retryDelayMs = parseRetryDelayMs(errData) || 45000;
-      const nextTryAt = Date.now() + retryDelayMs;
-      roomRetryAfterUntil.set(roomId, nextTryAt);
+      roomRetryAfterUntil.set(roomId, Date.now() + retryDelayMs);
       const waitSec = Math.max(1, Math.ceil(retryDelayMs / 1000));
-      console.warn(`[roomGemini] 429 quota/rate-limit room=${roomId} retryIn=${waitSec}s`);
-      await persistAndBroadcastAIMessage(
-        roomId,
-        `Je suis limitee par le quota Gemini (429). Reessayez dans environ ${waitSec}s, ou activez la facturation/augmentez le quota API.`
-      );
+      console.warn(`[roomGemini] 429 quota/rate-limit room=${roomId} retryIn=${waitSec}s — using heuristic fallback`);
+      const fallback = buildHeuristicResponse(room, recentMessages);
+      const note = `\n> *(Quota Gemini épuisé — réponse IA disponible dans ~${waitSec}s)*`;
+      await persistAndBroadcastAIMessage(roomId, fallback.content + note, fallback);
       return;
     }
 
-    await persistAndBroadcastAIMessage(
-      roomId,
-      "Desole, je n'ai pas pu repondre pour l'instant. Reessayez dans un moment."
-    );
+    // Timeout or other unexpected error — still give a useful heuristic response
+    console.warn(`[roomGemini] non-quota error (${errCode || errStatus}) — using heuristic fallback`);
+    const fallback = buildHeuristicResponse(room, recentMessages);
+    const note = '\n> *(Mode hors-ligne — réponse heuristique, réessayez @ia dans un instant)*';
+    await persistAndBroadcastAIMessage(roomId, fallback.content + note, fallback);
   }
 }
