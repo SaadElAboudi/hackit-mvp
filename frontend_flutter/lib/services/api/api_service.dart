@@ -99,4 +99,22 @@ class ApiService {
   Future<Response> deleteLesson({required String lessonId}) async {
     return _dio.delete('/api/lessons/$lessonId');
   }
+
+  /// Pings /health to wake the Render backend on cold start (fire-and-forget).
+  /// Creates its own Dio with extended timeouts so the cold-start window (~60s)
+  /// doesn't trip the default 20-30 s limits. All errors are swallowed.
+  Future<void> pingHealth({
+    Duration timeout = const Duration(seconds: 90),
+  }) async {
+    final warmupDio = Dio(BaseOptions(
+      baseUrl: _baseUrl,
+      connectTimeout: timeout,
+      receiveTimeout: timeout,
+    ));
+    try {
+      await warmupDio.get('/health');
+    } catch (_) {
+      // Best-effort: ignore timeouts / connection errors.
+    }
+  }
 }

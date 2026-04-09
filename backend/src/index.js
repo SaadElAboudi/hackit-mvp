@@ -148,7 +148,7 @@ const USE_GEMINI_ENV = (process.env.USE_GEMINI || "false") === "true";
 const USE_GEMINI_REFORMULATION = (process.env.USE_GEMINI_REFORMULATION || "false") === "true";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.0-flash-lite";
-const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || "4000");
+const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || "20000");
 let GEMINI_OPERATIONAL = true; // set to false after first hard failure
 // Circuit breaker state for Gemini
 const FAILURE_WINDOW_MS = Number(process.env.GEMINI_FAILURE_WINDOW_MS || '120000'); // 2 minutes

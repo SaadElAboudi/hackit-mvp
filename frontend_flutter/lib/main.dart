@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +14,7 @@ import 'providers/project_provider.dart';
 import 'providers/collab_provider.dart';
 import 'services/cache_manager.dart';
 import 'services/project_service.dart';
+import 'services/api/api_service.dart';
 import 'screens/root_tabs.dart';
 import 'screens/result_screen.dart';
 import 'utils/page_transitions.dart';
@@ -33,6 +35,13 @@ void main() async {
   // Resolve and persist the stable per-device userId used by ProjectService.
   // This ensures a consistent identity is ready before any collab call is made.
   await ProjectService.init();
+
+  // Wake up the Render backend immediately (fire & forget).
+  // Render free tier sleeps after 15 min of inactivity; cold start takes 30-60s.
+  // By pinging now, the server is warm by the time the user sends their first message.
+  unawaited(ApiService.create().pingHealth(
+    timeout: const Duration(seconds: 90),
+  ));
 
   runApp(const MyApp());
 }
