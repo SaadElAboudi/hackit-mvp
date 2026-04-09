@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../screens/home_screen.dart';
-import '../screens/library_screen.dart';
 import '../screens/salons_screen.dart';
 import '../providers/search_provider.dart';
 
@@ -17,14 +16,11 @@ class _RootTabsState extends State<RootTabs> {
   final _navigatorKeys = [
     GlobalKey<NavigatorState>(),
     GlobalKey<NavigatorState>(),
-    GlobalKey<NavigatorState>(),
   ];
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Register a callback so SearchProvider can switch to the chat tab
-    // (index 0) whenever a new search or refinement starts.
     context.read<SearchProvider>().onNavigateToChat = () {
       if (mounted && _index != 0) setState(() => _index = 0);
     };
@@ -43,17 +39,7 @@ class _RootTabsState extends State<RootTabs> {
       key: _navigatorKeys[tabIndex],
       initialRoute: '/',
       onGenerateRoute: (settings) {
-        final Widget page;
-        switch (tabIndex) {
-          case 1:
-            page = const LibraryScreen();
-            break;
-          case 2:
-            page = const SalonsScreen();
-            break;
-          default:
-            page = const HomeScreen();
-        }
+        final Widget page = tabIndex == 1 ? const SalonsScreen() : const HomeScreen();
         return MaterialPageRoute(
           builder: (_) => page,
           settings: settings,
@@ -76,7 +62,7 @@ class _RootTabsState extends State<RootTabs> {
       child: Scaffold(
         body: IndexedStack(
           index: _index,
-          children: List.generate(3, (i) => _buildTabNavigator(i)),
+          children: List.generate(2, (i) => _buildTabNavigator(i)),
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
@@ -89,12 +75,7 @@ class _RootTabsState extends State<RootTabs> {
             NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline_rounded),
               selectedIcon: Icon(Icons.chat_bubble_rounded),
-              label: 'Chat',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.collections_bookmark_outlined),
-              selectedIcon: Icon(Icons.collections_bookmark_rounded),
-              label: 'Pipeline',
+              label: 'Recherche',
             ),
             NavigationDestination(
               icon: Icon(Icons.forum_outlined),

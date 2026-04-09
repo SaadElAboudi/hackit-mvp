@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/history_favorites.dart';
 import '../services/history_favorites_repository.dart';
-import 'lessons_provider.dart';
 
 class HistoryFavoritesProvider extends ChangeNotifier {
   Future<void> removeHistory(String id) async {
@@ -14,7 +13,6 @@ class HistoryFavoritesProvider extends ChangeNotifier {
   final HistoryFavoritesRepository _repo;
   List<SearchEntry> _history = [];
   List<FavoriteItem> _favorites = [];
-  LessonsProvider? _lessons; // optional link for migration
 
   HistoryFavoritesProvider(SharedPreferences prefs)
       : _repo = HistoryFavoritesRepository(prefs) {
@@ -24,32 +22,6 @@ class HistoryFavoritesProvider extends ChangeNotifier {
   List<SearchEntry> get history => _history;
   List<FavoriteItem> get favorites => _favorites;
   bool isFavorite(String id) => _favorites.any((f) => f.id == id);
-
-  void linkLessons(LessonsProvider lessons) {
-    _lessons = lessons;
-    // Sync remote favorites into local store if not yet present
-    final remoteFavs = lessons.lessons.where((l) => l.favorite).toList();
-    bool changed = false;
-    for (final l in remoteFavs) {
-      if (!_favorites.any((f) => f.id == l.videoUrl)) {
-        _favorites.insert(
-          0,
-          FavoriteItem(
-            id: l.videoUrl,
-            title: l.title,
-            videoUrl: l.videoUrl,
-            addedAt: DateTime.now(),
-          ),
-        );
-        changed = true;
-      }
-    }
-    if (changed) {
-      // Persist merged favorites
-      _repo.saveFavorites(_favorites);
-      notifyListeners();
-    }
-  }
 
   void _load() {
     _history = _repo.loadHistory();
@@ -97,15 +69,6 @@ class HistoryFavoritesProvider extends ChangeNotifier {
       ));
     }
     _favorites = _repo.loadFavorites();
-    // Propagate to lessons if linked (mark favorite on existing lesson matching videoUrl)
-    if (_lessons != null && videoUrl != null) {
-      for (final l in _lessons!.lessons) {
-        if (l.videoUrl == videoId) {
-          _lessons!.toggleFavorite(l.id);
-          break;
-        }
-      }
-    }
     notifyListeners();
   }
 }

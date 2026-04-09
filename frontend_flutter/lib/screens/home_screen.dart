@@ -11,8 +11,6 @@ import '../widgets/citations_view.dart';
 import '../widgets/chapters_view.dart';
 import '../models/base_search_result.dart';
 import '../widgets/app_scaffold.dart';
-import '../providers/project_provider.dart';
-import '../widgets/project_context_chip.dart';
 // ...existing code...
 
 class HomeScreen extends StatelessWidget {
@@ -29,7 +27,6 @@ class HomeScreen extends StatelessWidget {
           : null,
       leadingIcon: Icons.bolt_rounded,
       actions: [
-        const ProjectContextChip(),
         if (hasMessages)
           Tooltip(
             message: 'Nouveau brief',
@@ -44,25 +41,8 @@ class HomeScreen extends StatelessWidget {
           Expanded(child: _ChatMessagesList()),
           ChatInput(
             onSearch: (query) {
-              final ctx = Provider.of<ProjectProvider>(context, listen: false)
-                  .activeProject
-                  ?.contextMap;
               Provider.of<SearchProvider>(context, listen: false)
-                  .searchStreaming(query,
-                      context: ctx?.isEmpty == true ? null : ctx);
-            },
-            onSearchWithContext: (query, contextData) {
-              final projectCtx = Provider.of<ProjectProvider>(context,
-                      listen: false)
-                  .activeProject
-                  ?.contextMap;
-              final merged = <String, String?>{
-                ...projectCtx ?? {},
-                ...contextData,
-              };
-              Provider.of<SearchProvider>(context, listen: false)
-                  .searchStreaming(query,
-                      context: merged.isEmpty ? null : merged);
+                  .searchStreaming(query);
             },
             disabled: Provider.of<SearchProvider>(context).loading,
             onRegenerate: Provider.of<SearchProvider>(context, listen: false)

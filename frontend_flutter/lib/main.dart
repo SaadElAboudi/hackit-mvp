@@ -7,17 +7,11 @@ import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/history_favorites_provider.dart';
-import 'providers/lessons_provider.dart';
-import 'providers/action_task_provider.dart';
-import 'providers/plan_feedback_provider.dart';
-import 'providers/project_provider.dart';
-import 'providers/collab_provider.dart';
 import 'providers/room_provider.dart';
 import 'services/cache_manager.dart';
 import 'services/project_service.dart';
 import 'services/api/api_service.dart';
 import 'screens/root_tabs.dart';
-import 'screens/result_screen.dart';
 import 'utils/page_transitions.dart';
 
 final getIt = GetIt.instance;
@@ -48,8 +42,7 @@ void main() async {
 }
 
 class MyApp extends StatefulWidget {
-  final bool skipLessonsInit;
-  const MyApp({super.key, this.skipLessonsInit = false});
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -64,25 +57,10 @@ class _MyAppState extends State<MyApp> {
           create: (_) => ThemeProvider(),
         ),
         ChangeNotifierProvider(
-          create: (_) => CollabProvider(),
-        ),
-        ChangeNotifierProvider(
           create: (_) => RoomProvider(),
         ),
         ChangeNotifierProvider(
-          create: (_) => ProjectProvider(getIt<SharedPreferences>()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => ActionTaskProvider(getIt<SharedPreferences>()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => PlanFeedbackProvider(getIt<SharedPreferences>()),
-        ),
-        ChangeNotifierProvider(
           create: (_) => HistoryFavoritesProvider(getIt<SharedPreferences>()),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => LessonsProvider(prefs: getIt<SharedPreferences>()),
         ),
         ChangeNotifierProvider(
           create: (ctx) => SearchProvider(
@@ -94,19 +72,6 @@ class _MyAppState extends State<MyApp> {
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            try {
-              final hist = context.read<HistoryFavoritesProvider>();
-              final lessons = context.read<LessonsProvider>();
-              hist.linkLessons(lessons);
-              if (!(context
-                      .findAncestorWidgetOfExactType<MyApp>()
-                      ?.skipLessonsInit ??
-                  false)) {
-                lessons.initIfNeeded();
-              }
-            } catch (_) {}
-          });
           return MaterialApp(
             title: 'Hackit MVP',
             theme: AppTheme.lightTheme,
@@ -115,31 +80,10 @@ class _MyAppState extends State<MyApp> {
             initialRoute: '/',
             home: const RootTabs(),
             onGenerateRoute: (settings) {
-              switch (settings.name) {
-                case '/':
-                  return PageTransitions.fadeTransition(
-                    page: const RootTabs(),
-                    settings: settings,
-                  );
-                case '/lessons':
-                case '/favorites':
-                case '/history':
-                case '/library':
-                  return PageTransitions.slideTransition(
-                    page: const RootTabs(),
-                    settings: settings,
-                  );
-                case '/result':
-                  return PageTransitions.slideTransition(
-                    page: const ResultScreen(),
-                    settings: settings,
-                  );
-                default:
-                  return PageTransitions.fadeTransition(
-                    page: const RootTabs(),
-                    settings: settings,
-                  );
-              }
+              return PageTransitions.fadeTransition(
+                page: const RootTabs(),
+                settings: settings,
+              );
             },
           );
         },

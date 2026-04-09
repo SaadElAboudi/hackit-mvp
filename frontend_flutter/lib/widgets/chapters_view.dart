@@ -1,8 +1,6 @@
 // ignore_for_file: prefer_const_constructors
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/base_search_result.dart';
-import '../services/video_seek_service.dart';
 import 'youtube_embed.dart';
 
 class ChaptersView extends StatefulWidget {
@@ -67,12 +65,7 @@ class _ChaptersViewState extends State<ChaptersView> {
                       Future.delayed(const Duration(milliseconds: 400), () {
                         _debouncing = false;
                       });
-                      if (kIsWeb) {
-                        seekYouTube(ch.startSec);
-                      } else {
-                        VideoSeekService.instance.seekOrQueue(ch.startSec,
-                            sourceUrl: widget.videoUrl);
-                      }
+                      seekYouTube(ch.startSec);
                       final messenger = ScaffoldMessenger.of(context);
                       messenger.hideCurrentSnackBar();
                       final ts = _formatTs(ch.startSec);

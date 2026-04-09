@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 // ...existing code...
 import '../models/base_search_result.dart';
-import '../services/video_seek_service.dart';
+import 'youtube_embed.dart';
 
 class CitationsView extends StatelessWidget {
   final List<Citation> citations;
@@ -26,8 +26,7 @@ class CitationsView extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             child: InkWell(
-              onTap: () => VideoSeekService.instance
-                  .seekOrQueue(c.startSec, sourceUrl: c.url),
+              onTap: () => seekYouTube(c.startSec),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
