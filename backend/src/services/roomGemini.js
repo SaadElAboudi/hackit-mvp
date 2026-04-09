@@ -18,6 +18,30 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.0-flash-lite';
 const GEMINI_TIMEOUT_MS = parseInt(process.env.GEMINI_TIMEOUT_MS || '30000', 10);
 const MAX_HISTORY = 20;
 
+// roomId -> epoch ms until next allowed Gemini request
+const roomRetryAfterUntil = new Map();
+
+function parseRetryDelayMs(errData) {
+  const msg = errData?.error?.message || '';
+  const m = String(msg).match(/Please retry in\s+([0-9]+(?:\.[0-9]+)?)s\.?/i);
+  if (!m) return null;
+  const seconds = Number(m[1]);
+  if (!Number.isFinite(seconds)) return null;
+  return Math.max(1000, Math.ceil(seconds * 1000));
+}
+
+async function persistAndBroadcastAIMessage(roomId, content) {
+  const msg = await RoomMessage.create({
+    roomId,
+    senderId: 'ai',
+    senderName: 'IA',
+    isAI: true,
+    content,
+    type: 'text',
+  });
+  broadcastRoomMessage(roomId, msg.toObject());
+}
+
 /**
  * Trigger the AI colleague to respond in a room.
  *
@@ -28,6 +52,22 @@ const MAX_HISTORY = 20;
 export async function triggerRoomAI(room, recentMessages, roomId) {
   if (!GEMINI_API_KEY) {
     console.warn('[roomGemini] GEMINI_API_KEY not set — skipping AI response');
+    await persistAndBroadcastAIMessage(
+      roomId,
+      "Je ne suis pas configuree (GEMINI_API_KEY manquante). Contactez l'administrateur."
+    );
+    return;
+  }
+
+  const now = Date.now();
+  const blockedUntil = roomRetryAfterUntil.get(roomId) || 0;
+  if (blockedUntil > now) {
+    const waitSec = Math.max(1, Math.ceil((blockedUntil - now) / 1000));
+    console.warn(`[roomGemini] cooldown active room=${roomId}, skip external call for ${waitSec}s`);
+    await persistAndBroadcastAIMessage(
+      roomId,
+      `Quota IA temporairement depasse. Reessayez dans environ ${waitSec}s.`
+    );
     return;
   }
 
@@ -110,16 +150,24 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
       message: errMessage,
       geminiError: errData?.error ?? errData,
     });
-    // Notify the room so users know something went wrong
-    const fallbackMsg = await RoomMessage.create({
+
+    // Respect server-advised retry window on quota/rate limits.
+    if (errStatus === 429) {
+      const retryDelayMs = parseRetryDelayMs(errData) || 45000;
+      const nextTryAt = Date.now() + retryDelayMs;
+      roomRetryAfterUntil.set(roomId, nextTryAt);
+      const waitSec = Math.max(1, Math.ceil(retryDelayMs / 1000));
+      console.warn(`[roomGemini] 429 quota/rate-limit room=${roomId} retryIn=${waitSec}s`);
+      await persistAndBroadcastAIMessage(
+        roomId,
+        `Je suis limitee par le quota Gemini (429). Reessayez dans environ ${waitSec}s, ou activez la facturation/augmentez le quota API.`
+      );
+      return;
+    }
+
+    await persistAndBroadcastAIMessage(
       roomId,
-      senderId: 'ai',
-      senderName: 'IA',
-      isAI: true,
-      content:
-        "Désolé, je n'ai pas pu répondre pour l'instant. Réessayez dans un moment.",
-      type: 'text',
-    });
-    broadcastRoomMessage(roomId, fallbackMsg.toObject());
+      "Desole, je n'ai pas pu repondre pour l'instant. Reessayez dans un moment."
+    );
   }
 }
