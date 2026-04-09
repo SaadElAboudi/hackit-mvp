@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/room.dart';
 import '../services/room_service.dart';
 import '../services/project_service.dart' show ProjectService;
+const _tag = '[RoomProvider]';
 
 /// State management for the Salons (Rooms) feature.
 class RoomProvider extends ChangeNotifier {
@@ -64,6 +65,7 @@ class RoomProvider extends ChangeNotifier {
   String? get myUserId => ProjectService.currentUserId;
 
   Future<void> openRoom(Room room) async {
+    debugPrint('$_tag openRoom: ${room.id} ("${room.name}")');
     // Close previous WS subscription
     await _wsSub?.cancel();
     _wsSub = null;
@@ -78,7 +80,9 @@ class RoomProvider extends ChangeNotifier {
       final result = await _svc.getMessages(room.id);
       currentRoom = result.room;
       messages = result.messages;
+      debugPrint('$_tag openRoom: loaded ${messages.length} messages');
     } catch (e) {
+      debugPrint('$_tag openRoom: error loading messages — $e');
       messagesError = e.toString().replaceFirst('Exception: ', '');
     } finally {
       loadingMessages = false;

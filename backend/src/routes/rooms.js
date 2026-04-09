@@ -130,6 +130,8 @@ router.post('/:id/messages', async (req, res) => {
         // Broadcast to all WS subscribers in this room
         broadcastRoomMessage(req.params.id, msg.toObject());
 
+        console.log(`[rooms] message saved id=${msg._id} room=${req.params.id} sender=${req.userId}`);
+
         // Update room timestamp so list sorts correctly
         room.updatedAt = new Date();
         await room.save();
@@ -139,10 +141,12 @@ router.post('/:id/messages', async (req, res) => {
 
         // If the user mentioned @ia (any case), trigger the AI colleague asynchronously
         if (/@ia\b/i.test(content)) {
+            console.log(`[rooms] @ia detected — loading history for room=${req.params.id}`);
             const recent = await RoomMessage.find({ roomId: room._id })
                 .sort({ createdAt: -1 })
                 .limit(MAX_HISTORY_FOR_AI)
                 .lean();
+            console.log(`[rooms] @ia trigger — ${recent.length} messages in history, calling triggerRoomAI`);
             triggerRoomAI(room.toObject(), recent.reverse(), req.params.id).catch(
                 (e) => console.error('[rooms] AI trigger error:', e)
             );

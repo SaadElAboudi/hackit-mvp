@@ -31,10 +31,14 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
     return;
   }
 
+  const maskedKey = GEMINI_API_KEY.slice(0, 6) + '***' + GEMINI_API_KEY.slice(-4);
+  console.log(`[roomGemini] triggerRoomAI room=${roomId} model=${GEMINI_MODEL} key=${maskedKey} historySize=${recentMessages.length}`);
+
   // Signal that AI is "typing" so everyone sees the indicator
   broadcastRoomTyping(roomId, 'ai');
 
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  console.log(`[roomGemini] POST ${geminiUrl.replace(GEMINI_API_KEY, '***')}`);
 
   const roomName = room.name || 'Salon';
   const directives = room.aiDirectives?.trim()
@@ -67,9 +71,13 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
       { timeout: GEMINI_TIMEOUT_MS }
     );
 
+    console.log(`[roomGemini] Gemini response received — candidates: ${data?.candidates?.length ?? 0} finishReason: ${data?.candidates?.[0]?.finishReason}`);
+
     const text =
       data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
       "Je n'ai pas pu générer de réponse.";
+
+    console.log(`[roomGemini] AI text length=${text.length} isDocument=${/^#{1,3}\s+\S/.test(text)} preview="${text.slice(0, 80).replace(/\n/g, '↵')}"`);
 
     // Detect document: starts with a markdown heading OR has 2+ ## sections
     const isDocument =
@@ -89,12 +97,19 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
       documentTitle,
     });
 
+    console.log(`[roomGemini] AI message saved id=${aiMsg._id} type=${aiMsg.type}`);
     broadcastRoomMessage(roomId, aiMsg.toObject());
   } catch (err) {
-    console.error(
-      '[roomGemini] Gemini error:',
-      err?.response?.data || err?.message
-    );
+    const errStatus = err?.response?.status;
+    const errData = err?.response?.data;
+    const errMsg = err?.message;
+    const errCode = err?.code; // e.g. ECONNABORTED for timeout
+    console.error('[roomGemini] GEMINI CALL FAILED:', {
+      status: errStatus,
+      code: errCode,
+      message: errMsg,
+      geminiError: errData?.error ?? errData,
+    });
     // Notify the room so users know something went wrong
     const errMsg = await RoomMessage.create({
       roomId,

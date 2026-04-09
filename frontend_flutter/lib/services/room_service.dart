@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/room.dart';
 import '../services/api_service.dart';
 import '../services/project_service.dart' show ProjectService;
+
+const _svcTag = '[RoomService]';
 
 /// REST + WebSocket client for the Salons (Rooms) feature.
 /// Mirrors the patterns in ProjectService; shares the same userId identity.
@@ -124,12 +127,15 @@ class RoomService {
     String content, {
     String? displayName,
   }) async {
+    debugPrint('$_svcTag sendMessage HTTP POST: room=$roomId content="${content.substring(0, content.length.clamp(0, 60))}"');
     final r = await _post(
       '/api/rooms/$roomId/messages',
       {'content': content},
       displayName: displayName,
     );
-    return RoomMessage.fromJson(r['message'] as Map<String, dynamic>);
+    final msg = RoomMessage.fromJson(r['message'] as Map<String, dynamic>);
+    debugPrint('$_svcTag sendMessage HTTP POST: response id=${msg.id}');
+    return msg;
   }
 
   Future<void> updateDirectives(String roomId, String directives) async {
@@ -192,6 +198,7 @@ class RoomService {
           .replaceFirst('https://', 'wss://')
           .replaceFirst('http://', 'ws://');
       final uri = Uri.parse('$wsBase/ws/rooms/$roomId');
+      debugPrint('$_svcTag WS connecting: $uri (userId=$userId)');
       final channel = WebSocketChannel.connect(uri);
       _channels[roomId] = channel;
 
@@ -203,16 +210,24 @@ class RoomService {
       channel.stream.listen(
         (raw) {
           _reconnectAttempts[roomId] = 0; // reset backoff on any received frame
+          debugPrint('$_svcTag WS frame received room=$roomId: ${raw.toString().substring(0, raw.toString().length.clamp(0, 120))}');
           try {
             final j = jsonDecode(raw.toString()) as Map<String, dynamic>;
             _controllers[roomId]?.add(WsRoomEvent.fromJson(j));
           } catch (_) {}
         },
-        onDone: () => _scheduleReconnect(roomId),
-        onError: (_) => _scheduleReconnect(roomId),
+        onDone: () {
+          debugPrint('$_svcTag WS closed (onDone) room=$roomId → scheduling reconnect');
+          _scheduleReconnect(roomId);
+        },
+        onError: (e) {
+          debugPrint('$_svcTag WS error room=$roomId: $e → scheduling reconnect');
+          _scheduleReconnect(roomId);
+        },
         cancelOnError: true,
       );
     } catch (_) {
+      debugPrint('$_svcTag WS connect exception room=$roomId: $_ → scheduling reconnect');
       _scheduleReconnect(roomId);
     }
   }
@@ -224,6 +239,7 @@ class RoomService {
     _reconnectAttempts[roomId] = attempt + 1;
     final delay = Duration(seconds: min(30, 1 << attempt)); // 1,2,4,8,16,30 s
 
+    debugPrint('$_svcTag WS scheduleReconnect room=$roomId attempt=$attempt delay=${delay.inSeconds}s');
     // Emit synthetic reconnecting event
     _controllers[roomId]?.add(
       WsRoomEvent(
