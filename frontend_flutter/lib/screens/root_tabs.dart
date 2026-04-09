@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../screens/home_screen.dart';
 import '../screens/library_screen.dart';
-import '../screens/collab_projects_screen.dart';
+import '../screens/salons_screen.dart';
 import '../providers/search_provider.dart';
 
 class RootTabs extends StatefulWidget {
@@ -43,37 +43,16 @@ class _RootTabsState extends State<RootTabs> {
       key: _navigatorKeys[tabIndex],
       initialRoute: '/',
       onGenerateRoute: (settings) {
-        Widget page;
-        // Si settings.name est null ou '/', on affiche la page principale du tab
-        if (settings.name == null || settings.name == '/') {
-          switch (tabIndex) {
-            case 0:
-              page = const HomeScreen();
-              break;
-            case 1:
-              page = const LibraryScreen();
-              break;
-            case 2:
-              page = const CollabProjectsScreen();
-              break;
-            default:
-              page = const HomeScreen();
-          }
-        } else {
-          // Pour toute autre route, on affiche la page principale du tab (ou personnaliser si besoin)
-          switch (tabIndex) {
-            case 0:
-              page = const HomeScreen();
-              break;
-            case 1:
-              page = const LibraryScreen();
-              break;
-            case 2:
-              page = const CollabProjectsScreen();
-              break;
-            default:
-              page = const HomeScreen();
-          }
+        final Widget page;
+        switch (tabIndex) {
+          case 1:
+            page = const LibraryScreen();
+            break;
+          case 2:
+            page = const SalonsScreen();
+            break;
+          default:
+            page = const HomeScreen();
         }
         return MaterialPageRoute(
           builder: (_) => page,
@@ -118,9 +97,9 @@ class _RootTabsState extends State<RootTabs> {
               label: 'Pipeline',
             ),
             NavigationDestination(
-              icon: Icon(Icons.workspaces_outlined),
-              selectedIcon: Icon(Icons.workspaces_rounded),
-              label: 'Projets',
+              icon: Icon(Icons.forum_outlined),
+              selectedIcon: Icon(Icons.forum_rounded),
+              label: 'Salons',
             ),
           ],
         ),

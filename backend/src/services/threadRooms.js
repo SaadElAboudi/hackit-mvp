@@ -24,6 +24,7 @@
  */
 
 import { WebSocketServer } from 'ws';
+import { handleRoomConnection } from './roomWS.js';
 
 /** @type {Map<string, Set<WebSocket>>} threadId → set of connected sockets */
 const rooms = new Map();
@@ -41,6 +42,12 @@ export function attachWebSocketServer(httpServer) {
   const wss = new WebSocketServer({ server: httpServer, path: undefined });
 
   wss.on('connection', (ws, req) => {
+    // Route /ws/rooms/ to the Salons WebSocket handler
+    if (req.url?.startsWith('/ws/rooms/')) {
+      handleRoomConnection(ws, req);
+      return;
+    }
+
     // Extract threadId from URL: /ws/threads/<threadId>
     const match = req.url?.match(/^\/ws\/threads\/([a-f0-9]{24})$/i);
     if (!match) {

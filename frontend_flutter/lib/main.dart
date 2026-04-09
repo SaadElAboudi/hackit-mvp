@@ -12,6 +12,7 @@ import 'providers/action_task_provider.dart';
 import 'providers/plan_feedback_provider.dart';
 import 'providers/project_provider.dart';
 import 'providers/collab_provider.dart';
+import 'providers/room_provider.dart';
 import 'services/cache_manager.dart';
 import 'services/project_service.dart';
 import 'services/api/api_service.dart';
@@ -64,6 +65,9 @@ class _MyAppState extends State<MyApp> {
         ),
         ChangeNotifierProvider(
           create: (_) => CollabProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => RoomProvider(),
         ),
         ChangeNotifierProvider(
           create: (_) => ProjectProvider(getIt<SharedPreferences>()),

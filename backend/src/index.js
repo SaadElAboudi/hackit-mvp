@@ -12,6 +12,7 @@ import morgan from 'morgan';
 import { getFeatureFlags } from './config/featureFlags.js';
 import lessonsRouter from './routes/lessons.js';
 import projectsRouter from './routes/projects.js';
+import roomsRouter from './routes/rooms.js';
 import { attachWebSocketServer } from './services/threadRooms.js';
 import { validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
 import { getChapters, extractDesiredChapters } from './services/chapters.js';
@@ -2126,9 +2127,10 @@ app.post("/api/generateLesson", userIdMiddleware, async (req, res) => {
   }
 });
 
-// Mount lessons, projects routers.
+// Mount lessons, projects, and rooms routers.
 app.use('/api/lessons', lessonsRouter);
 app.use('/api/projects', projectsRouter);
+app.use('/api/rooms', roomsRouter);
 
 app.use((req, res) => {
   return res.status(404).json({ error: 'Not found' });
