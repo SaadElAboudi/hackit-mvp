@@ -131,3 +131,12 @@ export function broadcastRoomTyping(roomId, userId) {
 export function broadcastRoomChallenge(roomId, messageId, challenge) {
   _broadcast(roomId, { type: 'challenge', roomId, messageId, challenge });
 }
+
+/** Returns the list of currently online userIds for a room (used by REST endpoint). */
+export function getOnlineUserIds(roomId) {
+  const sockets = rooms.get(roomId);
+  if (!sockets) return [];
+  return [...sockets]
+    .map((s) => meta.get(s)?.userId)
+    .filter(Boolean);
+}

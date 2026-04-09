@@ -11,6 +11,11 @@
  *   POST   /api/rooms/:id/messages                 – send a message (auto-triggers AI if @ia)
  *   PATCH  /api/rooms/:id/directives               – update AI directives for the room
  *   POST   /api/rooms/:id/messages/:msgId/challenge – add a challenge to a document message
+ *   GET    /api/rooms/:id/members                  – list members (with online presence)
+ *   POST   /api/rooms/:id/members                  – add a member to the room
+ *   DELETE /api/rooms/:id/members/:userId          – remove a member from the room
+ *   GET    /api/rooms/:id/invite                   – get shareable invite link
+ *   POST   /api/rooms/:id/documents                – attach a document to the room
  */
 
 import express from 'express';
@@ -18,7 +23,7 @@ import mongoose from 'mongoose';
 import Room from '../models/Room.js';
 import RoomMessage from '../models/RoomMessage.js';
 import { triggerRoomAI } from '../services/roomGemini.js';
-import { broadcastRoomMessage, broadcastRoomChallenge } from '../services/roomWS.js';
+import { broadcastRoomMessage, broadcastRoomChallenge, getOnlineUserIds } from '../services/roomWS.js';
 
 const router = express.Router();
 
@@ -217,6 +222,144 @@ router.post('/:id/messages/:msgId/challenge', async (req, res) => {
         res.status(201).json({ challenge: savedChallenge });
     } catch (err) {
         console.error('[rooms] challenge error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── GET /api/rooms/:id/members ───────────────────────────────────────────────
+
+router.get('/:id/members', async (req, res) => {
+    try {
+        const room = await Room.findById(req.params.id).lean();
+        if (!room) return res.status(404).json({ error: 'Room not found' });
+
+        const isMember = room.members.some((m) => m.userId === req.userId);
+        if (!isMember) return res.status(403).json({ error: 'Not a member of this room' });
+
+        const onlineIds = getOnlineUserIds(req.params.id);
+        const members = room.members.map((m) => ({
+            ...m,
+            online: onlineIds.includes(m.userId),
+        }));
+
+        res.json({ members, onlineCount: onlineIds.length });
+    } catch (err) {
+        console.error('[rooms] members error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── POST /api/rooms/:id/members ──────────────────────────────────────────────
+
+router.post('/:id/members', async (req, res) => {
+    try {
+        const { userId, displayName } = req.body;
+        if (!userId?.trim()) {
+            return res.status(400).json({ error: 'userId is required' });
+        }
+
+        const room = await Room.findById(req.params.id);
+        if (!room) return res.status(404).json({ error: 'Room not found' });
+
+        const isCallerMember = room.members.some((m) => m.userId === req.userId);
+        if (!isCallerMember) return res.status(403).json({ error: 'Not a member of this room' });
+
+        const alreadyMember = room.members.some((m) => m.userId === userId.trim());
+        if (alreadyMember) {
+            return res.status(409).json({ error: 'User is already a member' });
+        }
+
+        room.members.push({
+            userId: userId.trim(),
+            displayName: displayName?.trim() || `User_${userId.trim().slice(-6)}`,
+        });
+        await room.save();
+
+        res.status(201).json({ room });
+    } catch (err) {
+        console.error('[rooms] add member error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── DELETE /api/rooms/:id/members/:uid ───────────────────────────────────────
+
+router.delete('/:id/members/:uid', async (req, res) => {
+    try {
+        const room = await Room.findById(req.params.id);
+        if (!room) return res.status(404).json({ error: 'Room not found' });
+
+        const isCallerMember = room.members.some((m) => m.userId === req.userId);
+        if (!isCallerMember) return res.status(403).json({ error: 'Not a member of this room' });
+
+        // Prevent removing the last member
+        if (room.members.length <= 1) {
+            return res.status(400).json({ error: 'Cannot remove the last member' });
+        }
+
+        room.members = room.members.filter((m) => m.userId !== req.params.uid);
+        await room.save();
+
+        res.json({ room });
+    } catch (err) {
+        console.error('[rooms] remove member error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── GET /api/rooms/:id/invite ────────────────────────────────────────────────
+
+const APP_BASE_URL = process.env.APP_BASE_URL || 'https://saadelaboudi.github.io/hackit-mvp';
+
+router.get('/:id/invite', async (req, res) => {
+    try {
+        const room = await Room.findById(req.params.id).lean();
+        if (!room) return res.status(404).json({ error: 'Room not found' });
+
+        const isMember = room.members.some((m) => m.userId === req.userId);
+        if (!isMember) return res.status(403).json({ error: 'Not a member of this room' });
+
+        const link = `${APP_BASE_URL}/#/salon/${req.params.id}`;
+        res.json({ link, roomName: room.name });
+    } catch (err) {
+        console.error('[rooms] invite error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── POST /api/rooms/:id/documents ────────────────────────────────────────────
+
+router.post('/:id/documents', async (req, res) => {
+    try {
+        const { title, content } = req.body;
+        if (!content?.trim()) {
+            return res.status(400).json({ error: 'content is required' });
+        }
+
+        const room = await Room.findById(req.params.id);
+        if (!room) return res.status(404).json({ error: 'Room not found' });
+
+        const isMember = room.members.some((m) => m.userId === req.userId);
+        if (!isMember) return res.status(403).json({ error: 'Not a member of this room' });
+
+        const msg = await RoomMessage.create({
+            roomId: room._id,
+            senderId: req.userId,
+            senderName: req.displayName,
+            isAI: false,
+            content: content.trim(),
+            type: 'document',
+            documentTitle: title?.trim() || 'Document partagé',
+        });
+
+        broadcastRoomMessage(req.params.id, msg.toObject());
+
+        room.updatedAt = new Date();
+        await room.save();
+
+        res.status(201).json({ message: msg });
+    } catch (err) {
+        console.error('[rooms] document error:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

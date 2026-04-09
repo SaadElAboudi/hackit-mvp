@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/room.dart';
 import '../providers/room_provider.dart';
 import '../services/project_service.dart' show ProjectService;
+import '../utils/web_download.dart';
 
 /// The main chat screen for a salon.
 ///
@@ -26,7 +29,6 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   final _scrollCtrl = ScrollController();
   bool _directivesOpen = false;
   late final TextEditingController _directivesCtrl;
-
   String get _myUserId => ProjectService.currentUserId ?? '';
   String get _displayName {
     final uid = _myUserId;
@@ -74,6 +76,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     if (text.isEmpty) return;
 
     final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
     _inputCtrl.clear();
 
     final prov = context.read<RoomProvider>();
@@ -85,10 +88,77 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(prov.sendError ?? 'Erreur lors de l\'envoi'),
-          backgroundColor: Theme.of(context).colorScheme.error,
+          backgroundColor: errorColor,
         ),
       );
     }
+  }
+
+  Future<void> _share() async {
+    final prov = context.read<RoomProvider>();
+    final room = prov.currentRoom ?? widget.room;
+    final link = await prov.getInviteLink();
+    if (!mounted) return;
+    if (link == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible de générer le lien')),
+      );
+      return;
+    }
+    await Share.share(
+      'Rejoins le salon "${room.name}" sur HackIt :\n$link',
+      subject: 'Invitation au salon ${room.name}',
+    );
+  }
+
+  void _showMembersPanel() {
+    final prov = context.read<RoomProvider>();
+    final room = prov.currentRoom ?? widget.room;
+    final onlineIds = prov.onlineUserIds;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _MembersSheet(
+        room: room,
+        onlineUserIds: onlineIds,
+        myUserId: _myUserId,
+      ),
+    );
+  }
+
+  void _showAttachDialog() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _AttachDocumentSheet(
+        displayName: _displayName,
+        onUpload: (title, content) async {
+          final prov = context.read<RoomProvider>();
+          final ok = await prov.uploadDocument(
+            content,
+            title: title,
+            displayName: _displayName,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(ok
+                    ? 'Document partagé ✓'
+                    : 'Erreur lors du partage du document'),
+              ),
+            );
+            if (ok) _scrollToBottom(animated: true);
+          }
+        },
+      ),
+    );
   }
 
   @override
@@ -182,6 +252,10 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                                       displayName: _displayName,
                                     )
                                 : null,
+                            onExport: msg.isDocument
+                                ? (content, title) =>
+                                    _exportDocument(content, title)
+                                : null,
                           );
                         },
                       ),
@@ -192,6 +266,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
             controller: _inputCtrl,
             sending: prov.sendingMessage,
             onSend: _send,
+            onAttach: _showAttachDialog,
           ),
         ],
       ),
@@ -199,47 +274,89 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   }
 
   AppBar _buildAppBar(BuildContext context, Room room, ColorScheme scheme) {
+    final prov = context.watch<RoomProvider>();
+    final onlineCount = prov.onlineUserIds.length;
+
     return AppBar(
       backgroundColor: scheme.surface,
       elevation: 0,
       titleSpacing: 0,
       leading: const BackButton(),
-      title: Row(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: scheme.primaryContainer,
-            foregroundColor: scheme.onPrimaryContainer,
-            child: Text(
-              room.name.isNotEmpty ? room.name[0].toUpperCase() : '?',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+      title: GestureDetector(
+        onTap: _showMembersPanel,
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
+              child: Text(
+                room.name.isNotEmpty ? room.name[0].toUpperCase() : '?',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  room.name,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  '${room.memberCount} membre${room.memberCount > 1 ? 's' : ''} + IA',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.onSurface.withOpacity(0.5),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    room.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                  Row(
+                    children: [
+                      Text(
+                        '${room.memberCount} membre${room.memberCount > 1 ? 's' : ''} + IA',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurface.withOpacity(0.5),
+                        ),
+                      ),
+                      if (onlineCount > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF22c55e),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '$onlineCount en ligne',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: scheme.onSurface.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       actions: [
+        // Members panel
+        IconButton(
+          icon: const Icon(Icons.group_rounded),
+          tooltip: 'Membres',
+          onPressed: _showMembersPanel,
+        ),
+        // Share / Invite
+        IconButton(
+          icon: const Icon(Icons.ios_share_rounded),
+          tooltip: 'Partager le salon',
+          onPressed: _share,
+        ),
         // Directives toggle
         IconButton(
           icon: Icon(
@@ -250,6 +367,32 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           onPressed: () => setState(() => _directivesOpen = !_directivesOpen),
         ),
       ],
+    );
+  }
+
+  void _exportDocument(String content, String? title) {
+    final fileName =
+        '${(title ?? 'document').replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_')}.md';
+    if (kIsWeb) {
+      try {
+        triggerMarkdownDownload(content, fileName);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Téléchargement de $fileName'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        return;
+      } catch (_) {
+        // Fall through to clipboard
+      }
+    }
+    Clipboard.setData(ClipboardData(text: content));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Document copié dans le presse-papier'),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 }
@@ -343,17 +486,20 @@ class _MessageBubble extends StatelessWidget {
   final RoomMessage message;
   final bool isMe;
   final Future<bool> Function(String)? onChallenge;
+  final void Function(String content, String? title)? onExport;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
     this.onChallenge,
+    this.onExport,
   });
 
   @override
   Widget build(BuildContext context) {
     if (message.isDocument) {
-      return _DocumentCard(message: message, onChallenge: onChallenge);
+      return _DocumentCard(
+          message: message, onChallenge: onChallenge, onExport: onExport);
     }
 
     final scheme = Theme.of(context).colorScheme;
@@ -452,8 +598,9 @@ class _MessageBubble extends StatelessWidget {
 class _DocumentCard extends StatefulWidget {
   final RoomMessage message;
   final Future<bool> Function(String)? onChallenge;
+  final void Function(String content, String? title)? onExport;
 
-  const _DocumentCard({required this.message, this.onChallenge});
+  const _DocumentCard({required this.message, this.onChallenge, this.onExport});
 
   @override
   State<_DocumentCard> createState() => _DocumentCardState();
@@ -606,6 +753,15 @@ class _DocumentCardState extends State<_DocumentCard> {
                         ),
                       );
                     },
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton.icon(
+                    icon: const Icon(Icons.download_rounded, size: 15),
+                    label:
+                        const Text('Exporter', style: TextStyle(fontSize: 13)),
+                    onPressed: widget.onExport != null
+                        ? () => widget.onExport!(msg.content, msg.documentTitle)
+                        : null,
                   ),
                 ],
               ),
@@ -764,11 +920,13 @@ class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final bool sending;
   final VoidCallback onSend;
+  final VoidCallback onAttach;
 
   const _InputBar({
     required this.controller,
     required this.sending,
     required this.onSend,
+    required this.onAttach,
   });
 
   @override
@@ -777,13 +935,19 @@ class _InputBar extends StatelessWidget {
     return Container(
       color: scheme.surface,
       padding: EdgeInsets.fromLTRB(
-        12,
+        8,
         8,
         12,
         8 + MediaQuery.of(context).padding.bottom,
       ),
       child: Row(
         children: [
+          // Attach document button
+          IconButton(
+            icon: const Icon(Icons.attach_file_rounded, size: 22),
+            tooltip: 'Joindre un document',
+            onPressed: onAttach,
+          ),
           Expanded(
             child: TextField(
               controller: controller,
@@ -834,7 +998,6 @@ class _InputBar extends StatelessWidget {
 }
 
 // ── Empty chat state ──────────────────────────────────────────────────────────
-
 class _EmptyChat extends StatelessWidget {
   final String roomName;
   const _EmptyChat({required this.roomName});
@@ -875,3 +1038,291 @@ class _EmptyChat extends StatelessWidget {
     );
   }
 }
+
+// ── Members bottom sheet ──────────────────────────────────────────────────────
+
+class _MembersSheet extends StatelessWidget {
+  final Room room;
+  final List<String> onlineUserIds;
+  final String myUserId;
+
+  const _MembersSheet({
+    required this.room,
+    required this.onlineUserIds,
+    required this.myUserId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final members = room.members;
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.5,
+      maxChildSize: 0.85,
+      minChildSize: 0.3,
+      builder: (ctx, scrollCtrl) => Column(
+        children: [
+          // Handle
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Icon(Icons.group_rounded, color: scheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Membres du salon',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${members.length} + IA',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // AI row
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor: scheme.secondaryContainer,
+              child: Text('✦', style: TextStyle(color: scheme.secondary, fontSize: 16)),
+            ),
+            title: const Text('IA Collègue', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('Toujours disponible', style: TextStyle(fontSize: 12)),
+            trailing: Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: Color(0xFF22c55e),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          // Member list
+          Expanded(
+            child: ListView.builder(
+              controller: scrollCtrl,
+              itemCount: members.length,
+              itemBuilder: (ctx, i) {
+                final m = members[i];
+                final isOnline = onlineUserIds.contains(m.userId);
+                final isMe = m.userId == myUserId;
+                return ListTile(
+                  leading: Stack(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: scheme.primaryContainer,
+                        foregroundColor: scheme.onPrimaryContainer,
+                        child: Text(
+                          m.displayName.isNotEmpty
+                              ? m.displayName[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (isOnline)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF22c55e),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: scheme.surface, width: 1.5),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  title: Text(
+                    m.displayName + (isMe ? ' (moi)' : ''),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: isMe ? scheme.primary : null,
+                    ),
+                  ),
+                  subtitle: Text(
+                    isOnline ? 'En ligne' : 'Hors ligne',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isOnline
+                          ? const Color(0xFF22c55e)
+                          : scheme.onSurface.withOpacity(0.4),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Attach document bottom sheet ──────────────────────────────────────────────
+
+class _AttachDocumentSheet extends StatefulWidget {
+  final String displayName;
+  final Future<void> Function(String title, String content) onUpload;
+
+  const _AttachDocumentSheet({
+    required this.displayName,
+    required this.onUpload,
+  });
+
+  @override
+  State<_AttachDocumentSheet> createState() => _AttachDocumentSheetState();
+}
+
+class _AttachDocumentSheetState extends State<_AttachDocumentSheet> {
+  final _titleCtrl = TextEditingController();
+  final _contentCtrl = TextEditingController();
+  bool _uploading = false;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _contentCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final content = _contentCtrl.text.trim();
+    if (content.isEmpty) return;
+    setState(() => _uploading = true);
+    try {
+      await widget.onUpload(
+        _titleCtrl.text.trim().isEmpty ? 'Document partagé' : _titleCtrl.text.trim(),
+        content,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: scheme.onSurface.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Icon(Icons.description_rounded, color: scheme.secondary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Partager un document',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _titleCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Titre (optionnel)',
+                hintText: 'Ex: Cahier des charges, Note de synthèse…',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              textCapitalization: TextCapitalization.sentences,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _contentCtrl,
+              maxLines: 8,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Contenu *',
+                hintText: 'Collez ou saisissez le texte du document…',
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: scheme.surfaceContainerLow,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: _uploading
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: scheme.onPrimary,
+                        ),
+                      )
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: Text(_uploading ? 'Envoi en cours…' : 'Partager le document'),
+                onPressed: _uploading ? null : _submit,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Web download helper ───────────────────────────────────────────────────────
+// Implemented via conditional imports in lib/utils/web_download.dart
+// (web_download_web.dart uses dart:html; web_download_stub.dart is a no-op).

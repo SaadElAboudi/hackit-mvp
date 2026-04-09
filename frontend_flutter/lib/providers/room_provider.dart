@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/room.dart';
 import '../services/room_service.dart';
 import '../services/project_service.dart' show ProjectService;
+
 const _tag = '[RoomProvider]';
 
 /// State management for the Salons (Rooms) feature.
@@ -62,6 +63,9 @@ class RoomProvider extends ChangeNotifier {
   bool wsReconnecting = false; // WS reconnect in progress
   StreamSubscription<WsRoomEvent>? _wsSub;
 
+  /// Online user IDs received from WS presence events
+  List<String> onlineUserIds = [];
+
   String? get myUserId => ProjectService.currentUserId;
 
   Future<void> openRoom(Room room) async {
@@ -71,6 +75,7 @@ class RoomProvider extends ChangeNotifier {
     _wsSub = null;
     aiThinking = false;
     wsReconnecting = false;
+    onlineUserIds = [];
     currentRoom = room;
     messages = [];
     loadingMessages = true;
@@ -130,6 +135,10 @@ class RoomProvider extends ChangeNotifier {
           messages[idx] = messages[idx].withChallenge(challenge);
           notifyListeners();
         }
+
+      case WsRoomEventType.presence:
+        onlineUserIds = event.userIds;
+        notifyListeners();
 
       case WsRoomEventType.reconnecting:
         wsReconnecting = true;
@@ -246,6 +255,46 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  // ── Document upload ────────────────────────────────────────────────────────────
+
+  Future<bool> uploadDocument(
+    String content, {
+    String? title,
+    String? displayName,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    try {
+      final msg = await _svc.uploadDocument(
+        room.id,
+        content,
+        title: title,
+        displayName: displayName,
+      );
+      // WS will broadcast it; only add if WS is slow / not connected
+      final idx = messages.indexWhere((m) => m.id == msg.id);
+      if (idx < 0) {
+        messages.add(msg);
+        notifyListeners();
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ── Invite link ────────────────────────────────────────────────────────────────
+
+  Future<String?> getInviteLink() async {
+    final room = currentRoom;
+    if (room == null) return null;
+    try {
+      return await _svc.getInviteLink(room.id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Cleanup ───────────────────────────────────────────────────────────────────
 
   Future<void> closeRoom() async {
@@ -258,6 +307,7 @@ class RoomProvider extends ChangeNotifier {
     messages = [];
     aiThinking = false;
     wsReconnecting = false;
+    onlineUserIds = [];
     notifyListeners();
   }
 

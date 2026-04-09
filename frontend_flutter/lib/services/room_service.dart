@@ -78,6 +78,13 @@ class RoomService {
     return _parse(r);
   }
 
+  Future<Map<String, dynamic>> _delete(String path) async {
+    final r = await _http
+        .delete(Uri.parse('$_base$path'), headers: await _headers())
+        .timeout(const Duration(seconds: 15));
+    return _parse(r);
+  }
+
   Map<String, dynamic> _parse(http.Response r) {
     final body = jsonDecode(r.body) as Map<String, dynamic>;
     if (r.statusCode >= 400) {
@@ -154,6 +161,47 @@ class RoomService {
       displayName: displayName,
     );
     return RoomChallenge.fromJson(r['challenge'] as Map<String, dynamic>);
+  }
+
+  // ── Members ───────────────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getMembers(String roomId) async {
+    final r = await _get('/api/rooms/$roomId/members');
+    return (r['members'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addMember(String roomId, String userId, {String? displayName}) async {
+    await _post(
+      '/api/rooms/$roomId/members',
+      {'userId': userId, if (displayName != null) 'displayName': displayName},
+    );
+  }
+
+  Future<void> removeMember(String roomId, String userId) async {
+    await _delete('/api/rooms/$roomId/members/$userId');
+  }
+
+  // ── Invite link ───────────────────────────────────────────────────────────────
+
+  Future<String> getInviteLink(String roomId) async {
+    final r = await _get('/api/rooms/$roomId/invite');
+    return r['link'] as String;
+  }
+
+  // ── Document upload ───────────────────────────────────────────────────────────
+
+  Future<RoomMessage> uploadDocument(
+    String roomId,
+    String content, {
+    String? title,
+    String? displayName,
+  }) async {
+    final r = await _post(
+      '/api/rooms/$roomId/documents',
+      {'content': content, if (title != null) 'title': title},
+      displayName: displayName,
+    );
+    return RoomMessage.fromJson(r['message'] as Map<String, dynamic>);
   }
 
   // ── WebSocket (per room) ──────────────────────────────────────────────────────
