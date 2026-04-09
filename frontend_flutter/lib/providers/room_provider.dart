@@ -110,8 +110,18 @@ class RoomProvider extends ChangeNotifier {
       case WsRoomEventType.message:
         final msg = event.message;
         if (msg == null) return;
-        // Dedup by real id: update in-place if already present (WS after HTTP),
-        // otherwise append (other participant, AI, or WS before HTTP).
+
+        // The sender receives their own message via the HTTP response in
+        // sendMessage(). Silently ignore the WS echo so there is never a
+        // race between the two paths. We still update in-place if HTTP has
+        // already placed the message in the list (no-op otherwise).
+        if (!msg.isAI && myUserId != null && msg.senderId == myUserId) {
+          final idx = messages.indexWhere((m) => m.id == msg.id);
+          if (idx >= 0) messages[idx] = msg;
+          return; // do NOT notifyListeners — HTTP will do it
+        }
+
+        // Messages from other participants and AI: add or update in-place.
         final idx = messages.indexWhere((m) => m.id == msg.id);
         if (idx >= 0) {
           messages[idx] = msg;
@@ -168,11 +178,9 @@ class RoomProvider extends ChangeNotifier {
       final saved =
           await _svc.sendMessage(room.id, content, displayName: displayName);
 
-      // Add the confirmed message. If the WS broadcast arrived first it's
-      // already in the list (deduped by id in _onWsEvent) — don't add twice.
-      if (!messages.any((m) => m.id == saved.id)) {
-        messages.add(saved);
-      }
+      // Add the confirmed message. Own messages are excluded from the WS
+      // broadcast handler, so this is the sole place they enter the list.
+      messages.add(saved);
 
       // If @ia was mentioned, show AI thinking indicator
       if (RegExp(r'@ia\b', caseSensitive: false).hasMatch(content)) {
