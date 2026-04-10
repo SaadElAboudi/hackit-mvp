@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/room.dart';
 import '../providers/room_provider.dart';
 import '../services/project_service.dart' show ProjectService;
+import 'profile_screen.dart';
 import 'salon_chat_screen.dart';
 
 /// Lists the user's salons (rooms) and allows creating new ones.
@@ -17,11 +18,8 @@ class _SalonsScreenState extends State<SalonsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RoomProvider>().loadRooms();
-      if (ProjectService.currentDisplayName == null) {
-        await _showSetNameDialog();
-      }
     });
   }
 
@@ -42,8 +40,11 @@ class _SalonsScreenState extends State<SalonsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline_rounded),
-            tooltip: 'Mon pseudo',
-            onPressed: _showSetNameDialog,
+            tooltip: 'Mon profil',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
@@ -60,7 +61,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Text(
-              'Chattez en groupe, interpellez votre collègue IA avec @ia.',
+              'Collaborez en temps réel. Votre copilote IA privé ❖ est accessible dans chaque salon.',
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.55),
                 fontSize: 13,
@@ -124,7 +125,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'L\'IA rejoindra automatiquement le salon comme collègue.',
+              'Votre copilote IA privé sera disponible via le bouton ❖ dans le salon.',
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5),
@@ -152,56 +153,6 @@ class _SalonsScreenState extends State<SalonsScreen> {
               }
             },
             child: const Text('Créer'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showSetNameDialog() async {
-    if (!mounted) return;
-    final ctrl = TextEditingController(
-      text: ProjectService.currentDisplayName ?? '',
-    );
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: ProjectService.currentDisplayName != null,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Votre pseudo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Ce nom sera visible dans les salons par les autres participants.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Pseudo',
-                hintText: 'Ex\u00a0: Alice, Marc, AnneSo…',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (ProjectService.currentDisplayName != null)
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler'),
-            ),
-          FilledButton(
-            onPressed: () async {
-              if (ctrl.text.trim().isNotEmpty) {
-                await ProjectService.setDisplayName(ctrl.text.trim());
-                if (ctx.mounted) Navigator.pop(ctx);
-              }
-            },
-            child: const Text('Confirmer'),
           ),
         ],
       ),
@@ -286,7 +237,7 @@ class _RoomTile extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${room.memberCount} membre${room.memberCount > 1 ? 's' : ''} • IA incluse',
+                          '${room.memberCount} membre${room.memberCount > 1 ? 's' : ''}',
                           style: TextStyle(
                             fontSize: 12,
                             color: scheme.onSurface.withOpacity(0.5),
@@ -298,23 +249,6 @@ class _RoomTile extends StatelessWidget {
                 ),
               ),
 
-              // AI badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: scheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'IA',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: scheme.onSecondaryContainer,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
               Icon(
                 Icons.chevron_right_rounded,
                 color: scheme.onSurface.withOpacity(0.3),
@@ -353,7 +287,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Créez un salon pour collaborer avec vos collègues et l\'IA.',
+              'Créez un salon pour collaborer avec vos collègues.\nVotre IA personnelle ✦ vous accompagnera.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.55),

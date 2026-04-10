@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/room.dart';
 import '../providers/room_provider.dart';
+import '../services/personal_ai_service.dart';
 import '../services/project_service.dart' show ProjectService;
 import '../utils/web_download.dart';
+import 'profile_screen.dart';
 
 /// The main chat screen for a salon.
 ///
@@ -27,8 +29,11 @@ class SalonChatScreen extends StatefulWidget {
 class _SalonChatScreenState extends State<SalonChatScreen> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  bool _directivesOpen = false;
-  late final TextEditingController _directivesCtrl;
+  bool _aiPanelOpen = false;
+  final _aiInputCtrl = TextEditingController();
+  final List<AiMessage> _aiHistory = [];
+  bool _aiThinking = false;
+  String? _aiError;
   bool _isAtBottom = true; // track whether user is near the bottom
   String get _myUserId => ProjectService.currentUserId ?? '';
   String get _displayName {
@@ -40,7 +45,6 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   @override
   void initState() {
     super.initState();
-    _directivesCtrl = TextEditingController();
     _scrollCtrl.addListener(() {
       if (!_scrollCtrl.hasClients) return;
       final pos = _scrollCtrl.position;
@@ -49,7 +53,6 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<RoomProvider>();
       await prov.openRoom(widget.room);
-      _directivesCtrl.text = prov.currentRoom?.aiDirectives ?? '';
       _scrollToBottom();
     });
   }
@@ -57,7 +60,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   @override
   void dispose() {
     _inputCtrl.dispose();
-    _directivesCtrl.dispose();
+    _aiInputCtrl.dispose();
     _scrollCtrl.dispose();
     context.read<RoomProvider>().closeRoom();
     super.dispose();
@@ -169,6 +172,54 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
+  Future<void> _sendToAi() async {
+    final text = _aiInputCtrl.text.trim();
+    if (text.isEmpty) return;
+    final key = ProjectService.geminiKey;
+    if (key == null || key.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Configure ta clé Gemini dans ton profil (icône 👤)'),
+          ),
+        );
+      }
+      return;
+    }
+    _aiInputCtrl.clear();
+    final userMsg = AiMessage(role: 'user', text: text);
+    setState(() {
+      _aiHistory.add(userMsg);
+      _aiThinking = true;
+      _aiError = null;
+    });
+    try {
+      final prov = context.read<RoomProvider>();
+      final msgs = prov.messages;
+      final recent = msgs.length > 15 ? msgs.sublist(msgs.length - 15) : msgs;
+      final ctxLines =
+          recent.map((m) => '${m.senderName}: ${m.content}').join('\n');
+      final systemPrompt = 'Tu es un assistant IA personnel et confidentiel. '
+          'Seul l\'utilisateur te voit.\n\n'
+          'Contexte du salon (derniers messages) :\n$ctxLines\n\n'
+          'Aide l\'utilisateur à réfléchir, rédiger ou analyser. '
+          'Réponds de façon concise et en français.';
+      final svc = PersonalAiService(apiKey: key);
+      final reply = await svc.chat(_aiHistory, text, systemPrompt: systemPrompt);
+      if (!mounted) return;
+      setState(() {
+        _aiHistory.add(AiMessage(role: 'model', text: reply));
+        _aiThinking = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _aiThinking = false;
+        _aiError = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -213,26 +264,6 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
               ),
             ),
 
-          // AI Directives panel (collapsible)
-          _DirectivesPanel(
-            open: _directivesOpen,
-            controller: _directivesCtrl,
-            currentDirectives: room.aiDirectives,
-            onToggle: () => setState(() => _directivesOpen = !_directivesOpen),
-            onSave: (d) async {
-              final ok = await prov.updateDirectives(d);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(ok
-                        ? 'Directives enregistrées ✓'
-                        : 'Erreur lors de la sauvegarde'),
-                  ),
-                );
-              }
-            },
-          ),
-
           // Message list
           Expanded(
             child: prov.loadingMessages
@@ -270,12 +301,34 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                       ),
           ),
 
+          // Personal AI panel (private, collapsible)
+          AnimatedSize(
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeInOut,
+            child: _aiPanelOpen
+                ? _AiPanel(
+                    history: _aiHistory,
+                    thinking: _aiThinking,
+                    error: _aiError,
+                    inputCtrl: _aiInputCtrl,
+                    onSend: _sendToAi,
+                    onClose: () => setState(() => _aiPanelOpen = false),
+                    onUseInChat: (text) {
+                      _aiInputCtrl.clear();
+                      _inputCtrl.text = text;
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+
           // Input bar
           _InputBar(
             controller: _inputCtrl,
             sending: prov.sendingMessage,
             onSend: _send,
             onAttach: _showAttachDialog,
+            onAiToggle: () => setState(() => _aiPanelOpen = !_aiPanelOpen),
+            aiPanelOpen: _aiPanelOpen,
           ),
         ],
       ),
@@ -320,7 +373,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   Row(
                     children: [
                       Text(
-                        '${room.memberCount} membre${room.memberCount > 1 ? 's' : ''} + IA',
+                        '${room.memberCount} membre${room.memberCount > 1 ? 's' : ''}',
                         style: TextStyle(
                           fontSize: 11,
                           color: scheme.onSurface.withOpacity(0.5),
@@ -354,11 +407,14 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
         ),
       ),
       actions: [
-        // Change display name
+        // Profile screen
         IconButton(
           icon: const Icon(Icons.person_outline_rounded),
-          tooltip: 'Mon pseudo',
-          onPressed: _showSetNameDialog,
+          tooltip: 'Mon profil',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          ),
         ),
         // Members panel
         IconButton(
@@ -372,66 +428,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           tooltip: 'Partager le salon',
           onPressed: _share,
         ),
-        // Directives toggle
-        IconButton(
-          icon: Icon(
-            Icons.tune_rounded,
-            color: _directivesOpen ? scheme.primary : null,
-          ),
-          tooltip: 'Directives pour l\'IA',
-          onPressed: () => setState(() => _directivesOpen = !_directivesOpen),
-        ),
       ],
-    );
-  }
-
-  Future<void> _showSetNameDialog() async {
-    if (!mounted) return;
-    final ctrl = TextEditingController(
-      text: ProjectService.currentDisplayName ?? '',
-    );
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: ProjectService.currentDisplayName != null,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Votre pseudo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Ce nom sera visible dans le salon.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Pseudo',
-                hintText: 'Ex\u00a0: Alice, Marc\u2026',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (ProjectService.currentDisplayName != null)
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler'),
-            ),
-          FilledButton(
-            onPressed: () async {
-              if (ctrl.text.trim().isNotEmpty) {
-                await ProjectService.setDisplayName(ctrl.text.trim());
-                if (ctx.mounted) Navigator.pop(ctx);
-              }
-            },
-            child: const Text('Confirmer'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -462,83 +459,299 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   }
 }
 
-// ── Directives panel ──────────────────────────────────────────────────────────
+// ── Personal AI panel ─────────────────────────────────────────────────────────
 
-class _DirectivesPanel extends StatelessWidget {
-  final bool open;
-  final TextEditingController controller;
-  final String currentDirectives;
-  final VoidCallback onToggle;
-  final Future<void> Function(String) onSave;
+class _AiPanel extends StatefulWidget {
+  final List<AiMessage> history;
+  final bool thinking;
+  final String? error;
+  final TextEditingController inputCtrl;
+  final VoidCallback onSend;
+  final VoidCallback onClose;
+  final void Function(String text) onUseInChat;
 
-  const _DirectivesPanel({
-    required this.open,
-    required this.controller,
-    required this.currentDirectives,
-    required this.onToggle,
-    required this.onSave,
+  const _AiPanel({
+    required this.history,
+    required this.thinking,
+    this.error,
+    required this.inputCtrl,
+    required this.onSend,
+    required this.onClose,
+    required this.onUseInChat,
   });
+
+  @override
+  State<_AiPanel> createState() => _AiPanelState();
+}
+
+class _AiPanelState extends State<_AiPanel> {
+  final _listCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _listCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(_AiPanel old) {
+    super.didUpdateWidget(old);
+    if (widget.history.length != old.history.length ||
+        widget.thinking != old.thinking) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_listCtrl.hasClients) {
+          _listCtrl.animateTo(
+            _listCtrl.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    if (!open) return const SizedBox.shrink();
-
+    final empty =
+        widget.history.isEmpty && !widget.thinking && widget.error == null;
     return Container(
-      color: scheme.surfaceContainerLow,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      height: 320,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        border: Border(
+          top: BorderSide(color: scheme.secondaryContainer, width: 1.5),
+        ),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Icon(Icons.tune_rounded, size: 16, color: scheme.primary),
-              const SizedBox(width: 6),
-              Text(
-                'Directives pour l\'IA',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: scheme.primary,
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 4, 4),
+            child: Row(
+              children: [
+                Text('✦', style: TextStyle(color: scheme.secondary, fontSize: 16)),
+                const SizedBox(width: 8),
+                Text(
+                  'Copilote IA',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: scheme.onSurface,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              Text(
-                'Guident le comportement de l\'IA dans ce salon',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: scheme.onSurface.withOpacity(0.5),
+                const SizedBox(width: 8),
+                Text(
+                  'Privé · visible uniquement par toi',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withOpacity(0.45),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: controller,
-            maxLines: 3,
-            decoration: InputDecoration(
-              hintText:
-                  'Ex: Réponds toujours en français, sois concis, utilise des listes…',
-              filled: true,
-              fillColor: scheme.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-            style: const TextStyle(fontSize: 13),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.tonal(
-              onPressed: () => onSave(controller.text.trim()),
-              child: const Text('Enregistrer'),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  onPressed: widget.onClose,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Fermer',
+                ),
+              ],
             ),
           ),
+          const Divider(height: 1),
+          // Conversation
+          Expanded(
+            child: empty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        'Posez une question à votre IA.\nElle dispose du contexte du salon.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: scheme.onSurface.withOpacity(0.4),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _listCtrl,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    itemCount: widget.history.length +
+                        (widget.thinking ? 1 : 0) +
+                        (widget.error != null ? 1 : 0),
+                    itemBuilder: (ctx, i) {
+                      if (i < widget.history.length) {
+                        final msg = widget.history[i];
+                        return _AiMessageRow(
+                          msg: msg,
+                          scheme: scheme,
+                          onUseInChat: msg.role == 'model'
+                              ? () => widget.onUseInChat(msg.text)
+                              : null,
+                        );
+                      }
+                      if (widget.thinking && i == widget.history.length) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              Text('✦',
+                                  style: TextStyle(
+                                      color: scheme.secondary, fontSize: 13)),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Réfléchit…',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: scheme.onSurface.withOpacity(0.5),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: scheme.secondary),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: scheme.errorContainer,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            widget.error ?? '',
+                            style: TextStyle(
+                                color: scheme.onErrorContainer, fontSize: 13),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          // AI input bar
+          Container(
+            padding: EdgeInsets.fromLTRB(
+                10, 6, 10, 8 + MediaQuery.of(context).padding.bottom),
+            color: scheme.surface,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: widget.inputCtrl,
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(
+                      hintText: 'Demandez à votre IA…',
+                      filled: true,
+                      fillColor: scheme.surfaceContainerHigh,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                    ),
+                    onSubmitted: widget.thinking ? null : (_) => widget.onSend(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                widget.thinking
+                    ? Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2.5, color: scheme.primary),
+                        ),
+                      )
+                    : IconButton.filled(
+                        icon: const Icon(Icons.send_rounded, size: 18),
+                        onPressed: widget.onSend,
+                        tooltip: 'Envoyer',
+                      ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── AI message row ─────────────────────────────────────────────────────────────
+
+class _AiMessageRow extends StatelessWidget {
+  final AiMessage msg;
+  final ColorScheme scheme;
+  final VoidCallback? onUseInChat;
+
+  const _AiMessageRow({
+    required this.msg,
+    required this.scheme,
+    this.onUseInChat,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isUser = msg.role == 'user';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.8,
+            ),
+            decoration: BoxDecoration(
+              color: isUser ? scheme.primary : scheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(14).copyWith(
+                bottomRight: isUser
+                    ? const Radius.circular(3)
+                    : const Radius.circular(14),
+                bottomLeft: isUser
+                    ? const Radius.circular(14)
+                    : const Radius.circular(3),
+              ),
+            ),
+            child: SelectableText(
+              msg.text,
+              style: TextStyle(
+                fontSize: 13,
+                color:
+                    isUser ? scheme.onPrimary : scheme.onSecondaryContainer,
+              ),
+            ),
+          ),
+          if (!isUser && onUseInChat != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 2),
+              child: GestureDetector(
+                onTap: onUseInChat,
+                child: Text(
+                  'Utiliser dans le chat →',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.secondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -986,12 +1199,16 @@ class _InputBar extends StatelessWidget {
   final bool sending;
   final VoidCallback onSend;
   final VoidCallback onAttach;
+  final VoidCallback onAiToggle;
+  final bool aiPanelOpen;
 
   const _InputBar({
     required this.controller,
     required this.sending,
     required this.onSend,
     required this.onAttach,
+    required this.onAiToggle,
+    required this.aiPanelOpen,
   });
 
   @override
@@ -1000,18 +1217,27 @@ class _InputBar extends StatelessWidget {
     return Container(
       color: scheme.surface,
       padding: EdgeInsets.fromLTRB(
+        4,
         8,
         8,
-        12,
         8 + MediaQuery.of(context).padding.bottom,
       ),
       child: Row(
         children: [
-          // Attach document button
+          // AI copilote toggle
           IconButton(
-            icon: const Icon(Icons.attach_file_rounded, size: 22),
-            tooltip: 'Joindre un document',
-            onPressed: onAttach,
+            icon: Text(
+              '✦',
+              style: TextStyle(
+                fontSize: 20,
+                color: aiPanelOpen
+                    ? scheme.secondary
+                    : scheme.onSurface.withOpacity(0.4),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            tooltip: 'Copilote IA personnel',
+            onPressed: onAiToggle,
           ),
           Expanded(
             child: TextField(
@@ -1020,7 +1246,7 @@ class _InputBar extends StatelessWidget {
               keyboardType: TextInputType.multiline,
               textInputAction: TextInputAction.newline,
               decoration: InputDecoration(
-                hintText: 'Message… (mentionnez @ia pour l\'IA)',
+                hintText: 'Message…',
                 filled: true,
                 fillColor: scheme.surfaceContainerHigh,
                 border: OutlineInputBorder(
@@ -1035,7 +1261,14 @@ class _InputBar extends StatelessWidget {
               onSubmitted: sending ? null : (_) => onSend(),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
+          // Attach document button
+          IconButton(
+            icon: Icon(Icons.attach_file_rounded,
+                size: 22, color: scheme.onSurface.withOpacity(0.5)),
+            tooltip: 'Joindre un document',
+            onPressed: onAttach,
+          ),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             child: sending
@@ -1090,7 +1323,7 @@ class _EmptyChat extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Envoyez un message pour démarrer.\nMentionnez @ia pour impliquer votre collègue IA.',
+              'Envoyez un message pour démarrer.\nUtilisez ❖ pour invoquer votre copilote IA privé.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.55),
@@ -1165,7 +1398,7 @@ class _MembersSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${members.length} + IA',
+                    '${members.length}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1177,26 +1410,6 @@ class _MembersSheet extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          // AI row
-          ListTile(
-            leading: CircleAvatar(
-              backgroundColor: scheme.secondaryContainer,
-              child: Text('✦',
-                  style: TextStyle(color: scheme.secondary, fontSize: 16)),
-            ),
-            title: const Text('IA Collègue',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: const Text('Toujours disponible',
-                style: TextStyle(fontSize: 12)),
-            trailing: Container(
-              width: 10,
-              height: 10,
-              decoration: const BoxDecoration(
-                color: Color(0xFF22c55e),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
           // Member list
           Expanded(
             child: ListView.builder(

@@ -144,18 +144,8 @@ router.post('/:id/messages', async (req, res) => {
         // Respond immediately so the sender doesn't wait for AI
         res.status(201).json({ message: msg });
 
-        // If the user mentioned @ia (any case), trigger the AI colleague asynchronously
-        if (/@ia\b/i.test(content)) {
-            console.log(`[rooms] @ia detected — loading history for room=${req.params.id}`);
-            const recent = await RoomMessage.find({ roomId: room._id })
-                .sort({ createdAt: -1 })
-                .limit(MAX_HISTORY_FOR_AI)
-                .lean();
-            console.log(`[rooms] @ia trigger — ${recent.length} messages in history, calling triggerRoomAI`);
-            triggerRoomAI(room.toObject(), recent.reverse(), req.params.id).catch(
-                (e) => console.error('[rooms] AI trigger error:', e)
-            );
-        }
+        // Server-side AI (@ia) is disabled — AI is now personal/client-side using each user's own key.
+        // if (/@ia\b/i.test(content)) { ... }
     } catch (err) {
         console.error('[rooms] send message error:', err);
         if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
