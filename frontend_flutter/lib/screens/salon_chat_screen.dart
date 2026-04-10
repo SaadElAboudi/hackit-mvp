@@ -1158,7 +1158,8 @@ class _MembersSheet extends StatelessWidget {
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: scheme.primaryContainer,
                     borderRadius: BorderRadius.circular(20),
@@ -1180,10 +1181,13 @@ class _MembersSheet extends StatelessWidget {
           ListTile(
             leading: CircleAvatar(
               backgroundColor: scheme.secondaryContainer,
-              child: Text('✦', style: TextStyle(color: scheme.secondary, fontSize: 16)),
+              child: Text('✦',
+                  style: TextStyle(color: scheme.secondary, fontSize: 16)),
             ),
-            title: const Text('IA Collègue', style: TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: const Text('Toujours disponible', style: TextStyle(fontSize: 12)),
+            title: const Text('IA Collègue',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('Toujours disponible',
+                style: TextStyle(fontSize: 12)),
             trailing: Container(
               width: 10,
               height: 10,
@@ -1225,7 +1229,8 @@ class _MembersSheet extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: const Color(0xFF22c55e),
                               shape: BoxShape.circle,
-                              border: Border.all(color: scheme.surface, width: 1.5),
+                              border:
+                                  Border.all(color: scheme.surface, width: 1.5),
                             ),
                           ),
                         ),
@@ -1290,7 +1295,9 @@ class _AttachDocumentSheetState extends State<_AttachDocumentSheet> {
     setState(() => _uploading = true);
     try {
       await widget.onUpload(
-        _titleCtrl.text.trim().isEmpty ? 'Document partagé' : _titleCtrl.text.trim(),
+        _titleCtrl.text.trim().isEmpty
+            ? 'Document partagé'
+            : _titleCtrl.text.trim(),
         content,
       );
       if (mounted) Navigator.of(context).pop();
@@ -1326,7 +1333,8 @@ class _AttachDocumentSheetState extends State<_AttachDocumentSheet> {
             ),
             Row(
               children: [
-                Icon(Icons.description_rounded, color: scheme.secondary, size: 20),
+                Icon(Icons.description_rounded,
+                    color: scheme.secondary, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   'Partager un document',
@@ -1345,7 +1353,8 @@ class _AttachDocumentSheetState extends State<_AttachDocumentSheet> {
                 labelText: 'Titre (optionnel)',
                 hintText: 'Ex: Cahier des charges, Note de synthèse…',
                 border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
               textCapitalization: TextCapitalization.sentences,
             ),
@@ -1360,7 +1369,8 @@ class _AttachDocumentSheetState extends State<_AttachDocumentSheet> {
                 border: const OutlineInputBorder(),
                 filled: true,
                 fillColor: scheme.surfaceContainerLow,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
             const SizedBox(height: 16),
@@ -1377,7 +1387,8 @@ class _AttachDocumentSheetState extends State<_AttachDocumentSheet> {
                         ),
                       )
                     : const Icon(Icons.send_rounded, size: 18),
-                label: Text(_uploading ? 'Envoi en cours…' : 'Partager le document'),
+                label: Text(
+                    _uploading ? 'Envoi en cours…' : 'Partager le document'),
                 onPressed: _uploading ? null : _submit,
               ),
             ),
