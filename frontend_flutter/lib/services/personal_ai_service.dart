@@ -19,9 +19,9 @@ class AiMessage {
 /// Calls the Gemini API directly from the Flutter client using the user's own
 /// personal API key. Nothing passes through the app backend.
 ///
-/// Model: gemini-2.0-flash-lite (fast, cheap, sufficient for chat assistance).
+/// Model: gemini-1.5-flash (stable, generous free tier).
 class PersonalAiService {
-  static const _model = 'gemini-2.0-flash-lite';
+  static const _model = 'gemini-1.5-flash';
   static const _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/$_model:generateContent';
 
@@ -68,13 +68,16 @@ class PersonalAiService {
         .timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 401 || response.statusCode == 403) {
-      throw Exception('Clé API invalide. Vérifie tes paramètres de profil.');
+      final msg = _extractApiError(response.body);
+      throw Exception(msg ?? 'Clé API invalide. Vérifie tes paramètres de profil.');
     }
     if (response.statusCode == 429) {
-      throw Exception('Quota Gemini dépassé. Réessaie dans quelques secondes.');
+      throw Exception(
+          'Quota Gemini dépassé. Attends quelques secondes et réessaie.');
     }
     if (response.statusCode != 200) {
-      throw Exception('Erreur Gemini (${response.statusCode}).');
+      final msg = _extractApiError(response.body);
+      throw Exception(msg ?? 'Erreur Gemini (${response.statusCode}).');
     }
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
@@ -91,16 +94,38 @@ class PersonalAiService {
 
   /// Validates the key with a minimal request. Returns null on success,
   /// or an error message string.
+  ///
+  /// A 429 (rate-limit) is treated as success: Google authenticated the key,
+  /// it is valid — the user just needs to wait before making more requests.
   static Future<String?> validateKey(String key) async {
     try {
-      final svc = PersonalAiService(apiKey: key.trim());
-      await svc.chat([], 'Réponds juste "ok"',
-          systemPrompt: 'Tu es un assistant. Réponds en un mot.');
+      final trimmed = key.trim();
+      // Basic format check before hitting the network
+      if (!trimmed.startsWith('AIza') || trimmed.length < 20) {
+        return 'La clé doit commencer par "AIza" et faire au moins 20 caractères.';
+      }
+
+      final svc = PersonalAiService(apiKey: trimmed);
+      await svc.chat([], 'ok', systemPrompt: 'Reply with one word.');
       return null; // success
     } on Exception catch (e) {
-      return e.toString().replaceFirst('Exception: ', '');
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      // 429 = key is valid, Google just rate-limited us
+      if (msg.contains('Quota') || msg.contains('429')) return null;
+      return msg;
     } catch (_) {
       return 'Erreur inattendue lors de la validation.';
+    }
+  }
+
+  /// Tries to extract a human-readable message from a Gemini error response.
+  static String? _extractApiError(String body) {
+    try {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final error = json['error'] as Map?;
+      return error?['message'] as String?;
+    } catch (_) {
+      return null;
     }
   }
 }
