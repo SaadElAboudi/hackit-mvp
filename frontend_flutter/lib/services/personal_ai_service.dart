@@ -19,9 +19,9 @@ class AiMessage {
 /// Calls the Gemini API directly from the Flutter client using the user's own
 /// personal API key. Nothing passes through the app backend.
 ///
-/// Model: gemini-1.5-flash (stable, generous free tier).
+/// Model: gemini-2.0-flash (stable, generous free tier — 15 req/min, 1500 req/day).
 class PersonalAiService {
-  static const _model = 'gemini-1.5-flash';
+  static const _model = 'gemini-2.0-flash';
   static const _baseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/$_model:generateContent';
 

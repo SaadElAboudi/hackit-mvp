@@ -88219,7 +88219,7 @@ o=A.t(h,t.z)
 o.m(0,"contents",i)
 o.m(0,"system_instruction",A.at(["parts",A.b([A.at(["text",c],h,h)],g)],h,t.xW))
 o.m(0,"generationConfig",A.at(["temperature",0.7,"maxOutputTokens",1024],h,t.Ci))
-i=A.f4("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="+p.a,0,null)
+i=A.f4("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+p.a,0,null)
 h=A.at(["Content-Type","application/json"],h,h)
 s=3
 return A.O(A.aYL(i,B.aS.uh(o,null),h).vx(0,B.nq),$async$tR)
