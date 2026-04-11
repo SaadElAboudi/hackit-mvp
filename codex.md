@@ -1,30 +1,25 @@
-# Hackit 2.0 â€” Plan produit & technique
+# Hackit 2.0 — Workspace conversationnel avec IA collègue
 
-> Workspace conversationnel avec IA collègue  
-> Dernière mise Ã  jour : 11 avril 2026
+> Dernière mise à jour : 11 avril 2026
 
 ---
 
 ## Résumé
 
-Le socle temps réel (Rooms/Salons) est fonctionnel, mais le produit est fragmenté :
-- un chat collaboratif sans IA partagée
-- une IA privée en panneau latéral (BYOK supprimé)
-- un moteur de recherche backend plus mature que le frontend
-- des modèles `Thread/Version/RoomArtifact` définis mais pas encore exposés côté UI
+Le socle temps réel `Salons` est déjà réel et utile, mais le produit était fragmenté entre un chat collaboratif, une IA privée en panneau latéral, un backend de recherche plus mature que le frontend, et un embryon `Thread/Version` non exposé.
 
-**Décision produit :** faire de Hackit un **ChatGPT collaboratif pour pros** â€” des channels partageables oÃ¹ l'IA est un coéquipier visible par tous, capable de discuter, synthétiser, transformer un échange en document et enrichir le channel avec de la recherche sourcée.
+**Décision produit :** faire de Hackit un **ChatGPT collaboratif pour pros**, centré sur des **channels partageables**, où l'IA est un **coéquipier visible par tous** quand on la sollicite, capable de discuter, synthétiser, transformer un échange en document, et enrichir le channel avec de la recherche sourcée.
 
 **Positionnement :** _"un channel = une équipe, un contexte, une mémoire, une IA collègue"_
 
-**Critère de succès v1 :** créer un channel, inviter quelqu'un, obtenir en moins de 3 minutes un premier livrable partagé, révisable et traÃ§able par toute l'équipe.
+**Critère de succès v1 :** créer un channel, inviter quelqu'un, obtenir en moins de 3 minutes un premier livrable partagé, révisable et traçable par toute l'équipe.
 
 ---
 
 ## Spécification fonctionnelle
 
 ### Objet principal
-Le produit n'est plus un _"chat privé avec option partage"_, mais un **channel partagé** avec membres, présence, historique, mémoire et IA commune.
+Le produit n'est plus un "chat privé avec option partage", mais un **channel partagé** avec membres, présence, historique, mémoire et IA commune.
 
 ### Modes IA
 | Mode | Description | Priorité |
@@ -32,10 +27,14 @@ Le produit n'est plus un _"chat privé avec option partage"_, mais un **channel 
 | **Shared AI** | Réponses visibles par tous dans le channel | MVP |
 | **Private Draft** | Brouillon personnel avant envoi | Post-MVP |
 
-### Commandes coeur
+### Commandes cœur
 | Commande | Action |
 |---|---|
-| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| `@ia` | L'| décisions, risques et next steps |
+| `@ia` | L'IA répond dans le channel, visible de tous |
+| `/doc` | Transformer un échange en document/canvas partagé |
+| `/mission` | Assigner une tâche cadrée à l'IA |
+| `/search` | Lancer une recherche sourcée dans le channel |
+| `/decide` | Extraire décisions, risques et next steps |
 
 ### Types d'artefacts
 - Messages de conversation (`text`, `ai`, `system`)
@@ -45,12 +44,26 @@ Le produit n'est plus un _"chat privé avec option partage"_, mais un **channel 
 - Mémoire épinglée de channel
 
 ### Parcours utilisateur cible
-1. Créer 1. Créer 1. Créer 1. Créer 1. Créer 1. Créer 1. Créer 1. Créer 1. Créer 1.avec `@ia` ou `/commande`
+1. Créer un channel
+2. Inviter des membres
+3. Échanger en temps réel
+4. Interpeller l'IA avec `@ia` ou `/commande`
 5. Générer un document partagé (`/doc`)
-6. Commenter / 6. Commenter / 6. Commenter / 6. r une révision IA
+6. Commenter / challenger ce document
+7. Demander une révision IA
 8. Conserver une version validée
-9. Réutiliser la mémoire et les9. Réutiliser la mémoire et les9. Réutiliser la mémoire et le"en9. Réutiliser nterv9. Réutiliser la mÃmention, com9. Réutiliser la mémoire et les9. Réutiliser la mémoire et les9. Réutiliser la mémoire et le"en9. Réutiliser nterv9. Réutiliser la mÃmention, com9. Réutiliser la mémoire et les9. Réutiliser la mémoire et les9. Réutiliser la mémoire et le"en9. Réutiliser nterv9. Réutiliser la mÃmention, com9. Réutiliser la l'a9. Réutiliser la mÃt/Thread/Version` (dépendance `Project` absente, non routé)
-- Réutiliser les idées `Thread/Version` via des objets **room-scoped**
+9. Réutiliser la mémoire et les sources du channel
+
+### Règle d'autonomie
+L'IA n'agit jamais "en douce" ; elle intervient sur mention, commande ou mission explicite, puis propose des actions structurées à valider.
+
+---
+
+## Spécification technique
+
+### Architecture
+- Conserver `rooms` comme socle backend v1 pour ne pas casser l'existant, mais exposer le mot **Channels** côté produit/UI.
+- Ne pas réactiver le vieux chemin `Project/Thread/Version` : il dépend d'un `Project` absent et n'est pas routé. Réutiliser ses bonnes idées via des objets **room-scoped**.
 
 ### Modèles de données
 
@@ -58,15 +71,67 @@ Le produit n'est plus un _"chat privé avec option partage"_, mais un **channel 
 ```ts
 {
   id, name, description,
-  purpose: string,          purpose: string,          pity: 'public'|'private',  // ajouté
-  ownerId: string,                 // ajouté
-  pinnedArtifactId?: string,       //  pinnedArtifactId?: string,       //  pi    pinnedArtifactId?: strinber[],
+  purpose: string,
+  visibility: 'public' | 'private',
+  ownerId: string,
+  pinnedArtifactId?: string,
+  lastActivityAt: Date,
+  members: Member[],
   createdAt: Date
 }
 ```
 
-#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#### Room#### nd# s#### Room#### Room#### Room#### Room#### nd#### Room#### Room#### Room#`ts#### id, roomId, content,
-  type: 'fact'|'de  type: 'fact'|'de  typ createdBy: string,
+#### RoomMessage
+```ts
+{
+  id, roomId, senderId, senderName,
+  isAI: boolean,
+  content: string,
+  type: 'text' | 'ai' | 'artifact' | 'research' | 'decision' | 'system',
+  createdAt: Date
+}
+```
+
+#### RoomArtifact
+```ts
+{
+  id, roomId, title, content,
+  type: 'document' | 'canvas',
+  currentVersion: number,
+  createdBy: string,
+  createdAt: Date
+}
+```
+
+#### ArtifactVersion
+```ts
+{
+  id, artifactId, roomId,
+  content: string,
+  version: number,
+  sourcePrompt?: string,
+  status: 'draft' | 'validated',
+  createdBy: string,
+  createdAt: Date
+}
+```
+
+#### RoomMission
+```ts
+{
+  id, roomId, prompt,
+  status: 'queued' | 'running' | 'done' | 'failed',
+  createdBy: string,
+  createdAt: Date
+}
+```
+
+#### RoomMemory
+```ts
+{
+  id, roomId, content,
+  type: 'fact' | 'decision' | 'preference',
+  createdBy: string,
   createdAt: Date
 }
 ```
@@ -77,99 +142,125 @@ Le produit n'est plus un _"chat privé avec option partage"_, mais un **channel 
 |---|---|---|
 | `GET/POST` | `/api/rooms` | Lister / créer un channel |
 | `GET` | `/api/rooms/:id/messages` | Historique |
-| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench| `POST` | `/api/rooms/:id/messages` | Envoyer (déd/invite` | Lien d'invitati| `POST` | `/api/rooms/:id/messages` | Envoyer (déclench|---| `POST` | `/apiNouveau message |
+| `POST` | `/api/rooms/:id/messages` | Envoyer (déclenche orchestrateur IA si mention/commande) |
+| `GET/POST` | `/api/rooms/:id/artifacts` | Artefacts du channel |
+| `GET/POST` | `/api/rooms/:id/missions` | Missions IA |
+| `GET/POST` | `/api/rooms/:id/memory` | Mémoire épinglée |
+| `GET` | `/api/rooms/:id/search` | Recherche dans le channel |
+| `GET` | `/api/rooms/:id/decisions` | Décisions extraites |
+| `POST` | `/api/rooms/:id/invite` | Lien d'invitation |
+
+### Events WebSocket
+| Event | Description |
+|---|---|
+| `message` | Nouveau message (user ou IA) |
+| `message_chunk` | Fragment de réponse IA en streaming |
 | `typing` | Indicateur de saisie |
-| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pfact c| `pres| `pres| `prex| `pres| `pres| `prex|ted` | N| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pfact c| `pres| `pres| `prex| `pres| `pres| `prex|ted` | N| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pfact c| `pres| `pres| `prex| `pres| `pres| `prex|ted` | N| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pfact c| `pres| `pres| `prex| `pres| `pres| `prex|ted` | N| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pfact c| `pres| `pres| `prex| `pres| `pres| `prex|ted` | N| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pfact c| `pres| `pres| `prex| `pres| `pres| `prex|ted` | N| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pres| `prex| `pres| `pfact c| `pres| `pres| `prex| `pres| `pres| `prex|ted` | N| `pres| `pres| `prex| `pres| `pres| `prex|l'IA a répondu et sur quelle base
+| `presence` | Connexion/déconnexion d'un membre |
+| `artifact_created` | Nouvel artefact dans le channel |
+| `artifact_version_created` | Nouvelle version d'un artefact |
+| `mission_status` | Changement de statut d'une mission |
+| `decision_created` | Décision extraite par l'IA |
+| `research_attached` | Résultats de recherche joints au channel |
+
+### Frontend
+- Layout desktop-first en 3 panneaux : liste des channels · conversation · panneau contextuel (artifacts/memory/members)
+- Composer enrichi avec mentions `@` et slash commands `/`
+- Vue "Canvas" par channel (lecture + révision)
+- Cartes de recherche et citations dans le flux du channel, pas dans une feature isolée
+
+### Garde-fous
+- Identité anonyme + invitations pour MVP
+- Rôles simples `owner / member / guest`
+- Audit log minimal des actions IA
+- Message système expliquant pourquoi l'IA a répondu et sur quelle base
 
 ---
 
-## Ã‰tat d'avancement (11 avril 2026)
+## État d'avancement (11 avril 2026)
 
-### Backend â€” Implémenté âœ…
-- `Room.js` â€” champs étendus (`purpose`, `visibility`, `ownerId`, `lastActivityAt`)
-- `RoomMessage.js` â€” types étendus
-- `RoomArtifact.js` + `ArtifactVersion.js` â€” modèles créés
-- `RoomMission.js` + `RoomMemory.js` â€” modèles créés
-- `roomOrchestrator.js` â€” orchestrateur unifié branché (`triggerRoomAutomation`, `parseRoomCommand`, handlers par commande)
-- `rooms.js` â€” routes `/artifacts`, `/missions`, `/memory`, `/decisions`, `/search`, `/invite`
-- `roomWS.js` â€” events normalisés, orchestrateur intégré
-- `/api/ai/chat` â€” endpoint copilote privé (backup, via `gemini-2.0-flash-lite`)
+### Backend ✅
+- `Room.js` — champs étendus (`purpose`, `visibility`, `ownerId`, `lastActivityAt`)
+- `RoomMessage.js` — types étendus
+- `RoomArtifact.js` + `ArtifactVersion.js` — modèles créés
+- `RoomMission.js` + `RoomMemory.js` — modèles créés
+- `roomOrchestrator.js` — orchestrateur unifié (`triggerRoomAutomation`, `parseRoomCommand`, handlers par commande, streaming avec `tryGeminiStreaming`)
+- `gemini.js` — `streamWithGemini()` via SSE `?alt=sse`, throttle 80ms
+- `roomWS.js` — events normalisés + `broadcastRoomMessageChunk()`
+- `rooms.js` — routes `/artifacts`, `/missions`, `/memory`, `/decisions`, `/search`, `/invite` ; permissions `isRoomOwner` sur add-member, owner-or-creator sur delete-memory
+- `/api/ai/chat` — endpoint copilote privé (backup, via `gemini-2.0-flash-lite`)
 
-### Flutter â€” Implémenté âœ…
-- `room.dart` â€” modèle mis Ã  jour
-- `room_provider.dart` â€” nouveaux events WS gérés
-- `room_service.dart` â€” appels API artifacts/missions/memory
-- `salon_chat_screen.dart` â€” support `@ia` + `/commandes`
-- `salons_screen.dart` â€” renommage UI "Channels"
-
-### Non encore implémenté âŒ
-**********************************es ré************************réponse **********************************es ré************************réponse ********les `o**********************************eutorisation par room
-
-**Flutter :**
-- Modèles Dart `RoomArtifact`, `ArtifactVersion`, `RoomMission`, `RoomMemory`
-- Layout 3 panneaux (liste / conversation / panneau contextuel)
-- Widgets `ArtifactCard`, `ResearchCard`, `DecisionCard`, `MissionCard`
-- Vue Canvas (affichage + révision d'artefact)
-- Composer avec autocomplete `@mention` et `/slash`
-- Rebuild web + redéploiement gh-pages
+### Flutter ✅
+- `room.dart` — modèles `Room`, `RoomMessage`, `RoomArtifact`, `RoomMission`, `RoomMemory` ; `WsRoomEventType` incl. `messageChunk` avec getters `tempId`/`delta`
+- `room_provider.dart` — handlers WS : `message`, `messageChunk` (streaming placeholder), `typing`, `artifact`, `mission`, `memory`, `decision`
+- `room_service.dart` — appels API artifacts/missions/memory ; `postMission()`
+- `salon_chat_screen.dart` — support `@ia` + `/commandes`, `_showLaunchMissionDialog`, `_SystemEventChip`
+- `salons_screen.dart` — renommage UI "Channels"
 
 ---
 
 ## Feuille de route
 
-### Phase 0 â€” Réalignement produit âœ… _terminée_
-- Naming "Channels" en UI
-- Suppression BYOK (clé Gemini côté utilisateur)
-- IA routée via backend
+### Phase 0 — Réalignement produit ✅ _terminée_
+- [x] Naming "Channels" en UI
+- [x] Suppression BYOK (clé Gemini côté utilisateur)
+- [x] IA routée via backend
 
-### Phase 1 â€” Shared AI MVP ðŸ”„ _en cours_
+### Phase 1 — Shared AI MVP ✅ _terminée_
 > Objectif : `@ia` répond dans le channel, visible par tous
 
 - [x] Orchestrateur backend
 - [x] Parsing commandes côté serveur
 - [x] Persistance messages IA dans le channel
-- [ ] Streaming WS des réponses IA
-- [ ] `POST /missions` côté client Flutter
-- [ ] Middleware rôles/permissions
-- [ ] Modèles Dart `RoomArtifact`, `RoomMission`, `RoomMemory`
-- [ ] Rebuild Flutter + déploiement
+- [x] Streaming WS des réponses IA (`message_chunk` events, throttle 80ms, fallback non-streaming → heuristique)
+- [x] `POST /missions` côté client Flutter (`postMission` / `createMission` / dialog)
+- [x] Middleware rôles/permissions (`isRoomOwner` sur add-member, owner-or-creator sur delete-memory)
+- [x] Modèles Dart `RoomArtifact`, `RoomMission`, `RoomMemory`
+- [x] Rebuild Flutter + déploiement (`54d53da` gh-pages, `fe8799c` main)
 
-### Phase 2 â€” Canvas et versioning
+### Phase 2 — Canvas et versioning 🔜 _à démarrer_
 > Objectif : `/doc` crée un canvas versionné partagé
 
-- [ ] Vue Canvas Flutter (lecture + révision)
-- [ ] Widget artefact dans le flux de messages- [ ] Widget artefact dans le flux de messages- [ ] Widget artefact daact_version_created`
+- [ ] Vue Canvas Flutter (lecture + révision d'artefact)
+- [ ] Widget `ArtifactCard` dans le flux de messages
+- [ ] Composer `/doc` → crée `RoomArtifact` + `ArtifactVersion`
+- [ ] Système de commentaires / challenges sur un artefact
+- [ ] Révision IA d'un artefact → nouvelle `ArtifactVersion`
+- [ ] Version validée consultable (historique versions)
+- [ ] Panneau contextuel droit (artifacts / memory / members)
+- [ ] Event WS `artifact_version_created` branché côté Flutter
 
-### Phase 3 â€” Recherche collaborative
+### Phase 3 — Recherche collaborative
 > Objectif : `/search` insère des cartes sourcées dans le channel
 
-- [ ] Brancher mo- [ ] Brancher mo-cri- [ ] Brancher mo- [ ] Brancher mo-cri- [ ] Brancherment implémenté)
+- [ ] Brancher le moteur search/transcript/citations existant dans les channels
 - [ ] Widget `ResearchCard` avec citations cliquables
 - [ ] Mémoire du channel alimentée par artefacts et décisions
 - [ ] "Jump to source" dans le flux
+- [ ] Event WS `research_attached` côté Flutter
 
-### Phase 4 â€” Proactivité contrôlée _(post-PMF)_
-- Suggestions de synthèse automatiques
-- Briefs avant réunion
-- Intégrations Notion / Slack / Drive
-- Agents spécialisés par mission
-
----
-
-## Scénarios de test cibles
-
-| Scénario | Critère de succès |
-|---||---||---||---||---||---||---||---||---||---||---||---||---||-, |---||---||---||---||---||---||---|'artefact |
-| `/doc` | Crée un artefact versionné sans écraser l'historique |
-| Révision après challenge | Nouvelle version créée, ancienne consultable |
-| `/search` | Sources cliquables, horodatées, traÃ§ables dans le flux |
-| Mémoire | Influence les réponses suivantes, inspectable et supprimable |
-| Permissions | Non-membre ne peut pas accéder Ã  l'historique, aux artefacts ni aux missions |
-| Réseau | Reconnexion WS, déduplication messages, retry IA couverts par tests |
+### Phase 4 — Proactivité contrôlée (post-PMF)
+- [ ] Suggestions de synthèse automatiques
+- [ ] Briefs automatiques avant réunion
+- [ ] Intégrations Notion / Slack / Drive
+- [ ] Agents spécialisés par mission
 
 ---
 
-## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## #te## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## #te## ## re## ## ## ## ## ## ## ## ## ## ## #te |
-| Autonomie IA | Sur demande uniquement (MVP) |
-| No| No| No| No| No| No| No| No| No| No| er| No| No| No| No| No| he| No| No| No| No| No| No| No| No| No|apacité collaborative, pas abandonnée |
-| Clé API Gemini | Côté back| Clé API Gemini | Côté back| Cé client |
+## Tests et scénarios cibles
+- Deux utilisateurs dans un même channel voient la même réponse `@ia`, le même typing indicator, la même version de document et les mêmes commentaires.
+- Une commande `/doc` crée un artefact versionné sans écraser l'historique.
+- Une révision IA après challenge crée une nouvelle version et garde la précédente consultable.
+- Une commande `/search` joint au channel des sources cliquables, horodatées et traçables.
+- La mémoire du channel influence les réponses suivantes, mais peut être inspectée et supprimée.
+- Les permissions empêchent un non-membre d'accéder à l'historique, aux artefacts et aux missions.
+- Reconnexion WebSocket, duplication de messages et retry IA sont couverts par tests d'intégration.
+
+---
+
+## Hypothèses et choix par défaut
+- Cible prioritaire : **grand public pro**
+- Surface prioritaire : **web desktop-first**, mobile ensuite
+- Modèle d'autonomie : **IA sur demande uniquement** dans le MVP
+- Nommage produit : **Channels** en UI, `rooms` conservé en backend tant que la migration n'apporte pas de valeur claire
+- La recherche existante n'est pas abandonnée : elle devient une **capabilité collaborative** intégrée au channel, ce qui différencie Hackit d'un simple clone de ChatGPT
