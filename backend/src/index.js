@@ -2013,6 +2013,7 @@ app.use('/api/rooms', roomsRouter);
 // ── Personal AI copilot ────────────────────────────────────────────────────────
 // POST /api/ai/chat — proxies the user's conversation to Gemini using the
 // server-side GEMINI_API_KEY. No key is ever stored or transmitted by the client.
+// Uses gemini-2.0-flash-lite (30 RPM free tier) with up to 2 retries on 429.
 app.post('/api/ai/chat', async (req, res) => {
   try {
     const { message, history = [], systemPrompt } = req.body;
@@ -2039,11 +2040,30 @@ app.post('/api/ai/chat', async (req, res) => {
       generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
     };
 
-    const geminiRes = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      body,
-      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
-    );
+    // gemini-2.0-flash-lite: 30 RPM on free tier (2× more than flash).
+    // Retry up to 2 extra times on 429 with incremental back-off.
+    const aiChatUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`;
+    let geminiRes;
+    for (let attempt = 0; attempt <= 2; attempt++) {
+      try {
+        geminiRes = await axios.post(aiChatUrl, body, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 30000,
+        });
+        break; // success — exit retry loop
+      } catch (e) {
+        const status = e.response?.status;
+        const geminiMsg = e.response?.data?.error?.message ?? e.message;
+        if (status === 429 && attempt < 2) {
+          console.warn(`[ai/chat] 429 on attempt ${attempt + 1}, retrying in ${(attempt + 1) * 1500}ms — ${geminiMsg}`);
+          await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));
+          continue;
+        }
+        // Log full Gemini error detail to help diagnose quota=0 vs rate-limit
+        console.error(`[ai/chat] Gemini error (attempt ${attempt + 1}, HTTP ${status}):`, geminiMsg);
+        throw e;
+      }
+    }
 
     const parts = geminiRes.data?.candidates?.[0]?.content?.parts ?? [];
     const reply = parts[0]?.text ?? '';
