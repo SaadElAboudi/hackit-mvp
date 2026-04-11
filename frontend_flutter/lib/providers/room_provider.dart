@@ -412,6 +412,19 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> createMission(String prompt) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    try {
+      await _svc.postMission(room.id, prompt);
+      aiThinking = true;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Invite link ────────────────────────────────────────────────────────────────
 
   Future<String?> getInviteLink() async {

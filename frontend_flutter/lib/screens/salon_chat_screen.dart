@@ -174,6 +174,49 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     });
   }
 
+  Future<void> _showLaunchMissionDialog() async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Lancer une mission IA'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText:
+                'Ex: Rédige une stratégie go-to-market pour notre produit…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim().isNotEmpty),
+            child: const Text('Lancer'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      final success =
+          await context.read<RoomProvider>().createMission(ctrl.text.trim());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success ? 'Mission lancée ✦' : 'Impossible de lancer la mission',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _showReviseArtifactDialog(RoomArtifact artifact) async {
     final ctrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -360,6 +403,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   onlineUserIds: prov.onlineUserIds,
                   onInsertCommand: _insertCommand,
                   onReviseArtifact: _showReviseArtifactDialog,
+                  onLaunchMission: _showLaunchMissionDialog,
                 ),
               ),
             ],
@@ -520,6 +564,9 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.isSystem) {
+      return _SystemEventChip(message: message);
+    }
     if (message.isResearch) {
       return _ResearchCard(message: message);
     }
@@ -853,6 +900,39 @@ class _DocumentCardState extends State<_DocumentCard> {
     }
   }
 }
+
+// ── System event chip ─────────────────────────────────────────────────────────
+
+class _SystemEventChip extends StatelessWidget {
+  final RoomMessage message;
+  const _SystemEventChip({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            message.content,
+            style: TextStyle(
+              fontSize: 11,
+              color: scheme.onSurface.withOpacity(0.55),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Research card ─────────────────────────────────────────────────────────────
 
 class _ResearchCard extends StatelessWidget {
   final RoomMessage message;
@@ -1325,6 +1405,7 @@ class _ContextPanel extends StatelessWidget {
   final List<String> onlineUserIds;
   final void Function(String command) onInsertCommand;
   final Future<void> Function(RoomArtifact artifact) onReviseArtifact;
+  final VoidCallback onLaunchMission;
 
   const _ContextPanel({
     required this.room,
@@ -1334,6 +1415,7 @@ class _ContextPanel extends StatelessWidget {
     required this.onlineUserIds,
     required this.onInsertCommand,
     required this.onReviseArtifact,
+    required this.onLaunchMission,
   });
 
   @override
@@ -1502,6 +1584,10 @@ class _ContextPanel extends StatelessWidget {
               FilledButton.tonal(
                 onPressed: () => onInsertCommand('/decide'),
                 child: const Text('Synthèse de décision'),
+              ),
+              FilledButton.tonal(
+                onPressed: onLaunchMission,
+                child: const Text('Lancer une mission IA'),
               ),
             ],
           ),

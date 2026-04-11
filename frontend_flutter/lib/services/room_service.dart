@@ -227,6 +227,10 @@ class RoomService {
         .toList();
   }
 
+  Future<void> postMission(String roomId, String prompt) async {
+    await _post('/api/rooms/$roomId/missions', {'prompt': prompt});
+  }
+
   Future<RoomArtifact> createArtifact(
     String roomId, {
     required String title,
