@@ -29,11 +29,16 @@ const RoomMessageSchema = new mongoose.Schema(
     senderName: { type: String, required: true },   // displayName or 'IA'
     isAI: { type: Boolean, default: false },
     content: { type: String, required: true, trim: true },
-    // 'text' for regular chat messages, 'document' for structured AI deliverables
-    type: { type: String, enum: ['text', 'document'], default: 'text' },
+    // Message shape used by Channels: text, AI reply, artifact, research, decision or system
+    type: {
+      type: String,
+      enum: ['text', 'ai', 'artifact', 'research', 'decision', 'system', 'document'],
+      default: 'text',
+    },
     documentTitle: { type: String, trim: true, maxlength: 200 },
     // Comments / challenges on a document, added by any member
     challenges: { type: [ChallengeSchema], default: [] },
+    data: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );

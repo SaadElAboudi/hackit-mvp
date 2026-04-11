@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../screens/salons_screen.dart';
 
-/// Single-tab root: only the Salons experience.
+/// Single-tab root: only the Channels experience for now.
 /// The former "Recherche" tab has been removed.
 class RootTabs extends StatelessWidget {
   const RootTabs({super.key});

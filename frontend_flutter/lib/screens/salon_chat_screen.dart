@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/room.dart';
 import '../providers/room_provider.dart';
-import '../services/personal_ai_service.dart';
 import '../services/project_service.dart' show ProjectService;
 import '../utils/web_download.dart';
 import 'profile_screen.dart';
@@ -29,11 +28,6 @@ class SalonChatScreen extends StatefulWidget {
 class _SalonChatScreenState extends State<SalonChatScreen> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  bool _aiPanelOpen = false;
-  final _aiInputCtrl = TextEditingController();
-  final List<AiMessage> _aiHistory = [];
-  bool _aiThinking = false;
-  String? _aiError;
   bool _isAtBottom = true; // track whether user is near the bottom
   String get _myUserId => ProjectService.currentUserId ?? '';
   String get _displayName {
@@ -60,7 +54,6 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   @override
   void dispose() {
     _inputCtrl.dispose();
-    _aiInputCtrl.dispose();
     _scrollCtrl.dispose();
     context.read<RoomProvider>().closeRoom();
     super.dispose();
@@ -117,8 +110,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       return;
     }
     await Share.share(
-      'Rejoins le salon "${room.name}" sur HackIt :\n$link',
-      subject: 'Invitation au salon ${room.name}',
+      'Rejoins le channel "${room.name}" sur HackIt :\n$link',
+      subject: 'Invitation au channel ${room.name}',
     );
   }
 
@@ -172,42 +165,139 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
-  Future<void> _sendToAi() async {
-    final text = _aiInputCtrl.text.trim();
-    if (text.isEmpty) return;
-    _aiInputCtrl.clear();
-    final userMsg = AiMessage(role: 'user', text: text);
+  void _insertCommand(String command) {
+    final current = _inputCtrl.text.trim();
+    final next = current.isEmpty ? '$command ' : '$command $current';
     setState(() {
-      _aiHistory.add(userMsg);
-      _aiThinking = true;
-      _aiError = null;
+      _inputCtrl.text = next;
+      _inputCtrl.selection = TextSelection.collapsed(offset: next.length);
     });
-    try {
-      final prov = context.read<RoomProvider>();
-      final msgs = prov.messages;
-      final recent = msgs.length > 15 ? msgs.sublist(msgs.length - 15) : msgs;
-      final ctxLines =
-          recent.map((m) => '${m.senderName}: ${m.content}').join('\n');
-      final systemPrompt = 'Tu es un assistant IA personnel et confidentiel. '
-          'Seul l\'utilisateur te voit.\n\n'
-          'Contexte du salon (derniers messages) :\n$ctxLines\n\n'
-          'Aide l\'utilisateur à réfléchir, rédiger ou analyser. '
-          'Réponds de façon concise et en français.';
-      final svc = PersonalAiService();
-      final reply =
-          await svc.chat(_aiHistory, text, systemPrompt: systemPrompt);
+  }
+
+  Future<void> _showReviseArtifactDialog(RoomArtifact artifact) async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Réviser "${artifact.title}"'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText:
+                'Ex: ajoute les risques, rends le plus concret, prépare une v2 client…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim().isNotEmpty),
+            child: const Text('Lancer la révision'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      final success = await context
+          .read<RoomProvider>()
+          .reviseArtifact(artifact.id, ctrl.text.trim());
       if (!mounted) return;
-      setState(() {
-        _aiHistory.add(AiMessage(role: 'model', text: reply));
-        _aiThinking = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _aiThinking = false;
-        _aiError = e.toString().replaceFirst('Exception: ', '');
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success ? 'Révision IA lancée' : 'Impossible de lancer la révision',
+          ),
+        ),
+      );
     }
+  }
+
+  Widget _buildConversationList(
+      RoomProvider prov, Room room, ColorScheme scheme) {
+    if (prov.loadingMessages) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (prov.messages.isEmpty && !prov.aiThinking) {
+      return _EmptyChat(roomName: room.name);
+    }
+
+    return ListView.builder(
+      controller: _scrollCtrl,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      itemCount: prov.messages.length + (prov.aiThinking ? 1 : 0),
+      itemBuilder: (ctx, i) {
+        if (i == prov.messages.length) {
+          return _AITypingBubble(scheme: scheme);
+        }
+        final msg = prov.messages[i];
+        final isMe = msg.senderId == _myUserId;
+        return _MessageBubble(
+          message: msg,
+          isMe: isMe,
+          onChallenge: msg.isDocument
+              ? (content) => prov.addChallenge(
+                    msg.id,
+                    content,
+                    displayName: _displayName,
+                  )
+              : null,
+          onExport: msg.isDocument
+              ? (content, title) => _exportDocument(content, title)
+              : null,
+        );
+      },
+    );
+  }
+
+  Widget _buildConversationColumn(
+    BuildContext context,
+    Room room,
+    RoomProvider prov,
+    ColorScheme scheme, {
+    required bool showContextPanel,
+  }) {
+    return Column(
+      children: [
+        if (prov.wsReconnecting)
+          Container(
+            color: Colors.orange.shade800,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+            child: const Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Reconnexion en cours…',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        _CommandQuickBar(onInsertCommand: _insertCommand),
+        Expanded(child: _buildConversationList(prov, room, scheme)),
+        _InputBar(
+          controller: _inputCtrl,
+          sending: prov.sendingMessage,
+          onSend: _send,
+          onAttach: _showAttachDialog,
+        ),
+      ],
+    );
   }
 
   @override
@@ -227,100 +317,54 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: _buildAppBar(context, room, scheme),
-      body: Column(
-        children: [
-          // Reconnecting banner
-          if (prov.wsReconnecting)
-            Container(
-              color: Colors.orange.shade800,
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-              child: const Row(
-                children: [
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final showContextPanel = constraints.maxWidth >= 1080;
+          if (!showContextPanel) {
+            return _buildConversationColumn(
+              context,
+              room,
+              prov,
+              scheme,
+              showContextPanel: false,
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(
+                flex: 5,
+                child: _buildConversationColumn(
+                  context,
+                  room,
+                  prov,
+                  scheme,
+                  showContextPanel: true,
+                ),
+              ),
+              Container(
+                width: 340,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLowest,
+                  border: Border(
+                    left: BorderSide(
+                      color: scheme.outlineVariant.withOpacity(0.35),
                     ),
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Reconnexion en cours…',
-                    style: TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                ],
+                ),
+                child: _ContextPanel(
+                  room: room,
+                  artifacts: prov.artifacts,
+                  memoryItems: prov.memoryItems,
+                  missions: prov.missions,
+                  onlineUserIds: prov.onlineUserIds,
+                  onInsertCommand: _insertCommand,
+                  onReviseArtifact: _showReviseArtifactDialog,
+                ),
               ),
-            ),
-
-          // Message list
-          Expanded(
-            child: prov.loadingMessages
-                ? const Center(child: CircularProgressIndicator())
-                : prov.messages.isEmpty && !prov.aiThinking
-                    ? _EmptyChat(roomName: room.name)
-                    : ListView.builder(
-                        controller: _scrollCtrl,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
-                        itemCount:
-                            prov.messages.length + (prov.aiThinking ? 1 : 0),
-                        itemBuilder: (ctx, i) {
-                          if (i == prov.messages.length) {
-                            return _AITypingBubble(scheme: scheme);
-                          }
-                          final msg = prov.messages[i];
-                          final isMe = msg.senderId == _myUserId;
-                          return _MessageBubble(
-                            message: msg,
-                            isMe: isMe,
-                            onChallenge: msg.isDocument
-                                ? (content) => prov.addChallenge(
-                                      msg.id,
-                                      content,
-                                      displayName: _displayName,
-                                    )
-                                : null,
-                            onExport: msg.isDocument
-                                ? (content, title) =>
-                                    _exportDocument(content, title)
-                                : null,
-                          );
-                        },
-                      ),
-          ),
-
-          // Personal AI panel (private, collapsible)
-          AnimatedSize(
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeInOut,
-            child: _aiPanelOpen
-                ? _AiPanel(
-                    history: _aiHistory,
-                    thinking: _aiThinking,
-                    error: _aiError,
-                    inputCtrl: _aiInputCtrl,
-                    onSend: _sendToAi,
-                    onClose: () => setState(() => _aiPanelOpen = false),
-                    onUseInChat: (text) {
-                      _aiInputCtrl.clear();
-                      _inputCtrl.text = text;
-                    },
-                  )
-                : const SizedBox.shrink(),
-          ),
-
-          // Input bar
-          _InputBar(
-            controller: _inputCtrl,
-            sending: prov.sendingMessage,
-            onSend: _send,
-            onAttach: _showAttachDialog,
-            onAiToggle: () => setState(() => _aiPanelOpen = !_aiPanelOpen),
-            aiPanelOpen: _aiPanelOpen,
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -360,6 +404,16 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         fontWeight: FontWeight.bold, fontSize: 16),
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (room.purpose.isNotEmpty)
+                    Text(
+                      room.purpose,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withOpacity(0.45),
+                      ),
+                    ),
                   Row(
                     children: [
                       Text(
@@ -415,7 +469,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
         // Share / Invite
         IconButton(
           icon: const Icon(Icons.ios_share_rounded),
-          tooltip: 'Partager le salon',
+          tooltip: 'Partager le channel',
           onPressed: _share,
         ),
       ],
@@ -449,306 +503,6 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   }
 }
 
-// ── Personal AI panel ─────────────────────────────────────────────────────────
-
-class _AiPanel extends StatefulWidget {
-  final List<AiMessage> history;
-  final bool thinking;
-  final String? error;
-  final TextEditingController inputCtrl;
-  final VoidCallback onSend;
-  final VoidCallback onClose;
-  final void Function(String text) onUseInChat;
-
-  const _AiPanel({
-    required this.history,
-    required this.thinking,
-    this.error,
-    required this.inputCtrl,
-    required this.onSend,
-    required this.onClose,
-    required this.onUseInChat,
-  });
-
-  @override
-  State<_AiPanel> createState() => _AiPanelState();
-}
-
-class _AiPanelState extends State<_AiPanel> {
-  final _listCtrl = ScrollController();
-
-  @override
-  void dispose() {
-    _listCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(_AiPanel old) {
-    super.didUpdateWidget(old);
-    if (widget.history.length != old.history.length ||
-        widget.thinking != old.thinking) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_listCtrl.hasClients) {
-          _listCtrl.animateTo(
-            _listCtrl.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final empty =
-        widget.history.isEmpty && !widget.thinking && widget.error == null;
-    return Container(
-      height: 320,
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        border: Border(
-          top: BorderSide(color: scheme.secondaryContainer, width: 1.5),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 8, 4, 4),
-            child: Row(
-              children: [
-                Text('✦',
-                    style: TextStyle(color: scheme.secondary, fontSize: 16)),
-                const SizedBox(width: 8),
-                Text(
-                  'Copilote IA',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: scheme.onSurface,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Privé · visible uniquement par toi',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.onSurface.withOpacity(0.45),
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  onPressed: widget.onClose,
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Fermer',
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          // Conversation
-          Expanded(
-            child: empty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Text(
-                        'Posez une question à votre IA.\nElle dispose du contexte du salon.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: scheme.onSurface.withOpacity(0.4),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _listCtrl,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: widget.history.length +
-                        (widget.thinking ? 1 : 0) +
-                        (widget.error != null ? 1 : 0),
-                    itemBuilder: (ctx, i) {
-                      if (i < widget.history.length) {
-                        final msg = widget.history[i];
-                        return _AiMessageRow(
-                          msg: msg,
-                          scheme: scheme,
-                          onUseInChat: msg.role == 'model'
-                              ? () => widget.onUseInChat(msg.text)
-                              : null,
-                        );
-                      }
-                      if (widget.thinking && i == widget.history.length) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            children: [
-                              Text('✦',
-                                  style: TextStyle(
-                                      color: scheme.secondary, fontSize: 13)),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Réfléchit…',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: scheme.onSurface.withOpacity(0.5),
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: scheme.secondary),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: scheme.errorContainer,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            widget.error ?? '',
-                            style: TextStyle(
-                                color: scheme.onErrorContainer, fontSize: 13),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          // AI input bar
-          Container(
-            padding: EdgeInsets.fromLTRB(
-                10, 6, 10, 8 + MediaQuery.of(context).padding.bottom),
-            color: scheme.surface,
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: widget.inputCtrl,
-                    maxLines: null,
-                    keyboardType: TextInputType.multiline,
-                    decoration: InputDecoration(
-                      hintText: 'Demandez à votre IA…',
-                      filled: true,
-                      fillColor: scheme.surfaceContainerHigh,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                    ),
-                    onSubmitted:
-                        widget.thinking ? null : (_) => widget.onSend(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                widget.thinking
-                    ? Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2.5, color: scheme.primary),
-                        ),
-                      )
-                    : IconButton.filled(
-                        icon: const Icon(Icons.send_rounded, size: 18),
-                        onPressed: widget.onSend,
-                        tooltip: 'Envoyer',
-                      ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── AI message row ─────────────────────────────────────────────────────────────
-
-class _AiMessageRow extends StatelessWidget {
-  final AiMessage msg;
-  final ColorScheme scheme;
-  final VoidCallback? onUseInChat;
-
-  const _AiMessageRow({
-    required this.msg,
-    required this.scheme,
-    this.onUseInChat,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isUser = msg.role == 'user';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment:
-            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.8,
-            ),
-            decoration: BoxDecoration(
-              color: isUser ? scheme.primary : scheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(14).copyWith(
-                bottomRight: isUser
-                    ? const Radius.circular(3)
-                    : const Radius.circular(14),
-                bottomLeft: isUser
-                    ? const Radius.circular(14)
-                    : const Radius.circular(3),
-              ),
-            ),
-            child: SelectableText(
-              msg.text,
-              style: TextStyle(
-                fontSize: 13,
-                color: isUser ? scheme.onPrimary : scheme.onSecondaryContainer,
-              ),
-            ),
-          ),
-          if (!isUser && onUseInChat != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, left: 2),
-              child: GestureDetector(
-                onTap: onUseInChat,
-                child: Text(
-                  'Utiliser dans le chat →',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.secondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── Message bubble ────────────────────────────────────────────────────────────
 
 class _MessageBubble extends StatelessWidget {
@@ -766,6 +520,12 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.isResearch) {
+      return _ResearchCard(message: message);
+    }
+    if (message.isDecision) {
+      return _DecisionCard(message: message);
+    }
     if (message.isDocument) {
       return _DocumentCard(
           message: message, onChallenge: onChallenge, onExport: onExport);
@@ -907,14 +667,17 @@ class _DocumentCardState extends State<_DocumentCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          msg.documentTitle ?? 'Livrable IA',
+                          msg.documentTitle ??
+                              (msg.isAI
+                                  ? 'Canvas IA partagé'
+                                  : 'Canvas partagé'),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
                         ),
                         Text(
-                          '✦ IA • ${msg.challenges.length} challenge${msg.challenges.length != 1 ? 's' : ''}',
+                          '${msg.isAI ? '✦ IA' : 'Partagé'} • ${msg.challenges.length} challenge${msg.challenges.length != 1 ? 's' : ''}',
                           style: TextStyle(
                             fontSize: 11,
                             color: scheme.onSurface.withOpacity(0.5),
@@ -1091,6 +854,213 @@ class _DocumentCardState extends State<_DocumentCard> {
   }
 }
 
+class _ResearchCard extends StatelessWidget {
+  final RoomMessage message;
+  const _ResearchCard({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final citations =
+        (message.data['citations'] as List? ?? []).whereType<Map>().toList();
+    final chapters =
+        (message.data['chapters'] as List? ?? []).whereType<Map>().toList();
+    final videoTitle = message.data['videoTitle']?.toString() ?? 'Source';
+    final videoUrl = message.data['videoUrl']?.toString() ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.tertiaryContainer.withOpacity(0.35),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.tertiary.withOpacity(0.25)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.travel_explore_rounded,
+                      color: scheme.tertiary, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Recherche attachée',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                videoTitle,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                message.content,
+                style: const TextStyle(fontSize: 13, height: 1.45),
+              ),
+              if (videoUrl.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                SelectableText(
+                  videoUrl,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.primary,
+                  ),
+                ),
+              ],
+              if (citations.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Citations',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ...citations.take(3).map(
+                      (citation) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          '• ${citation['quote'] ?? ''}',
+                          style: const TextStyle(fontSize: 12, height: 1.35),
+                        ),
+                      ),
+                    ),
+              ],
+              if (chapters.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Chapitres',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: chapters.take(4).map((chapter) {
+                    return Chip(
+                      label: Text(
+                        chapter['title']?.toString() ?? 'Extrait',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DecisionCard extends StatelessWidget {
+  final RoomMessage message;
+  const _DecisionCard({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final decisions = (message.data['decisions'] as List? ?? [])
+        .map((e) => e.toString())
+        .toList();
+    final risks = (message.data['risks'] as List? ?? [])
+        .map((e) => e.toString())
+        .toList();
+    final nextSteps = (message.data['nextSteps'] as List? ?? [])
+        .map((e) => e.toString())
+        .toList();
+
+    Widget section(String title, List<String> items) {
+      if (items.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text('• $item', style: const TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer.withOpacity(0.42),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.primary.withOpacity(0.18)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.rule_folder_rounded,
+                      size: 18, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Synthèse de décision',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: scheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SelectableText(
+                message.content,
+                style: const TextStyle(fontSize: 13, height: 1.45),
+              ),
+              section('Décisions', decisions),
+              section('Risques', risks),
+              section('Next steps', nextSteps),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── Sender avatar ─────────────────────────────────────────────────────────────
 
 class _SenderAvatar extends StatelessWidget {
@@ -1190,16 +1160,12 @@ class _InputBar extends StatelessWidget {
   final bool sending;
   final VoidCallback onSend;
   final VoidCallback onAttach;
-  final VoidCallback onAiToggle;
-  final bool aiPanelOpen;
 
   const _InputBar({
     required this.controller,
     required this.sending,
     required this.onSend,
     required this.onAttach,
-    required this.onAiToggle,
-    required this.aiPanelOpen,
   });
 
   @override
@@ -1215,21 +1181,6 @@ class _InputBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // AI copilote toggle
-          IconButton(
-            icon: Text(
-              '✦',
-              style: TextStyle(
-                fontSize: 20,
-                color: aiPanelOpen
-                    ? scheme.secondary
-                    : scheme.onSurface.withOpacity(0.4),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            tooltip: 'Copilote IA personnel',
-            onPressed: onAiToggle,
-          ),
           Expanded(
             child: TextField(
               controller: controller,
@@ -1237,7 +1188,7 @@ class _InputBar extends StatelessWidget {
               keyboardType: TextInputType.multiline,
               textInputAction: TextInputAction.newline,
               decoration: InputDecoration(
-                hintText: 'Message…',
+                hintText: 'Message, @ia, /doc, /search, /decide, /mission…',
                 filled: true,
                 fillColor: scheme.surfaceContainerHigh,
                 border: OutlineInputBorder(
@@ -1314,7 +1265,7 @@ class _EmptyChat extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Envoyez un message pour démarrer.\nUtilisez ❖ pour invoquer votre copilote IA privé.',
+              'Envoyez un message pour démarrer.\nUtilisez @ia, /doc, /search, /decide ou /mission pour collaborer avec l’IA du channel.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.55),
@@ -1324,6 +1275,238 @@ class _EmptyChat extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CommandQuickBar extends StatelessWidget {
+  final void Function(String command) onInsertCommand;
+
+  const _CommandQuickBar({required this.onInsertCommand});
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <({String label, String command})>[
+      (label: '@ia', command: '@ia'),
+      (label: '/doc', command: '/doc'),
+      (label: '/search', command: '/search'),
+      (label: '/decide', command: '/decide'),
+      (label: '/mission', command: '/mission'),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: actions.map((action) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: OutlinedButton(
+                onPressed: () => onInsertCommand(action.command),
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: Text(action.label),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _ContextPanel extends StatelessWidget {
+  final Room room;
+  final List<RoomArtifact> artifacts;
+  final List<RoomMemory> memoryItems;
+  final List<RoomMission> missions;
+  final List<String> onlineUserIds;
+  final void Function(String command) onInsertCommand;
+  final Future<void> Function(RoomArtifact artifact) onReviseArtifact;
+
+  const _ContextPanel({
+    required this.room,
+    required this.artifacts,
+    required this.memoryItems,
+    required this.missions,
+    required this.onlineUserIds,
+    required this.onInsertCommand,
+    required this.onReviseArtifact,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    Widget sectionTitle(String title, {String? subtitle}) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            if (subtitle != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withOpacity(0.55),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        sectionTitle(
+          'Contexte',
+          subtitle: room.purpose.isEmpty
+              ? 'Aucune description de channel.'
+              : room.purpose,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Chip(
+                label: Text('${room.memberCount} membres'),
+                visualDensity: VisualDensity.compact,
+              ),
+              Chip(
+                label: Text('${onlineUserIds.length} en ligne'),
+                visualDensity: VisualDensity.compact,
+              ),
+              Chip(
+                label: Text(
+                  room.visibility == 'public' ? 'Public' : 'Invitation',
+                ),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+        sectionTitle(
+          'Artefacts',
+          subtitle:
+              artifacts.isEmpty ? 'Aucun canvas partagé pour le moment.' : null,
+        ),
+        ...artifacts.take(4).map(
+              (artifact) => ListTile(
+                dense: true,
+                leading:
+                    Icon(Icons.description_rounded, color: scheme.secondary),
+                title: Text(
+                  artifact.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  artifact.currentVersion?.contentPreview ??
+                      '${artifact.kind} • ${artifact.status}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+                  tooltip: 'Réviser avec IA',
+                  onPressed: () => onReviseArtifact(artifact),
+                ),
+              ),
+            ),
+        sectionTitle(
+          'Mémoire',
+          subtitle: memoryItems.isEmpty
+              ? 'Décisions et faits importants à réinjecter dans l’IA.'
+              : null,
+        ),
+        ...memoryItems.take(5).map(
+              (memory) => ListTile(
+                dense: true,
+                leading: Icon(
+                  memory.type == 'decision'
+                      ? Icons.task_alt_rounded
+                      : Icons.push_pin_outlined,
+                  size: 18,
+                  color: scheme.primary,
+                ),
+                title: Text(
+                  memory.content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  '${memory.type} • ${memory.createdByName}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withOpacity(0.5),
+                  ),
+                ),
+              ),
+            ),
+        sectionTitle(
+          'Missions IA',
+          subtitle: missions.isEmpty ? 'Aucune mission récente.' : null,
+        ),
+        ...missions.take(4).map(
+              (mission) => ListTile(
+                dense: true,
+                leading: Icon(
+                  mission.status == 'done'
+                      ? Icons.check_circle_outline_rounded
+                      : mission.status == 'failed'
+                          ? Icons.error_outline_rounded
+                          : Icons.timelapse_rounded,
+                  size: 18,
+                  color: mission.status == 'done'
+                      ? Colors.green
+                      : mission.status == 'failed'
+                          ? scheme.error
+                          : scheme.tertiary,
+                ),
+                title: Text(
+                  mission.promptPreview ?? mission.prompt,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(mission.status),
+              ),
+            ),
+        sectionTitle('Actions rapides'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonal(
+                onPressed: () => onInsertCommand('/doc'),
+                child: const Text('Créer un canvas'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => onInsertCommand('/search'),
+                child: const Text('Attacher une recherche'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => onInsertCommand('/decide'),
+                child: const Text('Synthèse de décision'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1373,7 +1556,7 @@ class _MembersSheet extends StatelessWidget {
                 Icon(Icons.group_rounded, color: scheme.primary, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'Membres du salon',
+                  'Membres du channel',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,

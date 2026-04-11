@@ -55,6 +55,9 @@ class RoomProvider extends ChangeNotifier {
 
   Room? currentRoom;
   List<RoomMessage> messages = [];
+  List<RoomArtifact> artifacts = [];
+  List<RoomMemory> memoryItems = [];
+  List<RoomMission> missions = [];
   bool loadingMessages = false;
   String? messagesError;
 
@@ -86,6 +89,14 @@ class RoomProvider extends ChangeNotifier {
       final result = await _svc.getMessages(room.id);
       currentRoom = result.room;
       messages = result.messages;
+      final contextResults = await Future.wait([
+        _svc.listArtifacts(room.id),
+        _svc.listMemory(room.id),
+        _svc.listMissions(room.id),
+      ]);
+      artifacts = contextResults[0] as List<RoomArtifact>;
+      memoryItems = contextResults[1] as List<RoomMemory>;
+      missions = contextResults[2] as List<RoomMission>;
       debugPrint('$_tag openRoom: loaded ${messages.length} messages');
     } catch (e) {
       debugPrint('$_tag openRoom: error loading messages — $e');
@@ -148,6 +159,60 @@ class RoomProvider extends ChangeNotifier {
           notifyListeners();
         }
 
+      case WsRoomEventType.artifactCreated:
+        final artifact = event.artifact;
+        if (artifact == null) return;
+        final idx = artifacts.indexWhere((a) => a.id == artifact.id);
+        if (idx >= 0) {
+          artifacts[idx] = artifact;
+        } else {
+          artifacts.insert(0, artifact);
+        }
+        notifyListeners();
+
+      case WsRoomEventType.artifactVersionCreated:
+        final artifactId = event.artifactId;
+        final version = event.version;
+        if (artifactId == null || version == null) return;
+        final idx = artifacts.indexWhere((a) => a.id == artifactId);
+        if (idx >= 0) {
+          final current = artifacts[idx];
+          artifacts[idx] = RoomArtifact(
+            id: current.id,
+            roomId: current.roomId,
+            title: current.title,
+            kind: current.kind,
+            status: current.status,
+            currentVersionId: version.id,
+            currentVersion: version,
+            updatedAt: DateTime.now(),
+          );
+          notifyListeners();
+        }
+
+      case WsRoomEventType.missionStatus:
+        final mission = event.mission;
+        if (mission == null) return;
+        final idx = missions.indexWhere((m) => m.id == mission.id);
+        if (idx >= 0) {
+          missions[idx] = mission;
+        } else {
+          missions.insert(0, mission);
+        }
+        notifyListeners();
+
+      case WsRoomEventType.decisionCreated:
+      case WsRoomEventType.researchAttached:
+        final msg = event.message;
+        if (msg == null) return;
+        final idx = messages.indexWhere((m) => m.id == msg.id);
+        if (idx >= 0) {
+          messages[idx] = msg;
+        } else {
+          messages.add(msg);
+        }
+        notifyListeners();
+
       case WsRoomEventType.presence:
         onlineUserIds = event.userIds;
         notifyListeners();
@@ -182,8 +247,10 @@ class RoomProvider extends ChangeNotifier {
       // broadcast handler, so this is the sole place they enter the list.
       messages.add(saved);
 
-      // If @ia was mentioned, show AI thinking indicator
-      if (RegExp(r'@ia\b', caseSensitive: false).hasMatch(content)) {
+      // Shared AI commands should show the thinking indicator immediately.
+      if (RegExp(r'(@ia\b|^/doc\b|^/mission\b|^/search\b|^/decide\b)',
+              caseSensitive: false)
+          .hasMatch(content)) {
         aiThinking = true;
       }
 
@@ -209,8 +276,13 @@ class RoomProvider extends ChangeNotifier {
         id: room.id,
         name: room.name,
         type: room.type,
+        purpose: room.purpose,
+        visibility: room.visibility,
+        ownerId: room.ownerId,
         members: room.members,
         aiDirectives: directives,
+        pinnedArtifactId: room.pinnedArtifactId,
+        lastActivityAt: room.lastActivityAt,
         updatedAt: DateTime.now(),
       );
       notifyListeners();
@@ -275,6 +347,71 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> createArtifact(
+    String title,
+    String content, {
+    String kind = 'canvas',
+  }) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    try {
+      final artifact = await _svc.createArtifact(
+        room.id,
+        title: title,
+        content: content,
+        kind: kind,
+      );
+      final idx = artifacts.indexWhere((a) => a.id == artifact.id);
+      if (idx >= 0) {
+        artifacts[idx] = artifact;
+      } else {
+        artifacts.insert(0, artifact);
+      }
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> reviseArtifact(
+    String artifactId,
+    String instructions,
+  ) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    try {
+      final artifact = await _svc.reviseArtifact(
+        room.id,
+        artifactId,
+        instructions: instructions,
+      );
+      final idx = artifacts.indexWhere((a) => a.id == artifact.id);
+      if (idx >= 0) {
+        artifacts[idx] = artifact;
+      } else {
+        artifacts.insert(0, artifact);
+      }
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> addMemory(String content, {String type = 'fact'}) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    try {
+      await _svc.addMemory(room.id, content: content, type: type);
+      memoryItems = await _svc.listMemory(room.id);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Invite link ────────────────────────────────────────────────────────────────
 
   Future<String?> getInviteLink() async {
@@ -297,6 +434,9 @@ class RoomProvider extends ChangeNotifier {
     }
     currentRoom = null;
     messages = [];
+    artifacts = [];
+    memoryItems = [];
+    missions = [];
     aiThinking = false;
     wsReconnecting = false;
     onlineUserIds = [];

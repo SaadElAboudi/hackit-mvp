@@ -6,7 +6,7 @@ import '../services/project_service.dart' show ProjectService;
 import 'profile_screen.dart';
 import 'salon_chat_screen.dart';
 
-/// Lists the user's salons (rooms) and allows creating new ones.
+/// Lists the user's channels and allows creating new ones.
 class SalonsScreen extends StatefulWidget {
   const SalonsScreen({super.key});
 
@@ -34,7 +34,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
         backgroundColor: scheme.surface,
         elevation: 0,
         title: const Text(
-          'Salons',
+          'Channels',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
         ),
         actions: [
@@ -61,7 +61,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Text(
-              'Collaborez en temps réel. Votre copilote IA privé ❖ est accessible dans chaque salon.',
+              'Collaborez dans des channels partageables. L’IA est un collègue visible par tous quand vous l’interpellez avec @ia ou une commande.',
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.55),
                 fontSize: 13,
@@ -97,7 +97,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
         heroTag: 'create_salon',
         onPressed: () => _showCreateDialog(context),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Nouveau salon'),
+        label: const Text('Nouveau channel'),
       ),
     );
   }
@@ -109,7 +109,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Créer un salon'),
+        title: const Text('Créer un channel'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -117,15 +117,15 @@ class _SalonsScreenState extends State<SalonsScreen> {
               controller: nameCtrl,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: 'Nom du salon',
-                hintText: 'Ex: Équipe produit',
+                labelText: 'Nom du channel',
+                hintText: 'Ex: IA produit',
                 border: OutlineInputBorder(),
               ),
               textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: 8),
             Text(
-              'Votre copilote IA privé sera disponible via le bouton ❖ dans le salon.',
+              'Le channel partagera une IA commune. Utilisez @ia, /doc, /search, /decide ou /mission une fois dedans.',
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5),
@@ -280,14 +280,14 @@ class _EmptyState extends StatelessWidget {
                 size: 64, color: scheme.primary.withOpacity(0.4)),
             const SizedBox(height: 16),
             Text(
-              'Pas encore de salon',
+              'Pas encore de channel',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Créez un salon pour collaborer avec vos collègues.\nVotre IA personnelle ✦ vous accompagnera.',
+              'Créez un channel pour collaborer avec vos collègues.\nL’IA commune du channel vous aidera à produire, chercher et décider.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: scheme.onSurface.withOpacity(0.55),
@@ -297,7 +297,7 @@ class _EmptyState extends StatelessWidget {
             FilledButton.icon(
               onPressed: onCreate,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Créer un salon'),
+              label: const Text('Créer un channel'),
             ),
           ],
         ),

@@ -10,8 +10,10 @@ class AiMessage {
   const AiMessage({required this.role, required this.text});
 }
 
-/// Calls the backend `/api/ai/chat` endpoint which proxies to Gemini using the
-/// server-side API key. No key is ever stored or sent by the client.
+/// Secondary private-draft copilot.
+///
+/// Hackit 2.0 now prioritizes shared AI inside Channels, but this service stays
+/// available for future private drafting flows backed by `/api/ai/chat`.
 class PersonalAiService {
   static String get _backendUrl => '${ApiService.staticBaseUrl}/api/ai/chat';
 

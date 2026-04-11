@@ -134,7 +134,8 @@ class RoomService {
     String content, {
     String? displayName,
   }) async {
-    debugPrint('$_svcTag sendMessage HTTP POST: room=$roomId content="${content.substring(0, content.length.clamp(0, 60))}"');
+    debugPrint(
+        '$_svcTag sendMessage HTTP POST: room=$roomId content="${content.substring(0, content.length.clamp(0, 60))}"');
     final r = await _post(
       '/api/rooms/$roomId/messages',
       {'content': content},
@@ -170,7 +171,8 @@ class RoomService {
     return (r['members'] as List).cast<Map<String, dynamic>>();
   }
 
-  Future<void> addMember(String roomId, String userId, {String? displayName}) async {
+  Future<void> addMember(String roomId, String userId,
+      {String? displayName}) async {
     await _post(
       '/api/rooms/$roomId/members',
       {'userId': userId, if (displayName != null) 'displayName': displayName},
@@ -202,6 +204,66 @@ class RoomService {
       displayName: displayName,
     );
     return RoomMessage.fromJson(r['message'] as Map<String, dynamic>);
+  }
+
+  Future<List<RoomArtifact>> listArtifacts(String roomId) async {
+    final r = await _get('/api/rooms/$roomId/artifacts');
+    return (r['artifacts'] as List? ?? [])
+        .map((j) => RoomArtifact.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<RoomMemory>> listMemory(String roomId) async {
+    final r = await _get('/api/rooms/$roomId/memory');
+    return (r['memory'] as List? ?? [])
+        .map((j) => RoomMemory.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<RoomMission>> listMissions(String roomId) async {
+    final r = await _get('/api/rooms/$roomId/missions');
+    return (r['missions'] as List? ?? [])
+        .map((j) => RoomMission.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<RoomArtifact> createArtifact(
+    String roomId, {
+    required String title,
+    required String content,
+    String kind = 'canvas',
+  }) async {
+    final r = await _post('/api/rooms/$roomId/artifacts', {
+      'title': title,
+      'content': content,
+      'kind': kind,
+    });
+    return RoomArtifact.fromJson(r['artifact'] as Map<String, dynamic>);
+  }
+
+  Future<RoomArtifact> reviseArtifact(
+    String roomId,
+    String artifactId, {
+    required String instructions,
+  }) async {
+    final r = await _post(
+      '/api/rooms/$roomId/artifacts/$artifactId/revise',
+      {'instructions': instructions},
+    );
+    return RoomArtifact.fromJson(r['artifact'] as Map<String, dynamic>);
+  }
+
+  Future<void> addMemory(
+    String roomId, {
+    required String content,
+    String type = 'fact',
+    bool pinned = true,
+  }) async {
+    await _post('/api/rooms/$roomId/memory', {
+      'content': content,
+      'type': type,
+      'pinned': pinned,
+    });
   }
 
   // ── WebSocket (per room) ──────────────────────────────────────────────────────
@@ -252,30 +314,39 @@ class RoomService {
 
       // Identify ourselves
       channel.sink.add(
-        jsonEncode({'type': 'join', 'roomId': roomId, 'userId': userId}),
+        jsonEncode({
+          'type': 'join',
+          'roomId': roomId,
+          'userId': userId,
+          'displayName': ProjectService.currentDisplayName,
+        }),
       );
 
       channel.stream.listen(
         (raw) {
           _reconnectAttempts[roomId] = 0; // reset backoff on any received frame
-          debugPrint('$_svcTag WS frame received room=$roomId: ${raw.toString().substring(0, raw.toString().length.clamp(0, 120))}');
+          debugPrint(
+              '$_svcTag WS frame received room=$roomId: ${raw.toString().substring(0, raw.toString().length.clamp(0, 120))}');
           try {
             final j = jsonDecode(raw.toString()) as Map<String, dynamic>;
             _controllers[roomId]?.add(WsRoomEvent.fromJson(j));
           } catch (_) {}
         },
         onDone: () {
-          debugPrint('$_svcTag WS closed (onDone) room=$roomId → scheduling reconnect');
+          debugPrint(
+              '$_svcTag WS closed (onDone) room=$roomId → scheduling reconnect');
           _scheduleReconnect(roomId);
         },
         onError: (e) {
-          debugPrint('$_svcTag WS error room=$roomId: $e → scheduling reconnect');
+          debugPrint(
+              '$_svcTag WS error room=$roomId: $e → scheduling reconnect');
           _scheduleReconnect(roomId);
         },
         cancelOnError: true,
       );
     } catch (_) {
-      debugPrint('$_svcTag WS connect exception room=$roomId: $_ → scheduling reconnect');
+      debugPrint(
+          '$_svcTag WS connect exception room=$roomId: $_ → scheduling reconnect');
       _scheduleReconnect(roomId);
     }
   }
@@ -287,10 +358,11 @@ class RoomService {
     _reconnectAttempts[roomId] = attempt + 1;
     final delay = Duration(seconds: min(30, 1 << attempt)); // 1,2,4,8,16,30 s
 
-    debugPrint('$_svcTag WS scheduleReconnect room=$roomId attempt=$attempt delay=${delay.inSeconds}s');
+    debugPrint(
+        '$_svcTag WS scheduleReconnect room=$roomId attempt=$attempt delay=${delay.inSeconds}s');
     // Emit synthetic reconnecting event
     _controllers[roomId]?.add(
-      WsRoomEvent(
+      const WsRoomEvent(
         type: WsRoomEventType.reconnecting,
         raw: {'type': 'reconnecting'},
       ),

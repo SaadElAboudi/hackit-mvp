@@ -18,6 +18,11 @@
  *     { type: 'message',   roomId, message }   — new RoomMessage object
  *     { type: 'typing',    roomId, userId }     — someone is typing (including AI)
  *     { type: 'challenge', roomId, messageId, challenge }
+ *     { type: 'artifact_created', roomId, artifact, version }
+ *     { type: 'artifact_version_created', roomId, artifactId, version }
+ *     { type: 'mission_status', roomId, mission }
+ *     { type: 'decision_created', roomId, message }
+ *     { type: 'research_attached', roomId, message }
  *     { type: 'presence',  roomId, userIds }    — current online users
  *     { type: 'pong' }
  *     { type: 'error',     reason }
@@ -74,7 +79,7 @@ export function handleRoomConnection(ws, req) {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-function _handleJoin(ws, roomId, userId, displayName) {
+function _handleJoin(ws, roomId, userId, _displayName) {
   if (!userId) {
     _send(ws, { type: 'error', reason: 'userId required' });
     return;
@@ -130,6 +135,31 @@ export function broadcastRoomTyping(roomId, userId) {
 
 export function broadcastRoomChallenge(roomId, messageId, challenge) {
   _broadcast(roomId, { type: 'challenge', roomId, messageId, challenge });
+}
+
+export function broadcastRoomArtifactCreated(roomId, artifact, version) {
+  _broadcast(roomId, { type: 'artifact_created', roomId, artifact, version });
+}
+
+export function broadcastRoomArtifactVersionCreated(roomId, artifactId, version) {
+  _broadcast(roomId, {
+    type: 'artifact_version_created',
+    roomId,
+    artifactId,
+    version,
+  });
+}
+
+export function broadcastRoomMissionStatus(roomId, mission) {
+  _broadcast(roomId, { type: 'mission_status', roomId, mission });
+}
+
+export function broadcastRoomDecisionCreated(roomId, message) {
+  _broadcast(roomId, { type: 'decision_created', roomId, message });
+}
+
+export function broadcastRoomResearchAttached(roomId, message) {
+  _broadcast(roomId, { type: 'research_attached', roomId, message });
 }
 
 /** Returns the list of currently online userIds for a room (used by REST endpoint). */
