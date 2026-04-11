@@ -15,6 +15,7 @@ class ApiService {
   })();
 
   String get baseUrl => _baseUrl;
+  static String get staticBaseUrl => _baseUrl;
 
   ApiService(this._dio);
 

@@ -535,9 +535,9 @@ function buildGeminiPromptForMode({ mode, query, context, videoTitle }) {
   const ctx = normalizeDeliveryContext(context);
   const ctxHint = [
     ctx.clientType ? `Client : ${ctx.clientType}` : '',
-    ctx.budget    ? `Budget : ${ctx.budget}` : '',
-    ctx.deadline  ? `Deadline : ${ctx.deadline}` : '',
-    ctx.maturity  ? `Maturité : ${ctx.maturity}` : '',
+    ctx.budget ? `Budget : ${ctx.budget}` : '',
+    ctx.deadline ? `Deadline : ${ctx.deadline}` : '',
+    ctx.maturity ? `Maturité : ${ctx.maturity}` : '',
   ].filter(Boolean).join(' | ');
   const ctxLine = ctxHint ? `\nContexte additionnel : ${ctxHint}` : '';
   const refLine = videoTitle ? `\nRéférence vidéo : "${videoTitle}"` : '';
@@ -547,8 +547,8 @@ function buildGeminiPromptForMode({ mode, query, context, videoTitle }) {
   const strategyHint = ctx.strategyKey === 'rapide'
     ? '\nMODE RAPIDE CHOISI : Périmètre minimal, livrable opérationnel en 24–48h. Priorise l\'essentiel absolu, coupe tout ce qui n\'est pas strictement nécessaire.'
     : ctx.strategyKey === 'ambitieux'
-    ? '\nMODE AMBITIEUX CHOISI : Périmètre exhaustif, documentation complète, aucun compromis sur le détail. Rends ce livrable réutilisable à long terme et partageable C-level.'
-    : '';
+      ? '\nMODE AMBITIEUX CHOISI : Périmètre exhaustif, documentation complète, aucun compromis sur le détail. Rends ce livrable réutilisable à long terme et partageable C-level.'
+      : '';
 
   // Core mandate present in all modes: fill every placeholder, be specific, be opinionated.
   const fillRule = `
@@ -1729,7 +1729,7 @@ app.get("/api/refine/stream", (req, res) => {
   };
   const end = () => {
     if (res.writableEnded || res.destroyed) return;
-    try { res.end(); } catch (_) {}
+    try { res.end(); } catch (_) { }
   };
 
   (async () => {
@@ -1834,7 +1834,7 @@ app.get("/api/challenge/stream", (req, res) => {
   };
   const end = () => {
     if (res.writableEnded || res.destroyed) return;
-    try { res.end(); } catch (_) {}
+    try { res.end(); } catch (_) { }
   };
 
   (async () => {
@@ -2009,6 +2009,53 @@ if (shouldConnectMongo) {
 
 // Mount rooms router.
 app.use('/api/rooms', roomsRouter);
+
+// ── Personal AI copilot ────────────────────────────────────────────────────────
+// POST /api/ai/chat — proxies the user's conversation to Gemini using the
+// server-side GEMINI_API_KEY. No key is ever stored or transmitted by the client.
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { message, history = [], systemPrompt } = req.body;
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ error: 'message requis' });
+    }
+    if (!GEMINI_API_KEY) {
+      return res.status(503).json({ error: 'Service IA non configuré côté serveur.' });
+    }
+
+    const contents = [
+      ...history.map((m) => ({
+        role: m.role === 'model' ? 'model' : 'user',
+        parts: [{ text: String(m.text || '') }],
+      })),
+      { role: 'user', parts: [{ text: message.trim() }] },
+    ];
+
+    const body = {
+      contents,
+      ...(systemPrompt
+        ? { system_instruction: { parts: [{ text: String(systemPrompt) }] } }
+        : {}),
+      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+    };
+
+    const geminiRes = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      body,
+      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+    );
+
+    const parts = geminiRes.data?.candidates?.[0]?.content?.parts ?? [];
+    const reply = parts[0]?.text ?? '';
+    return res.json({ reply });
+  } catch (err) {
+    if (err.response?.status === 429) {
+      return res.status(429).json({ error: 'Quota IA dépassé, réessaie dans quelques secondes.' });
+    }
+    console.error('[ai/chat]', err.message);
+    return res.status(500).json({ error: 'Erreur IA interne.' });
+  }
+});
 
 app.use((req, res) => {
   return res.status(404).json({ error: 'Not found' });

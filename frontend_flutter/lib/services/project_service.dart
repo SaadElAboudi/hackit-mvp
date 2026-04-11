@@ -2,30 +2,20 @@ import 'dart:math';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Manages the stable per-device identity, display name and personal Gemini
-/// API key. Nothing here is ever sent to the backend.
+/// Manages the stable per-device identity and display name.
 class ProjectService {
   static const _userIdKey = 'hackit:v1:userId';
   static const _displayNameKey = 'hackit:v1:displayName';
-  static const _geminiKeyKey = 'hackit:v1:geminiKey';
 
   static String? _userId;
   static String? _displayName;
-  static String? _geminiKey;
 
   static String? get currentUserId => _userId;
   static String? get currentDisplayName => _displayName;
 
-  /// The user's personal Gemini API key, stored only in SharedPreferences.
-  /// Never transmitted to the backend.
-  static String? get geminiKey => _geminiKey;
-
-  /// True only when both name and key are set — onboarding is complete.
+  /// True once the user has set a display name.
   static bool get isOnboarded =>
-      _displayName != null &&
-      _displayName!.isNotEmpty &&
-      _geminiKey != null &&
-      _geminiKey!.isNotEmpty;
+      _displayName != null && _displayName!.isNotEmpty;
 
   static Future<void> init() async {
     if (_userId != null) return;
@@ -39,7 +29,6 @@ class ProjectService {
     }
     _userId = id;
     _displayName = prefs.getString(_displayNameKey);
-    _geminiKey = prefs.getString(_geminiKeyKey);
   }
 
   static Future<void> setDisplayName(String name) async {
@@ -48,17 +37,6 @@ class ProjectService {
     final prefs = GetIt.instance<SharedPreferences>();
     _displayName = trimmed;
     await prefs.setString(_displayNameKey, trimmed);
-  }
-
-  static Future<void> setGeminiKey(String key) async {
-    final trimmed = key.trim();
-    final prefs = GetIt.instance<SharedPreferences>();
-    _geminiKey = trimmed.isEmpty ? null : trimmed;
-    if (trimmed.isEmpty) {
-      await prefs.remove(_geminiKeyKey);
-    } else {
-      await prefs.setString(_geminiKeyKey, trimmed);
-    }
   }
 
   static String _randomSalt(int length) {

@@ -175,17 +175,6 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   Future<void> _sendToAi() async {
     final text = _aiInputCtrl.text.trim();
     if (text.isEmpty) return;
-    final key = ProjectService.geminiKey;
-    if (key == null || key.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Configure ta clé Gemini dans ton profil (icône 👤)'),
-          ),
-        );
-      }
-      return;
-    }
     _aiInputCtrl.clear();
     final userMsg = AiMessage(role: 'user', text: text);
     setState(() {
@@ -204,8 +193,9 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           'Contexte du salon (derniers messages) :\n$ctxLines\n\n'
           'Aide l\'utilisateur à réfléchir, rédiger ou analyser. '
           'Réponds de façon concise et en français.';
-      final svc = PersonalAiService(apiKey: key);
-      final reply = await svc.chat(_aiHistory, text, systemPrompt: systemPrompt);
+      final svc = PersonalAiService();
+      final reply =
+          await svc.chat(_aiHistory, text, systemPrompt: systemPrompt);
       if (!mounted) return;
       setState(() {
         _aiHistory.add(AiMessage(role: 'model', text: reply));
@@ -530,7 +520,8 @@ class _AiPanelState extends State<_AiPanel> {
             padding: const EdgeInsets.fromLTRB(14, 8, 4, 4),
             child: Row(
               children: [
-                Text('✦', style: TextStyle(color: scheme.secondary, fontSize: 16)),
+                Text('✦',
+                    style: TextStyle(color: scheme.secondary, fontSize: 16)),
                 const SizedBox(width: 8),
                 Text(
                   'Copilote IA',
@@ -662,7 +653,8 @@ class _AiPanelState extends State<_AiPanel> {
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 8),
                     ),
-                    onSubmitted: widget.thinking ? null : (_) => widget.onSend(),
+                    onSubmitted:
+                        widget.thinking ? null : (_) => widget.onSend(),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -732,8 +724,7 @@ class _AiMessageRow extends StatelessWidget {
               msg.text,
               style: TextStyle(
                 fontSize: 13,
-                color:
-                    isUser ? scheme.onPrimary : scheme.onSecondaryContainer,
+                color: isUser ? scheme.onPrimary : scheme.onSecondaryContainer,
               ),
             ),
           ),
