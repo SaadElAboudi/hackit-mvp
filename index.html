@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="frontend_flutter">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png" />
+
+  <title>frontend_flutter</title>
+  <link rel="manifest" href="manifest.json">
+  <!-- Google Sign-In JS API for web -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    // Intercept buildConfig assignment to force HTML renderer before bootstrap autoloads.
+    (function () {
+      function supportsWebGL() {
+        try {
+          var c = document.createElement('canvas');
+          return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+        } catch (_) {
+          return false;
+        }
+      }
+      // For now, force HTML to avoid CanvasKit GL surface errors; toggle to detection if needed.
+      var forceHtml = true; // or: !supportsWebGL();
+      window._flutter = window._flutter || {};
+      var _cfg;
+      try {
+        Object.defineProperty(window._flutter, 'buildConfig', {
+          configurable: true,
+          get: function () { return _cfg; },
+          set: function (v) {
+            try {
+              if (v && Array.isArray(v.builds)) {
+                v.builds = v.builds.map(function (b) {
+                  return forceHtml ? Object.assign({}, b, { renderer: 'html' }) : b;
+                });
+              }
+            } catch (_) { }
+            _cfg = v;
+          }
+        });
+      } catch (_) {
+        // If defineProperty fails, we proceed without interception.
+      }
+    })();
+  </script>
+
+  <script>
+    // Deprecated local variable replaced by template token.
+    // Flutter tooling will substitute "276314056" at build time.
+    const serviceWorkerVersion = '"276314056"';
+  </script>
+  <!-- Flutter bootstrap (generated during build) includes the loader and auto-starts the app. -->
+  <script src="flutter_bootstrap.js" defer></script>
+</head>
+
+<body>
+  <!-- No inline bootstrap code needed; flutter_bootstrap.js calls loader.load() for us. -->
+</body>
+
+</html>

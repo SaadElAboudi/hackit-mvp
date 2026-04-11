@@ -1,4 +1,0 @@
-# Ignore legacy scripts and unused layers for now
-scripts/**
-src/routes/**
-src/utils/**
