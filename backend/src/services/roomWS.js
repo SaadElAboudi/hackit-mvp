@@ -133,6 +133,11 @@ export function broadcastRoomTyping(roomId, userId) {
   _broadcast(roomId, { type: 'typing', roomId, userId });
 }
 
+/** Stream a partial AI response. delta = cumulative content generated so far. */
+export function broadcastRoomMessageChunk(roomId, tempId, delta) {
+  _broadcast(roomId, { type: 'message_chunk', roomId, tempId, delta });
+}
+
 export function broadcastRoomChallenge(roomId, messageId, challenge) {
   _broadcast(roomId, { type: 'challenge', roomId, messageId, challenge });
 }

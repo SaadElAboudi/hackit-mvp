@@ -6,13 +6,14 @@ import RoomMission from '../models/RoomMission.js';
 import RoomMemory from '../models/RoomMemory.js';
 
 import { getChapters } from './chapters.js';
-import { generateWithGemini } from './gemini.js';
+import { generateWithGemini, streamWithGemini } from './gemini.js';
 import { getTranscript } from './transcript.js';
 import {
   broadcastRoomArtifactCreated,
   broadcastRoomArtifactVersionCreated,
   broadcastRoomDecisionCreated,
   broadcastRoomMessage,
+  broadcastRoomMessageChunk,
   broadcastRoomMissionStatus,
   broadcastRoomResearchAttached,
   broadcastRoomTyping,
@@ -210,6 +211,34 @@ async function tryGemini(prompt, maxOutputTokens = 900) {
   }
 }
 
+/**
+ * Like tryGemini but streams token-by-token via WS.
+ * onChunk(cumulativeText) is throttled to ~12 updates/s to avoid WS flood.
+ * Returns the full text (same as tryGemini), or null if streaming fails.
+ */
+async function tryGeminiStreaming(prompt, roomId, tempId, maxOutputTokens = 900) {
+  if (!process.env.GEMINI_API_KEY) return null;
+  try {
+    let lastBcast = 0;
+    const text = await streamWithGemini(
+      prompt,
+      (cumulative) => {
+        const now = Date.now();
+        if (now - lastBcast >= 80) { // max ~12 WS frames/s per AI stream
+          broadcastRoomMessageChunk(roomId, tempId, cumulative);
+          lastBcast = now;
+        }
+      },
+      maxOutputTokens
+    );
+    if (text) broadcastRoomMessageChunk(roomId, tempId, text); // final flush
+    return text;
+  } catch (err) {
+    console.warn('[roomOrchestrator] streaming fallback:', err?.message || err);
+    return null;
+  }
+}
+
 async function collectRoomContext(roomId) {
   const [messages, artifacts, memories] = await Promise.all([
     RoomMessage.find({ roomId })
@@ -288,6 +317,7 @@ async function persistRoomMessage({
   type,
   documentTitle,
   data = {},
+  tempId = null, // streaming placeholder ID — included in broadcast so client can replace it
 }) {
   const message = await RoomMessage.create({
     roomId,
@@ -299,7 +329,9 @@ async function persistRoomMessage({
     documentTitle,
     data,
   });
-  broadcastRoomMessage(roomId, message.toObject());
+  // Include tempId in the broadcast payload so Flutter can swap the streaming
+  // placeholder (keyed by tempId) with the final persisted message.
+  broadcastRoomMessage(roomId, { ...message.toObject(), tempId });
   await touchRoom(roomId);
   return message;
 }
@@ -325,6 +357,7 @@ export async function createRoomArtifact({
   senderId,
   senderName,
   status = 'draft',
+  tempId = null, // streaming placeholder ID forwarded to persistRoomMessage
 }) {
   const artifact = await RoomArtifact.create({
     roomId,
@@ -358,6 +391,7 @@ export async function createRoomArtifact({
     content,
     type: 'artifact',
     documentTitle: artifact.title,
+    tempId,
     data: {
       artifactId: artifact._id,
       artifactKind: kind,
@@ -497,8 +531,8 @@ async function handleResearchCommand({ roomId, room, prompt }) {
     `# Recherche — ${videoTitle}`,
     '',
     geminiText ||
-      summary ||
-      `- Source identifiée pour avancer sur ${query}\n- Consultez les citations et chapitres pour le contexte\n- Utilisez /doc pour transformer ces éléments en livrable partagé`,
+    summary ||
+    `- Source identifiée pour avancer sur ${query}\n- Consultez les citations et chapitres pour le contexte\n- Utilisez /doc pour transformer ces éléments en livrable partagé`,
   ].join('\n');
 
   const message = await persistRoomMessage({
@@ -539,7 +573,9 @@ async function handleDecisionCommand({ roomId, room, prompt, actor, context }) {
     formatContextForPrompt({ room, context }),
   ].join('\n\n');
 
-  const geminiText = await tryGemini(geminiPrompt, 650);
+  const tempId = `stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  let geminiText = await tryGeminiStreaming(geminiPrompt, roomId, tempId, 650);
+  if (!geminiText) geminiText = await tryGemini(geminiPrompt, 650);
   const content = geminiText || buildHeuristicReply({ roomName: room.name, prompt: subject, command: 'decide' });
 
   const message = await persistRoomMessage({
@@ -549,6 +585,7 @@ async function handleDecisionCommand({ roomId, room, prompt, actor, context }) {
     isAI: true,
     content,
     type: 'decision',
+    tempId,
     data: {
       why: `Synthèse de décision demandée par ${actor.displayName || 'un membre du channel'}.`,
       decisions: extractSectionList(content, /##\s*Décisions\s*([\s\S]*?)(?:##\s+|$)/i),
@@ -582,7 +619,13 @@ async function handleConversationCommand({
     formatContextForPrompt({ room, context }),
   ].join('\n\n');
 
-  const geminiText = await tryGemini(geminiPrompt, command === 'doc' ? 1100 : 700);
+  const maxTokens = command === 'doc' ? 1100 : 700;
+  const tempId = `stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // Try token-by-token streaming first; degraded silently to a single-shot call
+  let geminiText = await tryGeminiStreaming(geminiPrompt, roomId, tempId, maxTokens);
+  if (!geminiText) geminiText = await tryGemini(geminiPrompt, maxTokens);
+
   const content =
     geminiText || buildHeuristicReply({ roomName: room.name, prompt: effectivePrompt, command });
 
@@ -602,6 +645,7 @@ async function handleConversationCommand({
       isAI: true,
       senderId: 'ai',
       senderName: 'IA',
+      tempId,
     });
   }
 
@@ -612,6 +656,7 @@ async function handleConversationCommand({
     isAI: true,
     content,
     type: 'ai',
+    tempId,
     data: {
       why: `Réponse IA partagée déclenchée par ${actor.displayName || 'un membre du channel'}.`,
     },

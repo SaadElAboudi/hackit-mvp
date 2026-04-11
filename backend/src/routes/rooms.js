@@ -347,8 +347,8 @@ router.post('/:id/members', async (req, res) => {
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
-        if (!isRoomMember(room, req.userId)) {
-            return res.status(403).json({ error: 'Not a member of this room' });
+        if (!isRoomOwner(room, req.userId)) {
+            return res.status(403).json({ error: 'Owner role required to add members' });
         }
 
         if (room.members.some((member) => member.userId === userId)) {
@@ -683,13 +683,19 @@ router.delete('/:id/memory/:memoryId', async (req, res) => {
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
-        const deleted = await RoomMemory.findOneAndDelete({
+        // Only the owner OR the memory creator may delete a memory entry
+        const memory = await RoomMemory.findOne({
             _id: req.params.memoryId,
             roomId: req.params.id,
         });
-        if (!deleted) {
+        if (!memory) {
             return res.status(404).json({ error: 'Memory not found' });
         }
+        if (!isRoomOwner(room, req.userId) && String(memory.createdBy) !== req.userId) {
+            return res.status(403).json({ error: 'Owner or creator role required' });
+        }
+
+        await memory.deleteOne();
         res.json({ ok: true });
     } catch (err) {
         console.error('[rooms] memory delete error:', err);

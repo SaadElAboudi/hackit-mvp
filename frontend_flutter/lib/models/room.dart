@@ -309,6 +309,7 @@ class RoomMemory {
 enum WsRoomEventType {
   joined,
   message,
+  messageChunk, // streaming partial AI response
   typing,
   challenge,
   artifactCreated,
@@ -333,6 +334,7 @@ class WsRoomEvent {
     final t = switch (j['type']?.toString()) {
       'joined' => WsRoomEventType.joined,
       'message' => WsRoomEventType.message,
+      'message_chunk' => WsRoomEventType.messageChunk,
       'typing' => WsRoomEventType.typing,
       'challenge' => WsRoomEventType.challenge,
       'artifact_created' => WsRoomEventType.artifactCreated,
@@ -356,6 +358,10 @@ class WsRoomEvent {
   }
 
   String? get userId => raw['userId']?.toString();
+
+  /// For messageChunk events: the streaming temp ID and cumulative content so far.
+  String? get tempId => raw['tempId']?.toString();
+  String? get delta => raw['delta']?.toString();
 
   List<String> get userIds =>
       (raw['userIds'] as List? ?? []).map((u) => u.toString()).toList();

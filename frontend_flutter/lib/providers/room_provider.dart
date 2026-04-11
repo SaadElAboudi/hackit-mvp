@@ -122,6 +122,12 @@ class RoomProvider extends ChangeNotifier {
         final msg = event.message;
         if (msg == null) return;
 
+        // Remove streaming placeholder if this final message carries a tempId
+        final tempId = event.raw['message']?['tempId']?.toString();
+        if (tempId != null) {
+          messages.removeWhere((m) => m.id == tempId);
+        }
+
         // The sender receives their own message via the HTTP response in
         // sendMessage(). Silently ignore the WS echo so there is never a
         // race between the two paths. We still update in-place if HTTP has
@@ -148,6 +154,47 @@ class RoomProvider extends ChangeNotifier {
           aiThinking = true;
           notifyListeners();
         }
+
+      case WsRoomEventType.messageChunk:
+        // Streaming partial AI response — accumulate into a placeholder bubble
+        final tempId = event.tempId;
+        final delta = event.delta; // cumulative content so far
+        if (tempId == null || delta == null) return;
+        final idx = messages.indexWhere((m) => m.id == tempId);
+        if (idx >= 0) {
+          // Update existing placeholder in-place with more content
+          final existing = messages[idx];
+          messages[idx] = RoomMessage(
+            id: existing.id,
+            roomId: existing.roomId,
+            senderId: existing.senderId,
+            senderName: existing.senderName,
+            isAI: true,
+            content: delta,
+            type: 'ai',
+            documentTitle: null,
+            challenges: const [],
+            data: const {},
+            createdAt: existing.createdAt,
+          );
+        } else {
+          // First chunk — create a streaming placeholder
+          messages.add(RoomMessage(
+            id: tempId,
+            roomId: currentRoom?.id ?? '',
+            senderId: 'ai',
+            senderName: 'IA',
+            isAI: true,
+            content: delta,
+            type: 'ai',
+            documentTitle: null,
+            challenges: const [],
+            data: const {},
+            createdAt: DateTime.now(),
+          ));
+        }
+        aiThinking = false; // replace spinner with live text
+        notifyListeners();
 
       case WsRoomEventType.challenge:
         final challenge = event.challenge;

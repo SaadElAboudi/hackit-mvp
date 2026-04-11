@@ -124,6 +124,79 @@ export const generateWithGemini = async (prompt, maxOutputTokens = 256) => {
 };
 
 /**
+ * Stream text from Gemini API, calling onChunk(cumulativeText) as tokens arrive.
+ * Returns the full generated text, or null on error.
+ * Uses gemini-2.0-flash-lite for fast streaming; falls back to null so the
+ * caller can degrade to non-streaming generateWithGemini.
+ *
+ * @param {string} prompt
+ * @param {(cumulative: string) => void} onChunk
+ * @param {number} maxOutputTokens
+ * @returns {Promise<string|null>}
+ */
+export const streamWithGemini = async (prompt, onChunk, maxOutputTokens = 900) => {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!GEMINI_API_KEY) return null;
+
+  const model = 'models/gemini-2.0-flash-lite';
+  const url =
+    `https://generativelanguage.googleapis.com/v1/${model}:streamGenerateContent` +
+    `?key=${GEMINI_API_KEY}&alt=sse`;
+
+  try {
+    const resp = await axios.post(
+      url,
+      {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens, temperature: 0.2 },
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_SEXUAL_CONTENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+        ],
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        responseType: 'stream',
+        timeout: 60_000,
+      }
+    );
+
+    let fullText = '';
+    let buffer = '';
+
+    await new Promise((resolve, reject) => {
+      resp.data.on('data', (raw) => {
+        buffer += raw.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep any partial line for the next chunk
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const json = line.slice(6).trim();
+          if (!json || json === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(json);
+            const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            if (text) {
+              fullText += text;
+              onChunk(fullText);
+            }
+          } catch (_) { /* malformed SSE line — skip */ }
+        }
+      });
+      resp.data.on('end', resolve);
+      resp.data.on('error', reject);
+    });
+
+    return fullText || null;
+  } catch (err) {
+    console.warn('[gemini] streamWithGemini error:', err?.message || err);
+    return null;
+  }
+};
+
+/**
  * Reformule une question pour la recherche YouTube
  * @param {string} query - Question originale de l'utilisateur
  * @returns {Promise<string>} - Question reformulée
