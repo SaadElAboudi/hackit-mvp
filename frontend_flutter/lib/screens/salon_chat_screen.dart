@@ -7,6 +7,7 @@ import '../models/room.dart';
 import '../providers/room_provider.dart';
 import '../services/project_service.dart' show ProjectService;
 import '../utils/web_download.dart';
+import 'canvas_screen.dart';
 import 'profile_screen.dart';
 
 /// The main chat screen for a salon.
@@ -166,12 +167,85 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   }
 
   void _insertCommand(String command) {
+    // Intercept /doc to show a proper creation dialog
+    if (command == '/doc') {
+      _showCreateDocDialog();
+      return;
+    }
     final current = _inputCtrl.text.trim();
     final next = current.isEmpty ? '$command ' : '$command $current';
     setState(() {
       _inputCtrl.text = next;
       _inputCtrl.selection = TextSelection.collapsed(offset: next.length);
     });
+  }
+
+  Future<void> _showCreateDocDialog() async {
+    final titleCtrl = TextEditingController();
+    final contentCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Créer un canvas partagé'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleCtrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Titre',
+                hintText: 'Ex: Stratégie go-to-market Q3',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: contentCtrl,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText:
+                    'Contenu initial (ou laissez vide pour laisser l\'IA générer)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(ctx, titleCtrl.text.trim().isNotEmpty),
+            child: const Text('Créer le canvas'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      final title = titleCtrl.text.trim();
+      final content = contentCtrl.text.trim();
+      // If content is empty, delegate to the AI via /doc command
+      if (content.isEmpty) {
+        final cmd = '/doc $title';
+        setState(() {
+          _inputCtrl.text = cmd;
+          _inputCtrl.selection = TextSelection.collapsed(offset: cmd.length);
+        });
+      } else {
+        final success =
+            await context.read<RoomProvider>().createArtifact(title, content);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(success
+              ? 'Canvas "$title" créé ✓'
+              : 'Impossible de créer le canvas'),
+        ));
+        if (success) _scrollToBottom(animated: true);
+      }
+    }
   }
 
   Future<void> _showLaunchMissionDialog() async {
@@ -294,6 +368,22 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           onExport: msg.isDocument
               ? (content, title) => _exportDocument(content, title)
               : null,
+          onOpenCanvas: msg.isArtifact
+              ? () {
+                  final artifactId = msg.data['artifactId']?.toString() ?? '';
+                  if (artifactId.isEmpty) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CanvasScreen(
+                        roomId: msg.roomId,
+                        artifactId: artifactId,
+                        initialTitle: msg.documentTitle,
+                      ),
+                    ),
+                  );
+                }
+              : null,
         );
       },
     );
@@ -404,6 +494,16 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   onInsertCommand: _insertCommand,
                   onReviseArtifact: _showReviseArtifactDialog,
                   onLaunchMission: _showLaunchMissionDialog,
+                  onOpenCanvas: (artifact) => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CanvasScreen(
+                        roomId: artifact.roomId,
+                        artifactId: artifact.id,
+                        initialTitle: artifact.title,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -554,12 +654,14 @@ class _MessageBubble extends StatelessWidget {
   final bool isMe;
   final Future<bool> Function(String)? onChallenge;
   final void Function(String content, String? title)? onExport;
+  final VoidCallback? onOpenCanvas;
 
   const _MessageBubble({
     required this.message,
     required this.isMe,
     this.onChallenge,
     this.onExport,
+    this.onOpenCanvas,
   });
 
   @override
@@ -572,6 +674,14 @@ class _MessageBubble extends StatelessWidget {
     }
     if (message.isDecision) {
       return _DecisionCard(message: message);
+    }
+    if (message.isArtifact) {
+      return _ArtifactCard(
+        message: message,
+        onOpenCanvas: onOpenCanvas,
+        onChallenge: onChallenge,
+        onExport: onExport,
+      );
     }
     if (message.isDocument) {
       return _DocumentCard(
@@ -666,6 +776,240 @@ class _MessageBubble extends StatelessWidget {
         duration: Duration(seconds: 1),
       ),
     );
+  }
+}
+
+// ── Artifact card (navigates to CanvasScreen) ─────────────────────────────────
+
+class _ArtifactCard extends StatefulWidget {
+  final RoomMessage message;
+  final VoidCallback? onOpenCanvas;
+  final Future<bool> Function(String)? onChallenge;
+  final void Function(String content, String? title)? onExport;
+
+  const _ArtifactCard({
+    required this.message,
+    this.onOpenCanvas,
+    this.onChallenge,
+    this.onExport,
+  });
+
+  @override
+  State<_ArtifactCard> createState() => _ArtifactCardState();
+}
+
+class _ArtifactCardState extends State<_ArtifactCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final msg = widget.message;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: scheme.secondaryContainer.withOpacity(0.22),
+          border:
+              Border.all(color: scheme.secondary.withOpacity(0.45), width: 1.5),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.layers_rounded, size: 18, color: scheme.secondary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          msg.documentTitle ?? 'Canvas partagé',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '❆ Canvas IA • ${msg.challenges.length} challenge${msg.challenges.length != 1 ? 's' : ''}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: scheme.onSurface.withOpacity(0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      _expanded
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      size: 20,
+                    ),
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                  ),
+                ],
+              ),
+            ),
+
+            // Content preview (collapsible)
+            if (_expanded) ...[
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+                child: SelectableText(
+                  msg.content,
+                  style: const TextStyle(fontSize: 13, height: 1.5),
+                  maxLines: 12,
+                ),
+              ),
+            ],
+
+            // Challenges
+            if (msg.challenges.isNotEmpty) ...[
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                child: Text(
+                  'Challenges',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ),
+              ...msg.challenges.map(
+                (c) => Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.reply_rounded,
+                          size: 14, color: scheme.onSurface.withOpacity(0.4)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(children: [
+                            TextSpan(
+                              text: '${c.userName}: ',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                color: scheme.onSurface.withOpacity(0.7),
+                              ),
+                            ),
+                            TextSpan(
+                              text: c.content,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            // Action buttons
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+              child: Wrap(
+                spacing: 4,
+                children: [
+                  FilledButton.icon(
+                    icon: const Icon(Icons.layers_rounded, size: 15),
+                    label: const Text('Ouvrir le canvas',
+                        style: TextStyle(fontSize: 13)),
+                    onPressed: widget.onOpenCanvas,
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  TextButton.icon(
+                    icon:
+                        const Icon(Icons.chat_bubble_outline_rounded, size: 15),
+                    label: const Text('Challenger',
+                        style: TextStyle(fontSize: 13)),
+                    onPressed: widget.onChallenge != null
+                        ? () => _showChallengeDialog(context)
+                        : null,
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.copy_rounded, size: 15),
+                    label: const Text('Copier', style: TextStyle(fontSize: 13)),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: msg.content));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Copié'),
+                            duration: Duration(seconds: 1)),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showChallengeDialog(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Challenger ce canvas'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Votre retour sera visible par tous et pourra guider l\'IA à réviser le document.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Ex: La section 2 manque de détails sur le budget…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (ctrl.text.trim().isNotEmpty) Navigator.pop(ctx, true);
+            },
+            child: const Text('Envoyer'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && widget.onChallenge != null) {
+      await widget.onChallenge!(ctrl.text.trim());
+    }
   }
 }
 
@@ -1406,6 +1750,7 @@ class _ContextPanel extends StatelessWidget {
   final void Function(String command) onInsertCommand;
   final Future<void> Function(RoomArtifact artifact) onReviseArtifact;
   final VoidCallback onLaunchMission;
+  final void Function(RoomArtifact artifact) onOpenCanvas;
 
   const _ContextPanel({
     required this.room,
@@ -1416,6 +1761,7 @@ class _ContextPanel extends StatelessWidget {
     required this.onInsertCommand,
     required this.onReviseArtifact,
     required this.onLaunchMission,
+    required this.onOpenCanvas,
   });
 
   @override
@@ -1488,8 +1834,7 @@ class _ContextPanel extends StatelessWidget {
         ...artifacts.take(4).map(
               (artifact) => ListTile(
                 dense: true,
-                leading:
-                    Icon(Icons.description_rounded, color: scheme.secondary),
+                leading: Icon(Icons.layers_rounded, color: scheme.secondary),
                 title: Text(
                   artifact.title,
                   maxLines: 1,
@@ -1501,6 +1846,7 @@ class _ContextPanel extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                onTap: () => onOpenCanvas(artifact),
                 trailing: IconButton(
                   icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
                   tooltip: 'Réviser avec IA',

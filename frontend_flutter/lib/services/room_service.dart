@@ -257,6 +257,14 @@ class RoomService {
     return RoomArtifact.fromJson(r['artifact'] as Map<String, dynamic>);
   }
 
+  Future<List<ArtifactVersion>> fetchArtifactVersions(
+      String roomId, String artifactId) async {
+    final r = await _get('/api/rooms/$roomId/artifacts/$artifactId/versions');
+    return (r['versions'] as List? ?? [])
+        .map((j) => ArtifactVersion.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<void> addMemory(
     String roomId, {
     required String content,
