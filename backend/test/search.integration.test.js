@@ -50,6 +50,8 @@ await test('POST /api/search returns expected shape in mock mode', async (t) => 
     assert.ok(Array.isArray(json.steps) && json.steps.length > 0);
     assert.ok(json.videoUrl && typeof json.videoUrl === 'string');
     assert.ok(json.source && typeof json.source === 'string');
+    assert.ok(typeof json.requestId === 'string' && json.requestId.length > 4,
+        'requestId present for analytics feedback');
     assert.ok(Array.isArray(json.citations), 'citations array present');
     if (json.citations.length) {
         const c0 = json.citations[0];

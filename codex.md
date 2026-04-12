@@ -230,14 +230,16 @@ L'IA n'agit jamais "en douce" ; elle intervient sur mention, commande ou mission
 - [x] Panneau contextuel droit (artifacts / memory / members)
 - [x] Event WS `artifact_version_created` branché côté Flutter
 
-### Phase 3 — Recherche collaborative
+### Phase 3 — Recherche collaborative ✅ _implémentée_
 > Objectif : `/search` insère des cartes sourcées dans le channel
 
-- [ ] Brancher le moteur search/transcript/citations existant dans les channels
-- [ ] Widget `ResearchCard` avec citations cliquables
-- [ ] Mémoire du channel alimentée par artefacts et décisions
-- [ ] "Jump to source" dans le flux
-- [ ] Event WS `research_attached` côté Flutter
+- [x] Brancher le moteur search/transcript/citations existant dans les channels
+- [x] Widget `ResearchCard` avec citations cliquables
+- [x] Mémoire du channel alimentée par artefacts et décisions
+- [x] "Jump to source" dans le flux
+- [x] Event WS `research_attached` côté Flutter
+
+_Note qualité_: les prochains points restants sont surtout des tests E2E multi-clients (WS + persistance room search).
 
 ### Phase 4 — Proactivité contrôlée (post-PMF)
 - [ ] Suggestions de synthèse automatiques
