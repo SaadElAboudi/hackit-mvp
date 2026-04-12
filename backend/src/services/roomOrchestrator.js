@@ -491,6 +491,42 @@ export async function reviseRoomArtifact({
   return { version, message };
 }
 
+async function persistResearchArtifact({
+  roomId,
+  title,
+  content,
+  query,
+  sourceMessageId = null,
+}) {
+  const artifact = await RoomArtifact.create({
+    roomId,
+    title: slugTitle(title, 'Recherche collaborative'),
+    kind: 'research',
+    status: 'draft',
+    createdBy: 'ai',
+    sourcePrompt: clip(query, 4000),
+    sourceMessageId,
+  });
+
+  const version = await ArtifactVersion.create({
+    artifactId: artifact._id,
+    roomId,
+    number: 1,
+    content,
+    createdBy: 'ai',
+    sourcePrompt: clip(query, 4000),
+    status: 'draft',
+  });
+
+  artifact.currentVersionId = version._id;
+  await artifact.save();
+
+  broadcastRoomArtifactCreated(roomId, artifact.toObject(), summariseVersion(version));
+  broadcastRoomArtifactVersionCreated(roomId, String(artifact._id), summariseVersion(version));
+
+  return { artifact, version };
+}
+
 async function createDecisionMemories({ roomId, content, actor }) {
   const decisions = extractSectionList(
     content,
@@ -560,6 +596,26 @@ async function handleResearchCommand({ roomId, room, prompt }) {
     `- Source identifiée pour avancer sur ${query}\n- Consultez les citations et chapitres pour le contexte\n- Utilisez /doc pour transformer ces éléments en livrable partagé`,
   ].join('\n');
 
+  const researchArtifactContent = [
+    `# Recherche collaborative — ${videoTitle}`,
+    '',
+    `## Requête`,
+    query,
+    '',
+    `## Synthèse`,
+    content,
+    '',
+    `## Source`,
+    videoUrl,
+  ].join('\n');
+
+  const { artifact, version } = await persistResearchArtifact({
+    roomId,
+    title: `Recherche — ${videoTitle}`,
+    content: researchArtifactContent,
+    query,
+  });
+
   const message = await persistRoomMessage({
     roomId,
     senderId: 'ai',
@@ -576,9 +632,15 @@ async function handleResearchCommand({ roomId, room, prompt }) {
       citations,
       chapters: chapterLinks,
       keyTakeaways,
+      artifactId: artifact._id,
+      versionId: version._id,
       why: 'Recherche collaborative déclenchée depuis le channel.',
     },
   });
+
+  // Link the research artifact to the final persisted room message for traceability.
+  artifact.sourceMessageId = message._id;
+  await artifact.save();
 
   // Keep a compact trace in room memory so future AI replies can reuse research insights.
   await createResearchMemories({

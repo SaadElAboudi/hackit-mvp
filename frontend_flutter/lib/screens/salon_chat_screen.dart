@@ -1868,6 +1868,9 @@ class _ContextPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final workArtifacts = artifacts.where((a) => a.kind != 'research').toList();
+    final researchArtifacts =
+        artifacts.where((a) => a.kind == 'research').toList();
 
     Widget sectionTitle(String title, {String? subtitle}) {
       return Padding(
@@ -1929,10 +1932,11 @@ class _ContextPanel extends StatelessWidget {
         ),
         sectionTitle(
           'Artefacts',
-          subtitle:
-              artifacts.isEmpty ? 'Aucun canvas partagé pour le moment.' : null,
+          subtitle: workArtifacts.isEmpty
+              ? 'Aucun canvas partagé pour le moment.'
+              : null,
         ),
-        ...artifacts.take(4).map(
+        ...workArtifacts.take(4).map(
               (artifact) => ListTile(
                 dense: true,
                 leading: Icon(Icons.layers_rounded, color: scheme.secondary),
@@ -1953,6 +1957,31 @@ class _ContextPanel extends StatelessWidget {
                   tooltip: 'Réviser avec IA',
                   onPressed: () => onReviseArtifact(artifact),
                 ),
+              ),
+            ),
+        sectionTitle(
+          'Recherches',
+          subtitle: researchArtifacts.isEmpty
+              ? 'Aucune recherche attachée récemment.'
+              : null,
+        ),
+        ...researchArtifacts.take(4).map(
+              (artifact) => ListTile(
+                dense: true,
+                leading:
+                    Icon(Icons.travel_explore_rounded, color: scheme.tertiary),
+                title: Text(
+                  artifact.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  artifact.currentVersion?.contentPreview ??
+                      'research • ${artifact.status}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => onOpenCanvas(artifact),
               ),
             ),
         sectionTitle(
