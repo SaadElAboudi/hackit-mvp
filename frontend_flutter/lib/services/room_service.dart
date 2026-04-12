@@ -302,6 +302,20 @@ class RoomService {
     });
   }
 
+  Future<void> sendSearchFeedback({
+    String requestId = '',
+    bool clicked = false,
+    bool completed = false,
+    int? rating,
+  }) async {
+    await _post('/api/search/feedback', {
+      'requestId': requestId,
+      'clicked': clicked,
+      'completed': completed,
+      if (rating != null) 'rating': rating,
+    });
+  }
+
   // ── WebSocket (per room) ──────────────────────────────────────────────────────
 
   final Map<String, WebSocketChannel> _channels = {};

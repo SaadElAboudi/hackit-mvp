@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/room.dart';
 import '../providers/room_provider.dart';
 import '../services/project_service.dart' show ProjectService;
+import '../services/room_service.dart';
 import '../utils/web_download.dart';
 import 'canvas_screen.dart';
 import 'profile_screen.dart';
@@ -1301,6 +1302,31 @@ class _ResearchCard extends StatelessWidget {
     await context.read<RoomProvider>().sendMessage('/search $query');
   }
 
+  Future<void> _sendFeedback(
+    BuildContext context, {
+    required bool useful,
+  }) async {
+    try {
+      await roomService.sendSearchFeedback(
+        requestId: message.id,
+        clicked: useful,
+        completed: useful,
+        rating: useful ? 5 : 2,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(useful
+              ? 'Merci, feedback positif enregistré'
+              : 'Feedback enregistré, on améliore la recherche'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    } catch (_) {
+      // Keep UX silent on analytics failures.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1488,6 +1514,16 @@ class _ResearchCard extends StatelessWidget {
                         : () => _retrySearch(context, query),
                     icon: const Icon(Icons.refresh_rounded, size: 16),
                     label: const Text('Relancer /search'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _sendFeedback(context, useful: true),
+                    icon: const Icon(Icons.thumb_up_alt_outlined, size: 16),
+                    label: const Text('Utile'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _sendFeedback(context, useful: false),
+                    icon: const Icon(Icons.thumb_down_alt_outlined, size: 16),
+                    label: const Text('Pas utile'),
                   ),
                 ],
               ),
