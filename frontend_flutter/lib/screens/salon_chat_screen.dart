@@ -2001,6 +2001,22 @@ class _ContextPanel extends StatelessWidget {
               ? 'Aucune recherche attachée récemment.'
               : null,
         ),
+        if (researchArtifacts.length > 4)
+          Padding(
+            padding: const EdgeInsets.only(right: 8, bottom: 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _openResearchHistorySheet(
+                  context,
+                  researchArtifacts,
+                  onOpenCanvas,
+                ),
+                icon: const Icon(Icons.history_rounded, size: 16),
+                label: const Text('Voir tout'),
+              ),
+            ),
+          ),
         ...researchArtifacts.take(4).map(
               (artifact) => ListTile(
                 dense: true,
@@ -2105,6 +2121,98 @@ class _ContextPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  void _openResearchHistorySheet(
+    BuildContext context,
+    List<RoomArtifact> researchArtifacts,
+    void Function(RoomArtifact) onOpenCanvas,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.72,
+        maxChildSize: 0.92,
+        minChildSize: 0.4,
+        builder: (_, scrollCtrl) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.onSurface.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Row(
+                children: [
+                  Icon(Icons.travel_explore_rounded,
+                      color: scheme.tertiary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Historique des recherches',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${researchArtifacts.length}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurface.withOpacity(0.55),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollCtrl,
+                itemCount: researchArtifacts.length,
+                itemBuilder: (ctx, i) {
+                  final artifact = researchArtifacts[i];
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(Icons.travel_explore_rounded,
+                        color: scheme.tertiary),
+                    title: Text(
+                      artifact.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      artifact.currentVersion?.contentPreview ??
+                          'research • ${artifact.status}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onOpenCanvas(artifact);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
