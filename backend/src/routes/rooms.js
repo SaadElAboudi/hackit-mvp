@@ -570,6 +570,107 @@ router.post('/:id/artifacts/:artifactId/revise', async (req, res) => {
     }
 });
 
+router.post('/:id/artifacts/:artifactId/versions/:versionId/approve', async (req, res) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomOwner(room, req.userId)) {
+            return res.status(403).json({ error: 'Owner role required' });
+        }
+
+        const artifact = await RoomArtifact.findOne({
+            _id: req.params.artifactId,
+            roomId: req.params.id,
+        });
+        if (!artifact) {
+            return res.status(404).json({ error: 'Artifact not found' });
+        }
+
+        const version = await ArtifactVersion.findOne({
+            _id: req.params.versionId,
+            artifactId: artifact._id,
+            roomId: req.params.id,
+        });
+        if (!version) {
+            return res.status(404).json({ error: 'Version not found' });
+        }
+
+        version.status = 'approved';
+        await version.save();
+
+        artifact.status = 'validated';
+        artifact.currentVersionId = version._id;
+        artifact.updatedAt = new Date();
+        await artifact.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.json({
+            artifact: artifactSummary(artifact, version),
+            version,
+        });
+    } catch (err) {
+        console.error('[rooms] artifact version approve error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/:id/artifacts/:artifactId/versions/:versionId/comment', async (req, res) => {
+    try {
+        const content = String(req.body?.content || '').trim();
+        if (!content) {
+            return res.status(400).json({ error: 'content is required' });
+        }
+
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const artifact = await RoomArtifact.findOne({
+            _id: req.params.artifactId,
+            roomId: req.params.id,
+        });
+        if (!artifact) {
+            return res.status(404).json({ error: 'Artifact not found' });
+        }
+
+        const version = await ArtifactVersion.findOne({
+            _id: req.params.versionId,
+            artifactId: artifact._id,
+            roomId: req.params.id,
+        });
+        if (!version) {
+            return res.status(404).json({ error: 'Version not found' });
+        }
+
+        version.comments.push({
+            authorId: req.userId,
+            authorName: req.displayName,
+            text: content,
+            resolved: false,
+        });
+        await version.save();
+
+        artifact.updatedAt = new Date();
+        await artifact.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.status(201).json({
+            artifact: artifactSummary(artifact, version),
+            version,
+            comment: version.comments[version.comments.length - 1],
+        });
+    } catch (err) {
+        console.error('[rooms] artifact version comment error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 router.get('/:id/missions', async (req, res) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);

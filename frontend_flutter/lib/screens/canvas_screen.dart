@@ -25,6 +25,7 @@ class CanvasScreen extends StatefulWidget {
 
 class _CanvasScreenState extends State<CanvasScreen> {
   bool _loading = true;
+  bool _busyAction = false;
   String? _error;
   RoomArtifact? _artifact;
   List<ArtifactVersion> _versions = [];
@@ -118,6 +119,94 @@ class _CanvasScreenState extends State<CanvasScreen> {
     );
   }
 
+  Future<void> _approveSelectedVersion() async {
+    final artifact = _artifact;
+    final version = _selectedVersion;
+    if (artifact == null || version == null) return;
+    setState(() => _busyAction = true);
+    try {
+      final updated = await roomService.approveArtifactVersion(
+        widget.roomId,
+        artifact.id,
+        version.id,
+      );
+      await _load();
+      if (!mounted) return;
+      setState(() {
+        _selectedVersion = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Version validée ✓')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _busyAction = false);
+    }
+  }
+
+  Future<void> _showAddCommentDialog() async {
+    final artifact = _artifact;
+    final version = _selectedVersion;
+    if (artifact == null || version == null) return;
+
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Commenter v${version.number}'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'Ex: Ajouter un cas d\'usage enterprise section 3',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim().isNotEmpty),
+            child: const Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _busyAction = true);
+    try {
+      final updated = await roomService.commentArtifactVersion(
+        widget.roomId,
+        artifact.id,
+        version.id,
+        content: ctrl.text.trim(),
+      );
+      await _load();
+      if (!mounted) return;
+      setState(() {
+        _selectedVersion = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Commentaire ajouté')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _busyAction = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -161,6 +250,22 @@ class _CanvasScreenState extends State<CanvasScreen> {
               onPressed: () => setState(() => _showVersions = !_showVersions),
             ),
           IconButton(
+            icon: const Icon(Icons.comment_outlined),
+            tooltip: 'Commenter la version',
+            onPressed: _busyAction || _selectedVersion == null
+                ? null
+                : _showAddCommentDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.verified_rounded),
+            tooltip: 'Valider cette version',
+            onPressed: _busyAction ||
+                    _selectedVersion == null ||
+                    _selectedVersion!.status == 'approved'
+                ? null
+                : _approveSelectedVersion,
+          ),
+          IconButton(
             icon: const Icon(Icons.copy_rounded),
             tooltip: 'Copier le contenu',
             onPressed: _copyContent,
@@ -182,7 +287,10 @@ class _CanvasScreenState extends State<CanvasScreen> {
                     return Row(
                       children: [
                         Expanded(
-                          child: _ContentView(version: _selectedVersion),
+                          child: _ContentView(
+                            version: _selectedVersion,
+                            onAddComment: _showAddCommentDialog,
+                          ),
                         ),
                         _VersionsPanel(
                           versions: _versions,
@@ -192,7 +300,10 @@ class _CanvasScreenState extends State<CanvasScreen> {
                       ],
                     );
                   }
-                  return _ContentView(version: _selectedVersion);
+                  return _ContentView(
+                    version: _selectedVersion,
+                    onAddComment: _showAddCommentDialog,
+                  );
                 }),
       floatingActionButton: _artifact == null
           ? null
@@ -218,7 +329,9 @@ class _CanvasScreenState extends State<CanvasScreen> {
 
 class _ContentView extends StatelessWidget {
   final ArtifactVersion? version;
-  const _ContentView({this.version});
+  final VoidCallback? onAddComment;
+
+  const _ContentView({this.version, this.onAddComment});
 
   @override
   Widget build(BuildContext context) {
@@ -264,9 +377,75 @@ class _ContentView extends StatelessWidget {
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(28, 24, 28, 100),
-            child: SelectableText(
-              version!.content,
-              style: const TextStyle(fontSize: 14.5, height: 1.7),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  version!.content,
+                  style: const TextStyle(fontSize: 14.5, height: 1.7),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Text(
+                      'Commentaires (${version!.comments.length})',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface.withOpacity(0.65),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: onAddComment,
+                      icon: const Icon(Icons.add_comment_outlined, size: 16),
+                      label: const Text('Ajouter'),
+                    ),
+                  ],
+                ),
+                if (version!.comments.isEmpty)
+                  Text(
+                    'Aucun commentaire pour cette version.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurface.withOpacity(0.5),
+                    ),
+                  )
+                else
+                  ...version!.comments.reversed.map((comment) {
+                    final author =
+                        comment['authorName']?.toString() ?? 'Anonyme';
+                    final text = comment['text']?.toString() ?? '';
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '$author: ',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            TextSpan(
+                              text: text,
+                              style:
+                                  const TextStyle(fontSize: 12, height: 1.35),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+              ],
             ),
           ),
         ),

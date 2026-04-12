@@ -218,17 +218,17 @@ L'IA n'agit jamais "en douce" ; elle intervient sur mention, commande ou mission
 - [x] Modèles Dart `RoomArtifact`, `RoomMission`, `RoomMemory`
 - [x] Rebuild Flutter + déploiement (`54d53da` gh-pages, `fe8799c` main)
 
-### Phase 2 — Canvas et versioning 🔜 _à démarrer_
+### Phase 2 — Canvas et versioning ✅ _terminée_
 > Objectif : `/doc` crée un canvas versionné partagé
 
-- [ ] Vue Canvas Flutter (lecture + révision d'artefact)
-- [ ] Widget `ArtifactCard` dans le flux de messages
-- [ ] Composer `/doc` → crée `RoomArtifact` + `ArtifactVersion`
-- [ ] Système de commentaires / challenges sur un artefact
-- [ ] Révision IA d'un artefact → nouvelle `ArtifactVersion`
-- [ ] Version validée consultable (historique versions)
-- [ ] Panneau contextuel droit (artifacts / memory / members)
-- [ ] Event WS `artifact_version_created` branché côté Flutter
+- [x] Vue Canvas Flutter (lecture + révision d'artefact)
+- [x] Widget `ArtifactCard` dans le flux de messages
+- [x] Composer `/doc` → crée `RoomArtifact` + `ArtifactVersion`
+- [x] Système de commentaires / challenges sur un artefact
+- [x] Révision IA d'un artefact → nouvelle `ArtifactVersion`
+- [x] Version validée consultable (historique versions)
+- [x] Panneau contextuel droit (artifacts / memory / members)
+- [x] Event WS `artifact_version_created` branché côté Flutter
 
 ### Phase 3 — Recherche collaborative
 > Objectif : `/search` insère des cartes sourcées dans le channel

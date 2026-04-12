@@ -265,6 +265,30 @@ class RoomService {
         .toList();
   }
 
+  Future<ArtifactVersion> approveArtifactVersion(
+      String roomId, String artifactId, String versionId) async {
+    final r = await _post(
+      '/api/rooms/$roomId/artifacts/$artifactId/versions/$versionId/approve',
+      const {},
+    );
+    return ArtifactVersion.fromJson(r['version'] as Map<String, dynamic>);
+  }
+
+  Future<ArtifactVersion> commentArtifactVersion(
+    String roomId,
+    String artifactId,
+    String versionId, {
+    required String content,
+    String? displayName,
+  }) async {
+    final r = await _post(
+      '/api/rooms/$roomId/artifacts/$artifactId/versions/$versionId/comment',
+      {'content': content},
+      displayName: displayName,
+    );
+    return ArtifactVersion.fromJson(r['version'] as Map<String, dynamic>);
+  }
+
   Future<void> addMemory(
     String roomId, {
     required String content,
