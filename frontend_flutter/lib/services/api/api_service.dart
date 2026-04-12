@@ -42,65 +42,6 @@ class ApiService {
     return _dio.post(path, data: data, queryParameters: queryParameters);
   }
 
-  // ---- Lesson persistence endpoints ----
-  Future<Response> createLesson({
-    required String userId,
-    required String title,
-    required List<String> steps,
-    required String videoUrl,
-    String? summary,
-  }) async {
-    return post('/api/lessons', data: {
-      'userId': userId,
-      'title': title,
-      'steps': steps,
-      'videoUrl': videoUrl,
-      if (summary != null) 'summary': summary,
-    });
-  }
-
-  Future<Response> generateLesson(
-      {required String query,
-      required String userId,
-      bool useGemini = true}) async {
-    return post('/api/generateLesson', data: {
-      'query': query,
-      'userId': userId,
-      'useGemini': useGemini,
-    });
-  }
-
-  Future<Response> listLessons(
-      {required String userId,
-      bool? favorite,
-      String sort = 'createdAt',
-      String order = 'desc',
-      int limit = 50,
-      int offset = 0}) async {
-    return get('/api/lessons', queryParameters: {
-      'userId': userId,
-      if (favorite != null) 'favorite': favorite.toString(),
-      'sort': sort,
-      'order': order,
-      'limit': limit.toString(),
-      'offset': offset.toString(),
-    });
-  }
-
-  Future<Response> setFavorite(
-      {required String lessonId, required bool favorite}) async {
-    return _dio
-        .patch('/api/lessons/$lessonId/favorite', data: {'favorite': favorite});
-  }
-
-  Future<Response> recordView({required String lessonId}) async {
-    return _dio.post('/api/lessons/$lessonId/view');
-  }
-
-  Future<Response> deleteLesson({required String lessonId}) async {
-    return _dio.delete('/api/lessons/$lessonId');
-  }
-
   /// Pings /health to wake the Render backend on cold start (fire-and-forget).
   /// Creates its own Dio with extended timeouts so the cold-start window (~60s)
   /// doesn't trip the default 20-30 s limits. All errors are swallowed.
