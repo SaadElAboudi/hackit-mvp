@@ -18,9 +18,9 @@ export function userIdMiddleware(req, res, next) {
 
     try {
       if (res.cookie) {
-        res.cookie('userId', userId, { maxAge: 1000 * 3600 * 24 * 365, httpOnly: false, sameSite: 'lax' });
+        res.cookie('userId', userId, { maxAge: 1000 * 3600 * 24 * 365, httpOnly: true, sameSite: 'lax' });
       } else {
-        res.setHeader('Set-Cookie', `userId=${userId}; Path=/; Max-Age=31536000; SameSite=Lax`);
+        res.setHeader('Set-Cookie', `userId=${userId}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax`);
       }
     } catch (_err) {
       // ignore cookie write failure

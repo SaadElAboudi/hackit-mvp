@@ -1,21 +1,26 @@
-// Deprecated: SQLite lesson persistence removed. Use MongoDB via Mongoose models instead.
-// Lightweight persistence layer with MongoDB (via mongoose) when MONGO_URI is set,
-// and an in-memory fallback for local/dev without Mongo.
+// In-memory Gemini transcript cache (per server session).
+// Replaces the old SQLite layer. For cross-restart persistence, save to MongoDB.
 
+const _geminiCache = new Map();
 
-// ...existing code...
+/**
+ * Store Gemini analysis (summary, keyTakeaways, quiz) keyed by videoId.
+ */
+export function setGeminiCache(videoId, data) {
+    if (videoId) _geminiCache.set(String(videoId), data);
+}
 
-// Deprecated: Use Mongoose Lesson model for lesson creation.
+/**
+ * Retrieve cached Gemini analysis by videoId. Returns null on miss.
+ */
+export function getGeminiCache(videoId) {
+    return _geminiCache.get(String(videoId)) ?? null;
+}
 
-// Deprecated: Use Mongoose Lesson model for favorite status.
-
-// Deprecated: Use Mongoose Lesson model for view recording.
-
-// Deprecated: Use Mongoose Lesson model for lesson listing.
-
-
-// Deprecated: Use Mongoose Lesson model for lesson retrieval.
-
-// Deprecated: Use Mongoose Lesson model for lesson formatting.
-
-// Deprecated: Use Mongoose ObjectId for lesson IDs.
+/**
+ * Legacy fuzzy lookup by transcript content (not implemented — returns null).
+ * Kept for API compatibility with transcript.js.
+ */
+export function getGeminiCacheFuzzy(_transcript) {
+    return null;
+}

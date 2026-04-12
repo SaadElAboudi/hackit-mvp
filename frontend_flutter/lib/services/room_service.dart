@@ -86,7 +86,14 @@ class RoomService {
   }
 
   Map<String, dynamic> _parse(http.Response r) {
-    final body = jsonDecode(r.body) as Map<String, dynamic>;
+    Map<String, dynamic> body;
+    try {
+      body = r.body.isNotEmpty
+          ? jsonDecode(r.body) as Map<String, dynamic>
+          : <String, dynamic>{};
+    } catch (_) {
+      body = <String, dynamic>{};
+    }
     if (r.statusCode >= 400) {
       throw Exception(body['error'] ?? 'HTTP ${r.statusCode}');
     }

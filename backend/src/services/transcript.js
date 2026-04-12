@@ -64,8 +64,8 @@ export async function getTranscript(videoId, videoTitle) {
     let quiz = [];
     let summary = '';
     try {
-        const { getGeminiCacheFuzzy, setGeminiCache } = await import('../utils/persistence.js');
-        const gemini = getGeminiCacheFuzzy(transcript);
+        const { getGeminiCache, setGeminiCache } = await import('../utils/persistence.js');
+        const gemini = getGeminiCache(videoId);
         if (gemini && gemini.keyTakeaways && gemini.quiz) {
             keyTakeaways = gemini.keyTakeaways;
             quiz = gemini.quiz;
