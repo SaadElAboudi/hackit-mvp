@@ -14,6 +14,10 @@ import '../widgets/neumorphic_action_button.dart';
 import 'canvas_screen.dart';
 import 'profile_screen.dart';
 
+const String _uiStyle =
+    String.fromEnvironment('UI_STYLE', defaultValue: 'glass-neumorph');
+const bool _useNeumorphControls = _uiStyle != 'glass-only';
+
 /// The main chat screen for a salon.
 ///
 /// Features:
@@ -425,7 +429,10 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
               ],
             ),
           ),
-        _CommandQuickBar(onInsertCommand: _insertCommand),
+        _CommandQuickBar(
+          onInsertCommand: _insertCommand,
+          useNeumorphControls: _useNeumorphControls,
+        ),
         Expanded(child: _buildConversationList(prov, room, scheme)),
         _InputBar(
           controller: _inputCtrl,
@@ -503,6 +510,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         memoryItems: prov.memoryItems,
                         missions: prov.missions,
                         onlineUserIds: prov.onlineUserIds,
+                        useNeumorphControls: _useNeumorphControls,
                         onInsertCommand: _insertCommand,
                         onReviseArtifact: _showReviseArtifactDialog,
                         onLaunchMission: _showLaunchMissionDialog,
@@ -1844,8 +1852,12 @@ class _EmptyChat extends StatelessWidget {
 
 class _CommandQuickBar extends StatelessWidget {
   final void Function(String command) onInsertCommand;
+  final bool useNeumorphControls;
 
-  const _CommandQuickBar({required this.onInsertCommand});
+  const _CommandQuickBar({
+    required this.onInsertCommand,
+    required this.useNeumorphControls,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1865,10 +1877,18 @@ class _CommandQuickBar extends StatelessWidget {
           children: actions.map((action) {
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: NeumorphicActionButton(
-                label: action.label,
-                onPressed: () => onInsertCommand(action.command),
-              ),
+              child: useNeumorphControls
+                  ? NeumorphicActionButton(
+                      label: action.label,
+                      onPressed: () => onInsertCommand(action.command),
+                    )
+                  : OutlinedButton(
+                      onPressed: () => onInsertCommand(action.command),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: Text(action.label),
+                    ),
             );
           }).toList(),
         ),
@@ -1883,6 +1903,7 @@ class _ContextPanel extends StatelessWidget {
   final List<RoomMemory> memoryItems;
   final List<RoomMission> missions;
   final List<String> onlineUserIds;
+  final bool useNeumorphControls;
   final void Function(String command) onInsertCommand;
   final Future<void> Function(RoomArtifact artifact) onReviseArtifact;
   final VoidCallback onLaunchMission;
@@ -1894,6 +1915,7 @@ class _ContextPanel extends StatelessWidget {
     required this.memoryItems,
     required this.missions,
     required this.onlineUserIds,
+    required this.useNeumorphControls,
     required this.onInsertCommand,
     required this.onReviseArtifact,
     required this.onLaunchMission,
@@ -2100,26 +2122,45 @@ class _ContextPanel extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              NeumorphicActionButton(
-                icon: Icons.add_box_outlined,
-                label: 'Creer un canvas',
-                onPressed: () => onInsertCommand('/doc'),
-              ),
-              NeumorphicActionButton(
-                icon: Icons.travel_explore_rounded,
-                label: 'Attacher une recherche',
-                onPressed: () => onInsertCommand('/search'),
-              ),
-              NeumorphicActionButton(
-                icon: Icons.rule_folder_rounded,
-                label: 'Synthese de decision',
-                onPressed: () => onInsertCommand('/decide'),
-              ),
-              NeumorphicActionButton(
-                icon: Icons.auto_awesome_rounded,
-                label: 'Lancer une mission IA',
-                onPressed: onLaunchMission,
-              ),
+              if (useNeumorphControls) ...[
+                NeumorphicActionButton(
+                  icon: Icons.add_box_outlined,
+                  label: 'Creer un canvas',
+                  onPressed: () => onInsertCommand('/doc'),
+                ),
+                NeumorphicActionButton(
+                  icon: Icons.travel_explore_rounded,
+                  label: 'Attacher une recherche',
+                  onPressed: () => onInsertCommand('/search'),
+                ),
+                NeumorphicActionButton(
+                  icon: Icons.rule_folder_rounded,
+                  label: 'Synthese de decision',
+                  onPressed: () => onInsertCommand('/decide'),
+                ),
+                NeumorphicActionButton(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'Lancer une mission IA',
+                  onPressed: onLaunchMission,
+                ),
+              ] else ...[
+                FilledButton.tonal(
+                  onPressed: () => onInsertCommand('/doc'),
+                  child: const Text('Creer un canvas'),
+                ),
+                FilledButton.tonal(
+                  onPressed: () => onInsertCommand('/search'),
+                  child: const Text('Attacher une recherche'),
+                ),
+                FilledButton.tonal(
+                  onPressed: () => onInsertCommand('/decide'),
+                  child: const Text('Synthese de decision'),
+                ),
+                FilledButton.tonal(
+                  onPressed: onLaunchMission,
+                  child: const Text('Lancer une mission IA'),
+                ),
+              ],
             ],
           ),
         ),
