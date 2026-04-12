@@ -10,6 +10,7 @@ import '../services/project_service.dart' show ProjectService;
 import '../services/room_service.dart';
 import '../utils/web_download.dart';
 import '../widgets/glass_panel.dart';
+import '../widgets/neumorphic_action_button.dart';
 import 'canvas_screen.dart';
 import 'profile_screen.dart';
 
@@ -467,16 +468,16 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
-          final showContextPanel = constraints.maxWidth >= 1080;
-          if (!showContextPanel) {
-            return _buildConversationColumn(
-              context,
-              room,
-              prov,
-              scheme,
-              showContextPanel: false,
-            );
-          }
+            final showContextPanel = constraints.maxWidth >= 1080;
+            if (!showContextPanel) {
+              return _buildConversationColumn(
+                context,
+                room,
+                prov,
+                scheme,
+                showContextPanel: false,
+              );
+            }
 
             return Row(
               children: [
@@ -1864,12 +1865,9 @@ class _CommandQuickBar extends StatelessWidget {
           children: actions.map((action) {
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: OutlinedButton(
+              child: NeumorphicActionButton(
+                label: action.label,
                 onPressed: () => onInsertCommand(action.command),
-                style: OutlinedButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                ),
-                child: Text(action.label),
               ),
             );
           }).toList(),
@@ -2102,21 +2100,25 @@ class _ContextPanel extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              FilledButton.tonal(
+              NeumorphicActionButton(
+                icon: Icons.add_box_outlined,
+                label: 'Creer un canvas',
                 onPressed: () => onInsertCommand('/doc'),
-                child: const Text('Créer un canvas'),
               ),
-              FilledButton.tonal(
+              NeumorphicActionButton(
+                icon: Icons.travel_explore_rounded,
+                label: 'Attacher une recherche',
                 onPressed: () => onInsertCommand('/search'),
-                child: const Text('Attacher une recherche'),
               ),
-              FilledButton.tonal(
+              NeumorphicActionButton(
+                icon: Icons.rule_folder_rounded,
+                label: 'Synthese de decision',
                 onPressed: () => onInsertCommand('/decide'),
-                child: const Text('Synthèse de décision'),
               ),
-              FilledButton.tonal(
+              NeumorphicActionButton(
+                icon: Icons.auto_awesome_rounded,
+                label: 'Lancer une mission IA',
                 onPressed: onLaunchMission,
-                child: const Text('Lancer une mission IA'),
               ),
             ],
           ),
