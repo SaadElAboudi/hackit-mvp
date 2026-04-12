@@ -508,6 +508,22 @@ async function createDecisionMemories({ roomId, content, actor }) {
   return await RoomMemory.insertMany(entries);
 }
 
+async function createResearchMemories({ roomId, query, keyTakeaways, actor }) {
+  const takeaways = Array.isArray(keyTakeaways)
+    ? keyTakeaways.map((item) => clip(item, 240)).filter(Boolean)
+    : [];
+  const entries = takeaways.slice(0, 3).map((item) => ({
+    roomId,
+    type: 'fact',
+    content: `[Recherche] ${query}: ${item}`,
+    createdBy: actor.userId,
+    createdByName: actor.displayName,
+    pinned: true,
+  }));
+  if (!entries.length) return [];
+  return await RoomMemory.insertMany(entries);
+}
+
 async function handleResearchCommand({ roomId, room, prompt }) {
   const query = clip(prompt || room.purpose || room.name, 400);
   const video = await searchYouTube(query, { maxResults: 3 });
@@ -516,6 +532,15 @@ async function handleResearchCommand({ roomId, room, prompt }) {
   const videoId = video.videoId;
   const { transcript, keyTakeaways, summary } = await getTranscript(videoId, videoTitle);
   const { chapters } = await getChapters(videoId, videoTitle, { desired: 4 });
+  const chapterLinks = (Array.isArray(chapters) ? chapters : []).map((chapter) => {
+    const startSec = Number(chapter?.startSec || 0);
+    const separator = String(videoUrl || '').includes('?') ? '&' : '?';
+    return {
+      ...chapter,
+      startSec,
+      url: `${videoUrl}${separator}t=${startSec}`,
+    };
+  });
   const citations = buildTranscriptCitations({ videoUrl, transcript, max: 3 });
 
   const researchPrompt = [
@@ -549,10 +574,18 @@ async function handleResearchCommand({ roomId, room, prompt }) {
       source: video.source,
       alternatives: video.alternatives || [],
       citations,
-      chapters,
+      chapters: chapterLinks,
       keyTakeaways,
       why: 'Recherche collaborative déclenchée depuis le channel.',
     },
+  });
+
+  // Keep a compact trace in room memory so future AI replies can reuse research insights.
+  await createResearchMemories({
+    roomId,
+    query,
+    keyTakeaways,
+    actor: { userId: 'ai', displayName: 'IA' },
   });
 
   broadcastRoomResearchAttached(roomId, message.toObject());

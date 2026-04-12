@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/room.dart';
 import '../providers/room_provider.dart';
 import '../services/project_service.dart' show ProjectService;
@@ -1282,6 +1283,24 @@ class _ResearchCard extends StatelessWidget {
   final RoomMessage message;
   const _ResearchCard({required this.message});
 
+  Future<void> _openSource(BuildContext context, String rawUrl) async {
+    final url = rawUrl.trim();
+    if (url.isEmpty) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final ok = await launchUrl(uri, webOnlyWindowName: '_blank');
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible d\'ouvrir la source')),
+      );
+    }
+  }
+
+  Future<void> _retrySearch(BuildContext context, String query) async {
+    if (query.trim().isEmpty) return;
+    await context.read<RoomProvider>().sendMessage('/search $query');
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1289,8 +1308,11 @@ class _ResearchCard extends StatelessWidget {
         (message.data['citations'] as List? ?? []).whereType<Map>().toList();
     final chapters =
         (message.data['chapters'] as List? ?? []).whereType<Map>().toList();
+    final alternatives =
+        (message.data['alternatives'] as List? ?? []).whereType<Map>().toList();
     final videoTitle = message.data['videoTitle']?.toString() ?? 'Source';
     final videoUrl = message.data['videoUrl']?.toString() ?? '';
+    final query = message.data['query']?.toString() ?? '';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -1336,11 +1358,19 @@ class _ResearchCard extends StatelessWidget {
               ),
               if (videoUrl.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                SelectableText(
-                  videoUrl,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: scheme.primary,
+                InkWell(
+                  onTap: () => _openSource(context, videoUrl),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      videoUrl,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1358,9 +1388,23 @@ class _ResearchCard extends StatelessWidget {
                 ...citations.take(3).map(
                       (citation) => Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          '• ${citation['quote'] ?? ''}',
-                          style: const TextStyle(fontSize: 12, height: 1.35),
+                        child: InkWell(
+                          onTap: () => _openSource(
+                              context, citation['url']?.toString() ?? ''),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 2),
+                            child: Text(
+                              '• ${citation['quote'] ?? ''}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.35,
+                                color: scheme.onSurface,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -1380,9 +1424,14 @@ class _ResearchCard extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 6,
                   children: chapters.take(4).map((chapter) {
-                    return Chip(
+                    final title = chapter['title']?.toString() ?? 'Extrait';
+                    final chapterUrl = chapter['url']?.toString() ?? '';
+                    return ActionChip(
+                      onPressed: chapterUrl.isEmpty
+                          ? null
+                          : () => _openSource(context, chapterUrl),
                       label: Text(
-                        chapter['title']?.toString() ?? 'Extrait',
+                        title,
                         style: const TextStyle(fontSize: 11),
                       ),
                       visualDensity: VisualDensity.compact,
@@ -1390,6 +1439,58 @@ class _ResearchCard extends StatelessWidget {
                   }).toList(),
                 ),
               ],
+              if (alternatives.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Sources alternatives',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ...alternatives.take(2).map((alt) {
+                  final title = alt['title']?.toString() ?? 'Alternative';
+                  final url = alt['url']?.toString() ?? '';
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: InkWell(
+                      onTap:
+                          url.isEmpty ? null : () => _openSource(context, url),
+                      child: Text(
+                        '• $title',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.primary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: videoUrl.isEmpty
+                        ? null
+                        : () => _openSource(context, videoUrl),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: const Text('Jump to source'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: query.isEmpty
+                        ? null
+                        : () => _retrySearch(context, query),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Relancer /search'),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
