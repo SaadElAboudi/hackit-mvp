@@ -9,6 +9,7 @@ import '../providers/room_provider.dart';
 import '../services/project_service.dart' show ProjectService;
 import '../services/room_service.dart';
 import '../utils/web_download.dart';
+import '../widgets/glass_panel.dart';
 import 'canvas_screen.dart';
 import 'profile_screen.dart';
 
@@ -452,8 +453,20 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: _buildAppBar(context, room, scheme),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.primary.withValues(alpha: 0.08),
+              scheme.surface,
+              scheme.tertiary.withValues(alpha: 0.05),
+            ],
+          ),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
           final showContextPanel = constraints.maxWidth >= 1080;
           if (!showContextPanel) {
             return _buildConversationColumn(
@@ -465,52 +478,51 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
             );
           }
 
-          return Row(
-            children: [
-              Expanded(
-                flex: 5,
-                child: _buildConversationColumn(
-                  context,
-                  room,
-                  prov,
-                  scheme,
-                  showContextPanel: true,
-                ),
-              ),
-              Container(
-                width: 340,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLowest,
-                  border: Border(
-                    left: BorderSide(
-                      color: scheme.outlineVariant.withOpacity(0.35),
-                    ),
+            return Row(
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: _buildConversationColumn(
+                    context,
+                    room,
+                    prov,
+                    scheme,
+                    showContextPanel: true,
                   ),
                 ),
-                child: _ContextPanel(
-                  room: room,
-                  artifacts: prov.artifacts,
-                  memoryItems: prov.memoryItems,
-                  missions: prov.missions,
-                  onlineUserIds: prov.onlineUserIds,
-                  onInsertCommand: _insertCommand,
-                  onReviseArtifact: _showReviseArtifactDialog,
-                  onLaunchMission: _showLaunchMissionDialog,
-                  onOpenCanvas: (artifact) => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CanvasScreen(
-                        roomId: artifact.roomId,
-                        artifactId: artifact.id,
-                        initialTitle: artifact.title,
+                SizedBox(
+                  width: 340,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+                    child: GlassPanel(
+                      borderRadius: BorderRadius.circular(18),
+                      child: _ContextPanel(
+                        room: room,
+                        artifacts: prov.artifacts,
+                        memoryItems: prov.memoryItems,
+                        missions: prov.missions,
+                        onlineUserIds: prov.onlineUserIds,
+                        onInsertCommand: _insertCommand,
+                        onReviseArtifact: _showReviseArtifactDialog,
+                        onLaunchMission: _showLaunchMissionDialog,
+                        onOpenCanvas: (artifact) => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CanvasScreen(
+                              roomId: artifact.roomId,
+                              artifactId: artifact.id,
+                              initialTitle: artifact.title,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -810,13 +822,9 @@ class _ArtifactCardState extends State<_ArtifactCard> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.secondaryContainer.withOpacity(0.22),
-          border:
-              Border.all(color: scheme.secondary.withOpacity(0.45), width: 1.5),
-          borderRadius: BorderRadius.circular(16),
-        ),
+      child: GlassPanel(
+        tint: scheme.secondaryContainer.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1038,12 +1046,9 @@ class _DocumentCardState extends State<_DocumentCard> {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          border: Border.all(color: scheme.secondaryContainer, width: 1.5),
-          borderRadius: BorderRadius.circular(16),
-        ),
+      child: GlassPanel(
+        tint: scheme.surfaceContainerLow.withValues(alpha: 0.66),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1342,14 +1347,12 @@ class _ResearchCard extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.tertiaryContainer.withOpacity(0.35),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: scheme.tertiary.withOpacity(0.25)),
-        ),
+      child: GlassPanel(
+        tint: scheme.tertiaryContainer.withValues(alpha: 0.32),
+        borderRadius: BorderRadius.circular(16),
+        padding: const EdgeInsets.all(14),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1581,14 +1584,12 @@ class _DecisionCard extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.primaryContainer.withOpacity(0.42),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: scheme.primary.withOpacity(0.18)),
-        ),
+      child: GlassPanel(
+        tint: scheme.primaryContainer.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(16),
+        padding: const EdgeInsets.all(14),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
