@@ -15,6 +15,7 @@ import {
   broadcastRoomMessage,
   broadcastRoomMessageChunk,
   broadcastRoomMissionStatus,
+  broadcastRoomBriefSuggested,
   broadcastRoomResearchAttached,
   broadcastRoomSynthesisSuggested,
   broadcastRoomTyping,
@@ -26,6 +27,9 @@ const MAX_CONTEXT_ARTIFACTS = 3;
 const MAX_CONTEXT_MEMORY = 6;
 const SYNTHESIS_TRIGGER_EVERY = Number(process.env.ROOM_SYNTHESIS_TRIGGER_EVERY || 8);
 const SYNTHESIS_COOLDOWN_MS = Number(process.env.ROOM_SYNTHESIS_COOLDOWN_MS || 20 * 60 * 1000);
+const BRIEF_TRIGGER_EVERY = Number(process.env.ROOM_BRIEF_TRIGGER_EVERY || 4);
+const BRIEF_COOLDOWN_MS = Number(process.env.ROOM_BRIEF_COOLDOWN_MS || 30 * 60 * 1000);
+const MEETING_SIGNAL_REGEX = /(r[ée]union|meeting|kick\s?off|standup|comit[ée]|call|point\s+client|rdv)/i;
 
 function clip(text, max = 240) {
   const value = String(text || '').trim();
@@ -93,6 +97,13 @@ export function parseRoomCommand(rawContent = '') {
     return {
       kind: 'decide',
       prompt: stripCommandPrefix(content, /^\/decide\b/i),
+      raw: content,
+    };
+  }
+  if (/^\/brief\b/i.test(content)) {
+    return {
+      kind: 'brief',
+      prompt: stripCommandPrefix(content, /^\/brief\b/i),
       raw: content,
     };
   }
@@ -237,6 +248,35 @@ export function buildSynthesisSuggestion({ roomName, lines = [] }) {
     '- Convertir les points validés en `/decide`',
     '- Structurer le livrable en `/doc`',
     '- Vérifier les zones d’incertitude avec `/search`',
+  ].join('\n');
+}
+
+export function buildMeetingBrief({ roomName, lines = [], objective = '' }) {
+  const picked = (Array.isArray(lines) ? lines : [])
+    .map((line) => clip(line, 180))
+    .filter(Boolean)
+    .slice(0, 6);
+  const focus = clip(objective || roomName || 'réunion à venir', 120);
+  return [
+    `# Brief automatique avant réunion — ${roomName || 'Channel'}`,
+    '',
+    `## Objectif du point`,
+    `- ${focus}`,
+    '',
+    '## Points à aligner',
+    ...(picked.slice(0, 4).map((line) => `- ${line}`)),
+    ...(picked.length ? [] : ['- Aucun signal clair détecté, clarifier les priorités en ouverture']),
+    '',
+    '## Décisions à trancher',
+    '- Confirmer le périmètre du livrable',
+    '- Valider propriétaire et échéance par action',
+    '',
+    '## Questions critiques',
+    '- Quel est le risque principal si on ne livre pas cette semaine ?',
+    '- Quelle décision doit être prise pendant ce point ?',
+    '',
+    '## Prochaine étape',
+    '- Convertir le résultat du point en `/decide` puis en `/doc`',
   ].join('\n');
 }
 
@@ -920,6 +960,127 @@ export async function suggestRoomSynthesisIfNeeded({ roomId, room, actor }) {
   return { skipped: false, message };
 }
 
+async function handleBriefCommand({ roomId, room, prompt }) {
+  const context = await collectRoomContext(roomId);
+  const lines = context.messages
+    .filter((msg) => !msg.isAI)
+    .map((msg) => String(msg.content || '').trim())
+    .filter(Boolean)
+    .slice(-8);
+
+  const objective = clip(prompt || room?.purpose || room?.name || 'Préparer le prochain point', 180);
+  let brief = buildMeetingBrief({ roomName: room?.name, lines, objective });
+
+  if (process.env.GEMINI_API_KEY) {
+    const geminiPrompt = [
+      `Tu es PM de canal. Rédige un brief pré-réunion en markdown pour "${room?.name || 'Channel'}".`,
+      `Objectif: ${objective}`,
+      'Contraintes: <= 180 mots, sections: Objectif / Points à aligner / Décisions / Questions / Next step.',
+      '',
+      'Extraits récents:',
+      ...lines.map((line, i) => `${i + 1}. ${line}`),
+    ].join('\n');
+    const gemini = await tryGemini(geminiPrompt, 360);
+    if (gemini) brief = gemini;
+  }
+
+  const message = await persistRoomMessage({
+    roomId,
+    senderId: 'ai',
+    senderName: 'IA',
+    isAI: true,
+    type: 'system',
+    content: brief,
+    data: {
+      kind: 'meeting_brief',
+      source: 'manual',
+      objective,
+      suggestedCommands: ['/decide', '/doc'],
+      why: 'Brief automatique déclenché avant réunion.',
+    },
+  });
+
+  broadcastRoomBriefSuggested(roomId, message.toObject());
+  return { message };
+}
+
+export async function suggestRoomBriefIfNeeded({ roomId, room }) {
+  if (process.env.ROOM_AUTO_BRIEF === 'false') {
+    return { skipped: true, reason: 'disabled' };
+  }
+
+  const recent = await RoomMessage.find({ roomId }).sort({ createdAt: -1 }).limit(40).lean();
+  if (!recent.length) return { skipped: true, reason: 'no_messages' };
+
+  const lastBrief = recent.find(
+    (msg) => msg?.type === 'system' && msg?.data?.kind === 'meeting_brief'
+  );
+  if (lastBrief) {
+    const ageMs = Date.now() - new Date(lastBrief.createdAt).getTime();
+    if (ageMs < BRIEF_COOLDOWN_MS) {
+      return { skipped: true, reason: 'cooldown' };
+    }
+  }
+
+  const cutoffTime = lastBrief?.createdAt ? new Date(lastBrief.createdAt).getTime() : 0;
+  const humanSinceLastBrief = recent
+    .filter((msg) => !msg?.isAI)
+    .filter((msg) => !cutoffTime || new Date(msg.createdAt).getTime() > cutoffTime)
+    .filter((msg) => !isCommandLike(msg?.content));
+
+  if (humanSinceLastBrief.length < BRIEF_TRIGGER_EVERY) {
+    return { skipped: true, reason: 'not_enough_messages' };
+  }
+
+  const meetingSignals = humanSinceLastBrief
+    .map((msg) => String(msg.content || '').trim())
+    .filter((line) => MEETING_SIGNAL_REGEX.test(line));
+
+  if (!meetingSignals.length) {
+    return { skipped: true, reason: 'no_meeting_signal' };
+  }
+
+  const lines = humanSinceLastBrief
+    .slice(0, 10)
+    .map((msg) => String(msg.content || '').trim())
+    .filter(Boolean);
+  const objective = meetingSignals[0] || room?.purpose || 'Préparer le point à venir';
+  let brief = buildMeetingBrief({ roomName: room?.name, lines, objective });
+
+  if (process.env.GEMINI_API_KEY) {
+    const prompt = [
+      `Rédige un brief pré-réunion prêt à l'emploi pour "${room?.name || 'Channel'}".`,
+      `Objectif détecté: ${clip(objective, 180)}`,
+      'Format: markdown, <= 180 mots, sections: Objectif / Points à aligner / Décisions / Questions / Next step.',
+      '',
+      'Messages récents:',
+      ...lines.map((line, i) => `${i + 1}. ${line}`),
+    ].join('\n');
+    const gemini = await tryGemini(prompt, 380);
+    if (gemini) brief = gemini;
+  }
+
+  const message = await persistRoomMessage({
+    roomId,
+    senderId: 'ai',
+    senderName: 'IA',
+    isAI: true,
+    type: 'system',
+    content: brief,
+    data: {
+      kind: 'meeting_brief',
+      source: 'auto',
+      objective: clip(objective, 180),
+      basedOnMessages: humanSinceLastBrief.length,
+      suggestedCommands: ['/decide', '/doc'],
+      why: 'Brief auto proposé avant réunion détectée dans le channel.',
+    },
+  });
+
+  broadcastRoomBriefSuggested(roomId, message.toObject());
+  return { skipped: false, message };
+}
+
 export async function triggerRoomAutomation({
   room,
   roomId,
@@ -959,6 +1120,13 @@ export async function triggerRoomAutomation({
         actor,
         context,
         sourceMessageId: triggeringMessage?._id || null,
+      });
+    }
+    if (parsed.kind === 'brief') {
+      return await handleBriefCommand({
+        roomId,
+        room,
+        prompt: effectivePrompt,
       });
     }
     return await handleConversationCommand({

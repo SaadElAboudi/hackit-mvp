@@ -18,6 +18,7 @@ import {
     createRoomArtifact,
     parseRoomCommand,
     reviseRoomArtifact,
+    suggestRoomBriefIfNeeded,
     triggerRoomAutomation,
     suggestRoomSynthesisIfNeeded,
 } from '../services/roomOrchestrator.js';
@@ -243,6 +244,13 @@ router.post('/:id/messages', async (req, res) => {
                 },
             }).catch((error) => {
                 console.error('[rooms] synthesis suggestion error:', error);
+            });
+
+            suggestRoomBriefIfNeeded({
+                room,
+                roomId: req.params.id,
+            }).catch((error) => {
+                console.error('[rooms] meeting brief suggestion error:', error);
             });
         }
     } catch (err) {

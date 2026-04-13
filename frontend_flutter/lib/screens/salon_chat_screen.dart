@@ -693,6 +693,12 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (message.isSystem) {
+      if (message.data['kind']?.toString() == 'meeting_brief') {
+        return _MeetingBriefCard(
+          message: message,
+          onInsertCommand: onInsertCommand,
+        );
+      }
       if (message.data['kind']?.toString() == 'synthesis_suggestion') {
         return _SynthesisSuggestionCard(
           message: message,
@@ -1284,7 +1290,8 @@ class _SynthesisSuggestionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final basedOn = int.tryParse(message.data['basedOnMessages']?.toString() ?? '') ?? 0;
+    final basedOn =
+        int.tryParse(message.data['basedOnMessages']?.toString() ?? '') ?? 0;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GlassPanel(
@@ -1307,7 +1314,9 @@ class _SynthesisSuggestionCard extends StatelessWidget {
                 if (basedOn > 0)
                   Text(
                     '$basedOn msgs',
-                    style: TextStyle(fontSize: 11, color: scheme.onSurface.withValues(alpha: 0.55)),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withValues(alpha: 0.55)),
                   ),
               ],
             ),
@@ -1322,14 +1331,94 @@ class _SynthesisSuggestionCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 OutlinedButton.icon(
-                  onPressed: onInsertCommand == null ? null : () => onInsertCommand!('/decide'),
+                  onPressed: onInsertCommand == null
+                      ? null
+                      : () => onInsertCommand!('/decide'),
                   icon: const Icon(Icons.rule_folder_rounded, size: 16),
                   label: const Text('Transformer en /decide'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: onInsertCommand == null ? null : () => onInsertCommand!('/doc'),
+                  onPressed: onInsertCommand == null
+                      ? null
+                      : () => onInsertCommand!('/doc'),
                   icon: const Icon(Icons.description_outlined, size: 16),
                   label: const Text('Transformer en /doc'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MeetingBriefCard extends StatelessWidget {
+  final RoomMessage message;
+  final void Function(String command)? onInsertCommand;
+
+  const _MeetingBriefCard({
+    required this.message,
+    this.onInsertCommand,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final objective = message.data['objective']?.toString() ?? '';
+    final basedOn = int.tryParse(message.data['basedOnMessages']?.toString() ?? '') ?? 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GlassPanel(
+        tint: scheme.tertiaryContainer.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(16),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.groups_rounded, size: 18, color: scheme.tertiary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Brief automatique avant réunion',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+                if (basedOn > 0)
+                  Text(
+                    '$basedOn msgs',
+                    style: TextStyle(fontSize: 11, color: scheme.onSurface.withValues(alpha: 0.55)),
+                  ),
+              ],
+            ),
+            if (objective.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Objectif: $objective',
+                style: TextStyle(fontSize: 12, color: scheme.onSurface.withValues(alpha: 0.75)),
+              ),
+            ],
+            const SizedBox(height: 10),
+            SelectableText(
+              message.content,
+              style: const TextStyle(fontSize: 13, height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: onInsertCommand == null ? null : () => onInsertCommand!('/decide'),
+                  icon: const Icon(Icons.rule_folder_rounded, size: 16),
+                  label: const Text('Valider via /decide'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onInsertCommand == null ? null : () => onInsertCommand!('/doc'),
+                  icon: const Icon(Icons.description_outlined, size: 16),
+                  label: const Text('Convertir en /doc'),
                 ),
               ],
             ),

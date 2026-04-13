@@ -8,9 +8,9 @@ process.env.MOCK_MODE = 'true';
 
 const { createApp } = await import('../src/index.js');
 const { attachWebSocketServer } = await import('../src/services/threadRooms.js');
-const { broadcastRoomSynthesisSuggested } = await import('../src/services/roomWS.js');
+const { broadcastRoomBriefSuggested } = await import('../src/services/roomWS.js');
 
-const ROOM_ID = 'aabbccddeeff001122334456';
+const ROOM_ID = 'aabbccddeeff001122334457';
 
 function startServer() {
     return new Promise((resolve) => {
@@ -42,7 +42,6 @@ function connectClient(port, roomId) {
         });
 
         ws.on('error', reject);
-
         ws.on('open', () => {
             ws.send(JSON.stringify({ type: 'join', roomId, userId: `u-${Math.random().toString(36).slice(2)}` }));
             function waitForFrame(predicate, timeoutMs = 5000) {
@@ -56,7 +55,7 @@ function connectClient(port, roomId) {
     });
 }
 
-await test('synthesis_suggested is broadcast to all live clients in room', async (t) => {
+await test('brief_suggested is broadcast to all live clients in room', async (t) => {
     const { server, port } = await startServer();
     t.after(() => server.close());
 
@@ -70,30 +69,31 @@ await test('synthesis_suggested is broadcast to all live clients in room', async
     ]);
 
     const mockMessage = {
-        _id: '507f1f77bcf86cd799439019',
+        _id: '507f1f77bcf86cd799439020',
         roomId: ROOM_ID,
         senderId: 'ai',
         senderName: 'IA',
         isAI: true,
         type: 'system',
-        content: '# Suggestion de synthese\\n- Point 1\\n- Point 2',
+        content: '# Brief automatique avant reunion',
         data: {
-            kind: 'synthesis_suggestion',
-            basedOnMessages: 9,
+            kind: 'meeting_brief',
+            objective: 'Préparer la réunion client',
+            basedOnMessages: 6,
             suggestedCommands: ['/decide', '/doc'],
         },
     };
 
     const [evtA, evtB] = await Promise.all([
-        a.waitForFrame((m) => m.type === 'synthesis_suggested'),
-        b.waitForFrame((m) => m.type === 'synthesis_suggested'),
-        Promise.resolve().then(() => broadcastRoomSynthesisSuggested(ROOM_ID, mockMessage)),
+        a.waitForFrame((m) => m.type === 'brief_suggested'),
+        b.waitForFrame((m) => m.type === 'brief_suggested'),
+        Promise.resolve().then(() => broadcastRoomBriefSuggested(ROOM_ID, mockMessage)),
     ]);
 
     for (const evt of [evtA, evtB]) {
-        assert.equal(evt.type, 'synthesis_suggested');
+        assert.equal(evt.type, 'brief_suggested');
         assert.equal(evt.roomId, ROOM_ID);
-        assert.equal(evt.message?.data?.kind, 'synthesis_suggestion');
-        assert.equal(evt.message?.data?.basedOnMessages, 9);
+        assert.equal(evt.message?.data?.kind, 'meeting_brief');
+        assert.equal(evt.message?.data?.basedOnMessages, 6);
     }
 });

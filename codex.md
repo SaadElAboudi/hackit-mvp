@@ -243,7 +243,7 @@ _Note qualité_: les prochains points restants sont surtout des tests E2E multi-
 
 ### Phase 4 — Proactivité contrôlée (post-PMF)
 - [x] Suggestions de synthèse automatiques
-- [ ] Briefs automatiques avant réunion
+- [x] Briefs automatiques avant réunion
 - [ ] Intégrations Notion / Slack / Drive
 - [ ] Agents spécialisés par mission
 
