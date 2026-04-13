@@ -242,7 +242,7 @@ L'IA n'agit jamais "en douce" ; elle intervient sur mention, commande ou mission
 _Note qualité_: les prochains points restants sont surtout des tests E2E multi-clients (WS + persistance room search).
 
 ### Phase 4 — Proactivité contrôlée (post-PMF)
-- [ ] Suggestions de synthèse automatiques
+- [x] Suggestions de synthèse automatiques
 - [ ] Briefs automatiques avant réunion
 - [ ] Intégrations Notion / Slack / Drive
 - [ ] Agents spécialisés par mission

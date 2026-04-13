@@ -16,6 +16,7 @@ import {
   broadcastRoomMessageChunk,
   broadcastRoomMissionStatus,
   broadcastRoomResearchAttached,
+  broadcastRoomSynthesisSuggested,
   broadcastRoomTyping,
 } from './roomWS.js';
 import { searchYouTube } from './youtube.js';
@@ -23,6 +24,8 @@ import { searchYouTube } from './youtube.js';
 const MAX_CONTEXT_MESSAGES = 18;
 const MAX_CONTEXT_ARTIFACTS = 3;
 const MAX_CONTEXT_MEMORY = 6;
+const SYNTHESIS_TRIGGER_EVERY = Number(process.env.ROOM_SYNTHESIS_TRIGGER_EVERY || 8);
+const SYNTHESIS_COOLDOWN_MS = Number(process.env.ROOM_SYNTHESIS_COOLDOWN_MS || 20 * 60 * 1000);
 
 function clip(text, max = 240) {
   const value = String(text || '').trim();
@@ -198,6 +201,42 @@ function buildHeuristicReply({ roomName, prompt, command }) {
     '- Transformer l’échange en document avec `/doc`',
     '- Synthétiser des décisions avec `/decide`',
     '- Chercher une source avec `/search`',
+  ].join('\n');
+}
+
+function isCommandLike(text = '') {
+  const value = String(text || '').trim();
+  return /^\//.test(value) || /@ia\b/i.test(value);
+}
+
+export function buildSynthesisSuggestion({ roomName, lines = [] }) {
+  const picked = (Array.isArray(lines) ? lines : [])
+    .map((line) => clip(line, 180))
+    .filter(Boolean)
+    .slice(0, 6);
+  if (!picked.length) {
+    return [
+      `# Suggestion de synthèse — ${roomName || 'Channel'}`,
+      '',
+      '## Résumé rapide',
+      '- Peu de signaux exploitables détectés sur les derniers échanges.',
+      '',
+      '## Prochaines actions proposées',
+      '- Clarifier le blocage principal',
+      '- Nommer un responsable par action',
+      '- Fixer une échéance de validation',
+    ].join('\n');
+  }
+  return [
+    `# Suggestion de synthèse — ${roomName || 'Channel'}`,
+    '',
+    '## Points saillants détectés',
+    ...picked.slice(0, 4).map((line) => `- ${line}`),
+    '',
+    '## Prochaines actions proposées',
+    '- Convertir les points validés en `/decide`',
+    '- Structurer le livrable en `/doc`',
+    '- Vérifier les zones d’incertitude avec `/search`',
   ].join('\n');
 }
 
@@ -807,6 +846,78 @@ async function handleMissionCommand({
     broadcastRoomMissionStatus(roomId, mission.toObject());
     throw error;
   }
+}
+
+export async function suggestRoomSynthesisIfNeeded({ roomId, room, actor }) {
+  if (process.env.ROOM_SYNTHESIS_SUGGESTIONS === 'false') {
+    return { skipped: true, reason: 'disabled' };
+  }
+
+  const recent = await RoomMessage.find({ roomId }).sort({ createdAt: -1 }).limit(40).lean();
+  if (!recent.length) return { skipped: true, reason: 'no_messages' };
+
+  const lastSuggestion = recent.find(
+    (msg) => msg?.type === 'system' && msg?.data?.kind === 'synthesis_suggestion'
+  );
+  if (lastSuggestion) {
+    const ageMs = Date.now() - new Date(lastSuggestion.createdAt).getTime();
+    if (ageMs < SYNTHESIS_COOLDOWN_MS) {
+      return { skipped: true, reason: 'cooldown' };
+    }
+  }
+
+  const cutoffTime = lastSuggestion?.createdAt ? new Date(lastSuggestion.createdAt).getTime() : 0;
+  const humanSinceLastSuggestion = recent
+    .filter((msg) => !msg?.isAI)
+    .filter((msg) => !cutoffTime || new Date(msg.createdAt).getTime() > cutoffTime)
+    .filter((msg) => !isCommandLike(msg?.content));
+
+  if (humanSinceLastSuggestion.length < SYNTHESIS_TRIGGER_EVERY) {
+    return { skipped: true, reason: 'not_enough_messages' };
+  }
+
+  const lines = humanSinceLastSuggestion
+    .slice(0, 10)
+    .map((msg) => String(msg.content || '').trim())
+    .filter(Boolean);
+
+  const defaultSuggestion = buildSynthesisSuggestion({ roomName: room?.name, lines });
+  let suggestion = defaultSuggestion;
+
+  if (process.env.GEMINI_API_KEY) {
+    const prompt = [
+      `Tu es copilote de canal. Produis une suggestion de synthèse concise en markdown pour "${room?.name || 'Channel'}".`,
+      '',
+      'Contraintes:',
+      '- max 140 mots',
+      '- sections: "Résumé", "Décisions proposées", "Actions"',
+      '- concret et exécutable immédiatement',
+      '',
+      'Extraits récents:',
+      ...lines.map((line, i) => `${i + 1}. ${line}`),
+    ].join('\n');
+    const gemini = await tryGemini(prompt, 320);
+    if (gemini) suggestion = gemini;
+  }
+
+  const message = await persistRoomMessage({
+    roomId,
+    senderId: 'ai',
+    senderName: 'IA',
+    isAI: true,
+    type: 'system',
+    content: suggestion,
+    data: {
+      kind: 'synthesis_suggestion',
+      source: 'auto',
+      basedOnMessages: humanSinceLastSuggestion.length,
+      suggestedCommands: ['/decide', '/doc'],
+    },
+    sourceMessageId: null,
+  });
+
+  broadcastRoomSynthesisSuggested(roomId, message.toObject());
+  return { skipped: false, message };
 }
 
 export async function triggerRoomAutomation({

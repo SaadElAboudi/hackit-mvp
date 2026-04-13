@@ -19,6 +19,7 @@ import {
     parseRoomCommand,
     reviseRoomArtifact,
     triggerRoomAutomation,
+    suggestRoomSynthesisIfNeeded,
 } from '../services/roomOrchestrator.js';
 import {
     broadcastRoomChallenge,
@@ -229,6 +230,19 @@ router.post('/:id/messages', async (req, res) => {
                 },
             }).catch((error) => {
                 console.error('[rooms] automation error:', error);
+            });
+        } else {
+            // Controlled proactivity: suggest a synthesis only after enough
+            // non-command messages and with cooldown safeguards.
+            suggestRoomSynthesisIfNeeded({
+                room,
+                roomId: req.params.id,
+                actor: {
+                    userId: req.userId,
+                    displayName: req.displayName,
+                },
+            }).catch((error) => {
+                console.error('[rooms] synthesis suggestion error:', error);
             });
         }
     } catch (err) {

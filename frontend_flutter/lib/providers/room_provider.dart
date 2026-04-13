@@ -250,6 +250,7 @@ class RoomProvider extends ChangeNotifier {
 
       case WsRoomEventType.decisionCreated:
       case WsRoomEventType.researchAttached:
+      case WsRoomEventType.synthesisSuggested:
         final msg = event.message;
         if (msg == null) return;
         final idx = messages.indexWhere((m) => m.id == msg.id);

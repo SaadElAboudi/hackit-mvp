@@ -366,6 +366,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
         return _MessageBubble(
           message: msg,
           isMe: isMe,
+          onInsertCommand: _insertCommand,
           onChallenge: msg.isDocument
               ? (content) => prov.addChallenge(
                     msg.id,
@@ -675,6 +676,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
 class _MessageBubble extends StatelessWidget {
   final RoomMessage message;
   final bool isMe;
+  final void Function(String command)? onInsertCommand;
   final Future<bool> Function(String)? onChallenge;
   final void Function(String content, String? title)? onExport;
   final VoidCallback? onOpenCanvas;
@@ -682,6 +684,7 @@ class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
     required this.isMe,
+    this.onInsertCommand,
     this.onChallenge,
     this.onExport,
     this.onOpenCanvas,
@@ -690,6 +693,12 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (message.isSystem) {
+      if (message.data['kind']?.toString() == 'synthesis_suggestion') {
+        return _SynthesisSuggestionCard(
+          message: message,
+          onInsertCommand: onInsertCommand,
+        );
+      }
       return _SystemEventChip(message: message);
     }
     if (message.isResearch) {
@@ -1262,6 +1271,74 @@ class _DocumentCardState extends State<_DocumentCard> {
 }
 
 // ── System event chip ─────────────────────────────────────────────────────────
+
+class _SynthesisSuggestionCard extends StatelessWidget {
+  final RoomMessage message;
+  final void Function(String command)? onInsertCommand;
+
+  const _SynthesisSuggestionCard({
+    required this.message,
+    this.onInsertCommand,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final basedOn = int.tryParse(message.data['basedOnMessages']?.toString() ?? '') ?? 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GlassPanel(
+        tint: scheme.primaryContainer.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(16),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.summarize_rounded, size: 18, color: scheme.primary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Suggestion automatique de synthèse',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+                if (basedOn > 0)
+                  Text(
+                    '$basedOn msgs',
+                    style: TextStyle(fontSize: 11, color: scheme.onSurface.withValues(alpha: 0.55)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SelectableText(
+              message.content,
+              style: const TextStyle(fontSize: 13, height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: onInsertCommand == null ? null : () => onInsertCommand!('/decide'),
+                  icon: const Icon(Icons.rule_folder_rounded, size: 16),
+                  label: const Text('Transformer en /decide'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onInsertCommand == null ? null : () => onInsertCommand!('/doc'),
+                  icon: const Icon(Icons.description_outlined, size: 16),
+                  label: const Text('Transformer en /doc'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _SystemEventChip extends StatelessWidget {
   final RoomMessage message;
