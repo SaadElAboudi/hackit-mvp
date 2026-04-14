@@ -9,6 +9,7 @@ import { getChapters } from './chapters.js';
 import { generateWithGemini, streamWithGemini } from './gemini.js';
 import { getTranscript } from './transcript.js';
 import { buildSlackShareText, postSlackMessage } from './slack.js';
+import { createNotionPage } from './notion.js';
 import {
   broadcastRoomArtifactCreated,
   broadcastRoomArtifactVersionCreated,
@@ -21,6 +22,7 @@ import {
   broadcastRoomSynthesisSuggested,
   broadcastRoomTyping,
   broadcastRoomShareResult,
+  broadcastRoomNotionExported,
 } from './roomWS.js';
 import { searchYouTube } from './youtube.js';
 
@@ -1015,6 +1017,91 @@ async function handleBriefCommand({ roomId, room, prompt }) {
 
 async function handleShareCommand({ roomId, room, prompt, context }) {
   const providerAndNote = String(prompt || '').trim();
+
+  // ── Notion branch ──────────────────────────────────────────────────────────
+  if (/^notion\b/i.test(providerAndNote)) {
+    const notion = room?.integrations?.notion || {};
+    if (!notion.enabled || !String(notion.apiToken || '').trim()) {
+      const message = await persistRoomMessage({
+        roomId,
+        senderId: 'ai',
+        senderName: 'IA',
+        isAI: true,
+        type: 'system',
+        content:
+          'Notion n\'est pas connecte sur ce channel. Connectez-le via POST /integrations/notion puis relancez `/share notion`.',
+        data: { kind: 'notion_export', ok: false, reason: 'notion_not_connected' },
+      });
+      broadcastRoomNotionExported(roomId, message.toObject());
+      return { message };
+    }
+
+    // Find most recent AI-generated artifact content to export
+    const latestArtifact = await RoomArtifact.findOne({ roomId }).sort({ updatedAt: -1 }).lean();
+    let markdown = '';
+    let pageTitle = `Hackit — ${room?.name || 'Channel'}`;
+
+    if (latestArtifact?.currentVersionId) {
+      const ver = await ArtifactVersion.findById(latestArtifact.currentVersionId).lean();
+      if (ver?.content) {
+        markdown = ver.content;
+        pageTitle = latestArtifact.title || pageTitle;
+      }
+    }
+
+    if (!markdown) {
+      const candidate = [...(context?.messages || [])]
+        .reverse()
+        .find((msg) => msg?.isAI && String(msg?.content || '').trim());
+      markdown = clip(candidate?.content || room?.purpose || 'Partage depuis Hackit.', 4000);
+    }
+
+    try {
+      const page = await createNotionPage({
+        apiToken: notion.apiToken,
+        parentPageId: notion.parentPageId,
+        title: pageTitle,
+        markdown,
+        emoji: '\uD83D\uDCCB',
+      });
+
+      const message = await persistRoomMessage({
+        roomId,
+        senderId: 'ai',
+        senderName: 'IA',
+        isAI: true,
+        type: 'system',
+        content: `Contenu exporte vers Notion : ${page.url}`,
+        data: {
+          kind: 'notion_export',
+          ok: true,
+          pageId: page.pageId,
+          url: page.url,
+          title: pageTitle,
+        },
+      });
+      broadcastRoomNotionExported(roomId, message.toObject());
+      return { message };
+    } catch (error) {
+      const message = await persistRoomMessage({
+        roomId,
+        senderId: 'ai',
+        senderName: 'IA',
+        isAI: true,
+        type: 'system',
+        content: `Echec export Notion : ${clip(error?.message || 'erreur inconnue', 220)}`,
+        data: {
+          kind: 'notion_export',
+          ok: false,
+          reason: clip(error?.code || error?.message || 'notion_error', 120),
+        },
+      });
+      broadcastRoomNotionExported(roomId, message.toObject());
+      return { error, message };
+    }
+  }
+
+  // ── Slack branch ───────────────────────────────────────────────────────────
   if (!/^slack\b/i.test(providerAndNote)) {
     const message = await persistRoomMessage({
       roomId,
@@ -1023,7 +1110,7 @@ async function handleShareCommand({ roomId, room, prompt, context }) {
       isAI: true,
       type: 'system',
       content:
-        'Partage non supporte pour cette cible. Utilisez `/share slack` (optionnel: `/share slack note`).',
+        'Partage non supporte pour cette cible. Utilisez `/share slack` ou `/share notion`.',
       data: { kind: 'share_result', provider: 'unknown', ok: false },
     });
     return { message };

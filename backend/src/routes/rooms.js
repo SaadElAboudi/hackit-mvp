@@ -23,6 +23,7 @@ import {
     suggestRoomSynthesisIfNeeded,
 } from '../services/roomOrchestrator.js';
 import { buildSlackShareText, postSlackMessage } from '../services/slack.js';
+import { createNotionPage, validateNotionToken } from '../services/notion.js';
 import {
     broadcastRoomChallenge,
     broadcastRoomMessage,
@@ -1099,6 +1100,113 @@ router.post('/:id/share', async (req, res) => {
         if (!res.headersSent) {
             res.status(502).json({ error: err?.message || 'Share failed' });
         }
+    }
+});
+
+// ── Integrations: Notion ──────────────────────────────────────────────────────
+
+/**
+ * GET /api/rooms/:id/integrations/notion
+ * Returns Notion integration status (token masked).
+ */
+router.get('/:id/integrations/notion', async (req, res) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+        const notion = room.integrations?.notion || {};
+        res.json({
+            enabled: Boolean(notion.enabled),
+            connected: Boolean(notion.apiToken),
+            parentPageId: notion.parentPageId || '',
+            connectedBy: notion.connectedBy || '',
+            connectedAt: notion.connectedAt || null,
+        });
+    } catch (err) {
+        console.error('[rooms/notion] status error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /api/rooms/:id/integrations/notion
+ * Connect Notion: store apiToken + parentPageId.
+ * Validates the token with a Notion search call.
+ */
+router.post('/:id/integrations/notion', async (req, res) => {
+    try {
+        const apiToken = String(req.body?.apiToken || '').trim();
+        const parentPageId = String(req.body?.parentPageId || '').trim();
+
+        if (!apiToken) {
+            return res.status(400).json({ error: 'apiToken is required' });
+        }
+        if (!parentPageId) {
+            return res.status(400).json({ error: 'parentPageId is required' });
+        }
+        if (!/^(secret_|ntn_)/.test(apiToken)) {
+            return res.status(400).json({
+                error: 'apiToken must be a Notion integration token (starts with secret_ or ntn_)',
+            });
+        }
+
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomOwner(room, req.userId)) {
+            return res.status(403).json({ error: 'Owner role required to connect integrations' });
+        }
+
+        try {
+            await validateNotionToken(apiToken);
+        } catch (err) {
+            return res.status(400).json({ error: `Notion rejected the token: ${err?.message || err}` });
+        }
+
+        room.integrations = room.integrations ?? {};
+        room.integrations.notion = {
+            enabled: true,
+            apiToken,
+            parentPageId,
+            connectedBy: req.userId,
+            connectedAt: new Date(),
+        };
+        await room.save();
+
+        res.status(201).json({ ok: true, parentPageId, connectedBy: req.userId });
+    } catch (err) {
+        console.error('[rooms/notion] connect error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * DELETE /api/rooms/:id/integrations/notion
+ * Disconnect Notion: wipe token and disable integration.
+ */
+router.delete('/:id/integrations/notion', async (req, res) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomOwner(room, req.userId)) {
+            return res.status(403).json({ error: 'Owner role required to remove integrations' });
+        }
+
+        room.integrations = room.integrations ?? {};
+        room.integrations.notion = {
+            enabled: false,
+            apiToken: '',
+            parentPageId: '',
+            connectedBy: '',
+            connectedAt: null,
+        };
+        await room.save();
+
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[rooms/notion] disconnect error:', err);
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 

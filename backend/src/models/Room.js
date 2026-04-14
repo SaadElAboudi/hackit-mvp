@@ -24,9 +24,21 @@ const RoomSlackIntegrationSchema = new mongoose.Schema(
     { _id: false }
 );
 
+const RoomNotionIntegrationSchema = new mongoose.Schema(
+    {
+        enabled: { type: Boolean, default: false },
+        apiToken: { type: String, trim: true, default: '' },
+        parentPageId: { type: String, trim: true, default: '' },
+        connectedBy: { type: String, trim: true, default: '' },
+        connectedAt: { type: Date, default: null },
+    },
+    { _id: false }
+);
+
 const RoomIntegrationsSchema = new mongoose.Schema(
     {
         slack: { type: RoomSlackIntegrationSchema, default: () => ({}) },
+        notion: { type: RoomNotionIntegrationSchema, default: () => ({}) },
     },
     { _id: false }
 );

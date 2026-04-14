@@ -26,6 +26,7 @@
  *     { type: 'synthesis_suggested', roomId, message }
  *     { type: 'brief_suggested',     roomId, message }
  *     { type: 'share_result',        roomId, message }
+ *     { type: 'notion_exported',      roomId, message }
  *     { type: 'presence',  roomId, userIds }    — current online users
  *     { type: 'pong' }
  *     { type: 'error',     reason }
@@ -180,6 +181,10 @@ export function broadcastRoomBriefSuggested(roomId, message) {
 
 export function broadcastRoomShareResult(roomId, message) {
   _broadcast(roomId, { type: 'share_result', roomId, message });
+}
+
+export function broadcastRoomNotionExported(roomId, message) {
+  _broadcast(roomId, { type: 'notion_exported', roomId, message });
 }
 
 /** Returns the list of currently online userIds for a room (used by REST endpoint). */
