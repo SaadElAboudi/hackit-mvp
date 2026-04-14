@@ -22,6 +22,7 @@ import {
     triggerRoomAutomation,
     suggestRoomSynthesisIfNeeded,
 } from '../services/roomOrchestrator.js';
+import { buildSlackShareText, postSlackMessage } from '../services/slack.js';
 import {
     broadcastRoomChallenge,
     broadcastRoomMessage,
@@ -918,6 +919,186 @@ router.post('/:id/documents', async (req, res) => {
     } catch (err) {
         console.error('[rooms] document error:', err);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ── Integrations: Slack ────────────────────────────────────────────────────────
+
+/**
+ * GET /api/rooms/:id/integrations/slack
+ * Returns Slack integration status (token is masked for safety).
+ */
+router.get('/:id/integrations/slack', async (req, res) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+        const slack = room.integrations?.slack || {};
+        res.json({
+            enabled: Boolean(slack.enabled),
+            connected: Boolean(slack.botToken),
+            channelId: slack.channelId || '',
+            connectedBy: slack.connectedBy || '',
+            connectedAt: slack.connectedAt || null,
+        });
+    } catch (err) {
+        console.error('[rooms/slack] status error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /api/rooms/:id/integrations/slack
+ * Connect Slack: store botToken + channelId and enable integration.
+ * Validates the token with a cheap Slack API call (auth.test).
+ */
+router.post('/:id/integrations/slack', async (req, res) => {
+    try {
+        const botToken = String(req.body?.botToken || '').trim();
+        const channelId = String(req.body?.channelId || '').trim();
+
+        if (!botToken) {
+            return res.status(400).json({ error: 'botToken is required' });
+        }
+        if (!channelId) {
+            return res.status(400).json({ error: 'channelId is required' });
+        }
+        if (!/^xoxb-/.test(botToken)) {
+            return res.status(400).json({ error: 'botToken must be a Slack Bot token (starts with xoxb-)' });
+        }
+        if (!/^[CG][A-Z0-9]{6,}$/.test(channelId)) {
+            return res.status(400).json({ error: 'channelId must be a Slack channel ID (e.g. C012AB3CD)' });
+        }
+
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        if (!isRoomOwner(room, req.userId)) {
+            return res.status(403).json({ error: 'Owner role required to connect integrations' });
+        }
+
+        // Validate the token against Slack by calling auth.test
+        let { default: axios } = await import('axios').catch(() => ({ default: null }));
+        if (!axios) {
+            // axios is always available as a CJS dep — import only on this path
+            const m = await import('axios');
+            axios = m.default ?? m;
+        }
+        try {
+            const auth = await axios.post(
+                'https://slack.com/api/auth.test',
+                {},
+                {
+                    headers: {
+                        Authorization: `Bearer ${botToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                    timeout: 8_000,
+                }
+            );
+            if (!auth?.data?.ok) {
+                const slackErr = auth?.data?.error || 'invalid_auth';
+                return res.status(400).json({ error: `Slack rejected the token: ${slackErr}` });
+            }
+        } catch (err) {
+            return res.status(502).json({ error: `Could not reach Slack to validate token: ${err?.message || err}` });
+        }
+
+        room.integrations = room.integrations ?? {};
+        room.integrations.slack = {
+            enabled: true,
+            botToken,
+            channelId,
+            connectedBy: req.userId,
+            connectedAt: new Date(),
+        };
+        await room.save();
+
+        res.status(201).json({ ok: true, channelId, connectedBy: req.userId });
+    } catch (err) {
+        console.error('[rooms/slack] connect error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * DELETE /api/rooms/:id/integrations/slack
+ * Disconnect Slack: wipe token and disable integration.
+ */
+router.delete('/:id/integrations/slack', async (req, res) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomOwner(room, req.userId)) {
+            return res.status(403).json({ error: 'Owner role required to remove integrations' });
+        }
+
+        room.integrations = room.integrations ?? {};
+        room.integrations.slack = {
+            enabled: false,
+            botToken: '',
+            channelId: '',
+            connectedBy: '',
+            connectedAt: null,
+        };
+        await room.save();
+
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[rooms/slack] disconnect error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /api/rooms/:id/share
+ * Manual share endpoint: posts last artifact / summary to the connected Slack channel.
+ * Accepts optional { note } in body.
+ */
+router.post('/:id/share', async (req, res) => {
+    try {
+        const note = String(req.body?.note || '').trim().slice(0, 300);
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const slack = room.integrations?.slack || {};
+        if (!slack.enabled || !String(slack.botToken || '').trim()) {
+            return res.status(409).json({ error: 'Slack not connected for this room. Connect via POST /integrations/slack first.' });
+        }
+
+        // Grab the most recent humanly-readable artifact or message
+        const [lastArtifact, lastMsg] = await Promise.all([
+            RoomArtifact.findOne({ roomId: req.params.id })
+                .sort({ updatedAt: -1 })
+                .lean(),
+            RoomMessage.findOne({ roomId: req.params.id, isAI: false })
+                .sort({ createdAt: -1 })
+                .lean(),
+        ]);
+
+        // eslint-disable-next-line prefer-destructuring
+        const rawContent = lastArtifact?.title
+            ? `${lastArtifact.title}`
+            : String(lastMsg?.content || room.purpose || 'Partage Hackit').slice(0, 500);
+        const text = buildSlackShareText({ roomName: room.name, summary: rawContent, note });
+
+        const sent = await postSlackMessage({
+            botToken: slack.botToken,
+            channelId: slack.channelId,
+            text,
+        });
+
+        res.json({ ok: true, channel: sent.channel, ts: sent.ts });
+    } catch (err) {
+        console.error('[rooms/share] error:', err);
+        if (!res.headersSent) {
+            res.status(502).json({ error: err?.message || 'Share failed' });
+        }
     }
 });
 

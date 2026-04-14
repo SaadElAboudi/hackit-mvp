@@ -13,6 +13,24 @@ const RoomMemberSchema = new mongoose.Schema(
     { _id: false }
 );
 
+const RoomSlackIntegrationSchema = new mongoose.Schema(
+    {
+        enabled: { type: Boolean, default: false },
+        botToken: { type: String, trim: true, default: '' },
+        channelId: { type: String, trim: true, default: '' },
+        connectedBy: { type: String, trim: true, default: '' },
+        connectedAt: { type: Date, default: null },
+    },
+    { _id: false }
+);
+
+const RoomIntegrationsSchema = new mongoose.Schema(
+    {
+        slack: { type: RoomSlackIntegrationSchema, default: () => ({}) },
+    },
+    { _id: false }
+);
+
 /**
  * Room — a salon de discussion.
  *  type = 'dm'    : direct message between two users
@@ -39,6 +57,7 @@ const RoomSchema = new mongoose.Schema(
             ref: 'RoomArtifact',
             default: null,
         },
+        integrations: { type: RoomIntegrationsSchema, default: () => ({}) },
         lastActivityAt: { type: Date, default: Date.now },
     },
     { timestamps: true }

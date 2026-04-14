@@ -244,7 +244,7 @@ _Note qualité_: les prochains points restants sont surtout des tests E2E multi-
 ### Phase 4 — Proactivité contrôlée (post-PMF)
 - [x] Suggestions de synthèse automatiques
 - [x] Briefs automatiques avant réunion
-- [ ] Intégrations Notion / Slack / Drive
+- [x] Intégrations Slack (connect/disconnect/share, `/share slack`, REST routes, WS event, 16 tests)
 - [ ] Agents spécialisés par mission
 
 ---

@@ -24,7 +24,8 @@
  *     { type: 'decision_created', roomId, message }
  *     { type: 'research_attached', roomId, message }
  *     { type: 'synthesis_suggested', roomId, message }
- *     { type: 'brief_suggested', roomId, message }
+ *     { type: 'brief_suggested',     roomId, message }
+ *     { type: 'share_result',        roomId, message }
  *     { type: 'presence',  roomId, userIds }    — current online users
  *     { type: 'pong' }
  *     { type: 'error',     reason }
@@ -175,6 +176,10 @@ export function broadcastRoomSynthesisSuggested(roomId, message) {
 
 export function broadcastRoomBriefSuggested(roomId, message) {
   _broadcast(roomId, { type: 'brief_suggested', roomId, message });
+}
+
+export function broadcastRoomShareResult(roomId, message) {
+  _broadcast(roomId, { type: 'share_result', roomId, message });
 }
 
 /** Returns the list of currently online userIds for a room (used by REST endpoint). */

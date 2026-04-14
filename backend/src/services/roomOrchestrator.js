@@ -8,6 +8,7 @@ import RoomMemory from '../models/RoomMemory.js';
 import { getChapters } from './chapters.js';
 import { generateWithGemini, streamWithGemini } from './gemini.js';
 import { getTranscript } from './transcript.js';
+import { buildSlackShareText, postSlackMessage } from './slack.js';
 import {
   broadcastRoomArtifactCreated,
   broadcastRoomArtifactVersionCreated,
@@ -19,6 +20,7 @@ import {
   broadcastRoomResearchAttached,
   broadcastRoomSynthesisSuggested,
   broadcastRoomTyping,
+  broadcastRoomShareResult,
 } from './roomWS.js';
 import { searchYouTube } from './youtube.js';
 
@@ -104,6 +106,13 @@ export function parseRoomCommand(rawContent = '') {
     return {
       kind: 'brief',
       prompt: stripCommandPrefix(content, /^\/brief\b/i),
+      raw: content,
+    };
+  }
+  if (/^\/share\b/i.test(content)) {
+    return {
+      kind: 'share',
+      prompt: stripCommandPrefix(content, /^\/share\b/i),
       raw: content,
     };
   }
@@ -1004,6 +1013,92 @@ async function handleBriefCommand({ roomId, room, prompt }) {
   return { message };
 }
 
+async function handleShareCommand({ roomId, room, prompt, context }) {
+  const providerAndNote = String(prompt || '').trim();
+  if (!/^slack\b/i.test(providerAndNote)) {
+    const message = await persistRoomMessage({
+      roomId,
+      senderId: 'ai',
+      senderName: 'IA',
+      isAI: true,
+      type: 'system',
+      content:
+        'Partage non supporte pour cette cible. Utilisez `/share slack` (optionnel: `/share slack note`).',
+      data: { kind: 'share_result', provider: 'unknown', ok: false },
+    });
+    return { message };
+  }
+
+  const slack = room?.integrations?.slack || {};
+  if (!slack.enabled || !String(slack.botToken || '').trim()) {
+    const message = await persistRoomMessage({
+      roomId,
+      senderId: 'ai',
+      senderName: 'IA',
+      isAI: true,
+      type: 'system',
+      content:
+        'Slack n\'est pas connecte sur ce channel. Connectez-le via les endpoints integrations puis relancez `/share slack`.',
+      data: { kind: 'share_result', provider: 'slack', ok: false, reason: 'slack_not_connected' },
+    });
+    return { message };
+  }
+
+  const note = providerAndNote.replace(/^slack\b/i, '').trim();
+  const candidate = [...(context?.messages || [])]
+    .reverse()
+    .find((msg) => String(msg?.content || '').trim() && !isCommandLike(msg?.content));
+
+  const summary = clip(
+    candidate?.content || room?.purpose || 'Partage rapide depuis le channel Hackit.',
+    1800
+  );
+  const text = buildSlackShareText({ roomName: room?.name, summary, note });
+
+  try {
+    const sent = await postSlackMessage({
+      botToken: slack.botToken,
+      channelId: slack.channelId,
+      text,
+    });
+
+    const message = await persistRoomMessage({
+      roomId,
+      senderId: 'ai',
+      senderName: 'IA',
+      isAI: true,
+      type: 'system',
+      content: `Partage Slack envoye dans ${sent.channel} (ts: ${sent.ts}).`,
+      data: {
+        kind: 'share_result',
+        provider: 'slack',
+        ok: true,
+        channel: sent.channel,
+        ts: sent.ts,
+      },
+    });
+    broadcastRoomShareResult(roomId, message.toObject());
+    return { message };
+  } catch (error) {
+    const message = await persistRoomMessage({
+      roomId,
+      senderId: 'ai',
+      senderName: 'IA',
+      isAI: true,
+      type: 'system',
+      content: `Echec du partage Slack: ${clip(error?.message || 'erreur inconnue', 220)}`,
+      data: {
+        kind: 'share_result',
+        provider: 'slack',
+        ok: false,
+        reason: clip(error?.code || error?.message || 'slack_error', 120),
+      },
+    });
+    broadcastRoomShareResult(roomId, message.toObject());
+    return { error, message };
+  }
+}
+
 export async function suggestRoomBriefIfNeeded({ roomId, room }) {
   if (process.env.ROOM_AUTO_BRIEF === 'false') {
     return { skipped: true, reason: 'disabled' };
@@ -1127,6 +1222,14 @@ export async function triggerRoomAutomation({
         roomId,
         room,
         prompt: effectivePrompt,
+      });
+    }
+    if (parsed.kind === 'share') {
+      return await handleShareCommand({
+        roomId,
+        room,
+        prompt: effectivePrompt,
+        context,
       });
     }
     return await handleConversationCommand({
