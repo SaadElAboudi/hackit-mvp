@@ -247,7 +247,7 @@ _Note qualité_: les prochains points restants sont surtout des tests E2E multi-
 - [x] Intégrations Slack (connect/disconnect/share, `/share slack`, REST routes, WS event, 16 tests)
 - [x] Intégrations Slack (connect/disconnect/share, `/share slack`, REST routes, WS event, 16 tests)
 - [x] Intégration Notion (connect/disconnect/export, `/share notion`, markdown→blocks, REST routes, WS event, 18 tests)
-- [ ] Agents spécialisés par mission
+- [x] Agents spécialisés par mission
 
 ---
 

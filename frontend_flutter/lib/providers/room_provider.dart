@@ -461,11 +461,11 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> createMission(String prompt) async {
+  Future<bool> createMission(String prompt, {String agentType = 'auto'}) async {
     final room = currentRoom;
     if (room == null) return false;
     try {
-      await _svc.postMission(room.id, prompt);
+      await _svc.postMission(room.id, prompt, agentType: agentType);
       aiThinking = true;
       notifyListeners();
       return true;

@@ -11,6 +11,12 @@ const RoomMissionSchema = new mongoose.Schema(
     prompt: { type: String, required: true, trim: true, maxlength: 4000 },
     requestedBy: { type: String, required: true, trim: true, maxlength: 120 },
     requestedByName: { type: String, default: 'Anonyme', trim: true, maxlength: 120 },
+    agentType: {
+      type: String,
+      enum: ['auto', 'strategist', 'researcher', 'facilitator', 'analyst', 'writer'],
+      default: 'auto',
+    },
+    agentLabel: { type: String, default: 'Agent auto', trim: true, maxlength: 80 },
     status: {
       type: String,
       enum: ['queued', 'running', 'done', 'failed'],

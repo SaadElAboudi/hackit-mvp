@@ -34,6 +34,44 @@ const SYNTHESIS_COOLDOWN_MS = Number(process.env.ROOM_SYNTHESIS_COOLDOWN_MS || 2
 const BRIEF_TRIGGER_EVERY = Number(process.env.ROOM_BRIEF_TRIGGER_EVERY || 4);
 const BRIEF_COOLDOWN_MS = Number(process.env.ROOM_BRIEF_COOLDOWN_MS || 30 * 60 * 1000);
 const MEETING_SIGNAL_REGEX = /(r[ée]union|meeting|kick\s?off|standup|comit[ée]|call|point\s+client|rdv)/i;
+const MISSION_AGENT_PROFILES = {
+  auto: {
+    type: 'auto',
+    label: 'Agent auto',
+    instruction:
+      'Choisis la posture la plus utile selon la demande et rends un livrable directement exploitable.',
+  },
+  strategist: {
+    type: 'strategist',
+    label: 'Strategist',
+    instruction:
+      'Travaille comme un stratège produit ou business. Clarifie objectifs, arbitrages, priorités, risques et plan d’exécution.',
+  },
+  researcher: {
+    type: 'researcher',
+    label: 'Researcher',
+    instruction:
+      'Travaille comme un chercheur. Structure hypothèses, signaux, comparatifs, sources potentielles et zones d’incertitude.',
+  },
+  facilitator: {
+    type: 'facilitator',
+    label: 'Facilitator',
+    instruction:
+      'Travaille comme un facilitateur d’équipe. Prépare alignement, décisions à trancher, agenda, next steps et responsabilités.',
+  },
+  analyst: {
+    type: 'analyst',
+    label: 'Analyst',
+    instruction:
+      'Travaille comme un analyste. Décompose le problème, formule diagnostics, métriques, scénarios et recommandations argumentées.',
+  },
+  writer: {
+    type: 'writer',
+    label: 'Writer',
+    instruction:
+      'Travaille comme un rédacteur senior. Produis un document clair, structuré, prêt à partager, avec formulation précise et ton professionnel.',
+  },
+};
 
 function clip(text, max = 240) {
   const value = String(text || '').trim();
@@ -70,6 +108,38 @@ function inferFallbackPrompt(triggeringMessage, recentMessages) {
     clip(latestHuman?.content || '', 1000) ||
     'Aide l’équipe à avancer.'
   );
+}
+
+export function normalizeMissionAgentType(value = '') {
+  const raw = String(value || '').trim().toLowerCase();
+  return MISSION_AGENT_PROFILES[raw] ? raw : 'auto';
+}
+
+export function inferMissionAgentType(prompt = '') {
+  const text = String(prompt || '').toLowerCase();
+  if (!text) return 'auto';
+  if (/(r[eé]union|atelier|alignement|facilit|standup|kickoff|kick-off|agenda|d[eé]cision)/i.test(text)) {
+    return 'facilitator';
+  }
+  if (/(benchmark|research|cherche|analyse march[eé]|veille|source|comparatif|concurrent)/i.test(text)) {
+    return 'researcher';
+  }
+  if (/(kpi|metric|m[eé]trique|funnel|data|diagnostic|analyse|chiffr|cohort|retention)/i.test(text)) {
+    return 'analyst';
+  }
+  if (/(note|brief|r[eé]dige|document|sp[eé]c|spec|copy|announce|email|memo|pr[ée]sentation)/i.test(text)) {
+    return 'writer';
+  }
+  if (/(go[- ]to[- ]market|gtm|roadmap|priori|strat[eé]gie|positionnement|lancement|plan)/i.test(text)) {
+    return 'strategist';
+  }
+  return 'auto';
+}
+
+export function resolveMissionAgentProfile({ prompt = '', agentType = 'auto' } = {}) {
+  const normalized = normalizeMissionAgentType(agentType);
+  const resolvedType = normalized === 'auto' ? inferMissionAgentType(prompt) : normalized;
+  return MISSION_AGENT_PROFILES[resolvedType] || MISSION_AGENT_PROFILES.auto;
 }
 
 export function parseRoomCommand(rawContent = '') {
@@ -157,7 +227,7 @@ function extractSectionList(markdown, titleRegex) {
     .slice(0, 6);
 }
 
-function buildHeuristicReply({ roomName, prompt, command }) {
+function buildHeuristicReply({ roomName, prompt, command, missionAgentLabel = 'Agent auto' }) {
   const topic = clip(prompt || roomName, 120);
   if (command === 'doc') {
     return [
@@ -203,6 +273,9 @@ function buildHeuristicReply({ roomName, prompt, command }) {
   if (command === 'mission') {
     return [
       `# Mission IA — ${slugTitle(topic, 'Mission partagée')}`,
+      '',
+      `## Agent`,
+      `- ${missionAgentLabel}`,
       '',
       '## Résultat',
       '- Analyse initiale produite',
@@ -792,11 +865,14 @@ async function handleConversationCommand({
   actor,
   context,
   sourceMessageId,
+  modeInstruction = '',
+  missionAgentLabel = 'Agent auto',
 }) {
   const effectivePrompt = clip(prompt || inferFallbackPrompt(null, context.messages), 1200);
   const geminiPrompt = [
     'Tu es un collègue IA visible par tous dans un channel collaboratif.',
     'Réponds en français, de façon utile, structurée et concise.',
+    modeInstruction ? `Posture spécialisée: ${modeInstruction}` : '',
     command === 'doc'
       ? 'Rends un document markdown complet, avec un titre principal commençant par #.'
       : 'Rends une réponse directement exploitable dans le flux de discussion.',
@@ -812,7 +888,12 @@ async function handleConversationCommand({
   if (!geminiText) geminiText = await tryGemini(geminiPrompt, maxTokens);
 
   const content =
-    geminiText || buildHeuristicReply({ roomName: room.name, prompt: effectivePrompt, command });
+    geminiText || buildHeuristicReply({
+      roomName: room.name,
+      prompt: effectivePrompt,
+      command,
+      missionAgentLabel,
+    });
 
   const shouldCreateArtifact =
     command === 'doc' || /^#\s+/.test(String(content || '')) || isDocLikePrompt(effectivePrompt);
@@ -857,13 +938,17 @@ async function handleMissionCommand({
   actor,
   context,
   sourceMessageId,
+  agentType,
 }) {
   const missionPrompt = clip(prompt || inferFallbackPrompt(null, context.messages), 2000);
+  const agentProfile = resolveMissionAgentProfile({ prompt: missionPrompt, agentType });
   const mission = await RoomMission.create({
     roomId,
     prompt: missionPrompt,
     requestedBy: actor.userId,
     requestedByName: actor.displayName,
+    agentType: agentProfile.type,
+    agentLabel: agentProfile.label,
     status: 'queued',
   });
   broadcastRoomMissionStatus(roomId, mission.toObject());
@@ -881,6 +966,8 @@ async function handleMissionCommand({
       actor,
       context,
       sourceMessageId,
+      modeInstruction: agentProfile.instruction,
+      missionAgentLabel: agentProfile.label,
     });
 
     mission.status = 'done';
@@ -1268,6 +1355,7 @@ export async function triggerRoomAutomation({
   roomId,
   triggeringMessage,
   actor,
+  options = {},
 }) {
   const parsed = parseRoomCommand(triggeringMessage?.content || '');
   if (parsed.kind === 'none') return { skipped: true };
@@ -1302,6 +1390,7 @@ export async function triggerRoomAutomation({
         actor,
         context,
         sourceMessageId: triggeringMessage?._id || null,
+        agentType: options.agentType,
       });
     }
     if (parsed.kind === 'brief') {

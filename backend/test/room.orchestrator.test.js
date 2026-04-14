@@ -5,7 +5,10 @@ process.env.NODE_ENV = 'test';
 
 const {
   buildTranscriptCitations,
+  inferMissionAgentType,
   parseRoomCommand,
+  resolveMissionAgentProfile,
+  normalizeMissionAgentType,
 } = await import('../src/services/roomOrchestrator.js');
 
 await test('parseRoomCommand recognizes shared AI triggers', async () => {
@@ -32,4 +35,28 @@ await test('buildTranscriptCitations converts transcript snippets to deep links'
   assert.match(citations[0].url, /[?&]t=12/);
   assert.equal(citations[0].endSec, 42);
   assert.ok(citations[1].quote.includes('Deuxième extrait utile'));
+});
+
+await test('normalizeMissionAgentType accepts only supported mission agents', async () => {
+  assert.equal(normalizeMissionAgentType('writer'), 'writer');
+  assert.equal(normalizeMissionAgentType('STRATEGIST'), 'strategist');
+  assert.equal(normalizeMissionAgentType('unknown'), 'auto');
+});
+
+await test('inferMissionAgentType detects specialist from prompt intent', async () => {
+  assert.equal(inferMissionAgentType('Prépare une stratégie go-to-market'), 'strategist');
+  assert.equal(inferMissionAgentType('Fais un benchmark concurrentiel sourcé'), 'researcher');
+  assert.equal(inferMissionAgentType('Prépare un agenda de réunion et décisions à trancher'), 'facilitator');
+  assert.equal(inferMissionAgentType('Analyse les KPI de rétention'), 'analyst');
+  assert.equal(inferMissionAgentType('Rédige une note de cadrage client'), 'writer');
+});
+
+await test('resolveMissionAgentProfile honors explicit agent type over inference', async () => {
+  const profile = resolveMissionAgentProfile({
+    prompt: 'Prépare un benchmark concurrentiel',
+    agentType: 'writer',
+  });
+
+  assert.equal(profile.type, 'writer');
+  assert.equal(profile.label, 'Writer');
 });

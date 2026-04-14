@@ -258,41 +258,74 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
 
   Future<void> _showLaunchMissionDialog() async {
     final ctrl = TextEditingController();
+    String selectedAgent = 'auto';
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Lancer une mission IA'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText:
-                'Ex: Rédige une stratégie go-to-market pour notre produit…',
-            border: OutlineInputBorder(),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Lancer une mission IA'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selectedAgent,
+                decoration: const InputDecoration(
+                  labelText: 'Agent spécialisé',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'auto', child: Text('Auto')),
+                  DropdownMenuItem(
+                      value: 'strategist', child: Text('Strategist')),
+                  DropdownMenuItem(
+                      value: 'researcher', child: Text('Researcher')),
+                  DropdownMenuItem(
+                      value: 'facilitator', child: Text('Facilitator')),
+                  DropdownMenuItem(value: 'analyst', child: Text('Analyst')),
+                  DropdownMenuItem(value: 'writer', child: Text('Writer')),
+                ],
+                onChanged: (value) =>
+                    setState(() => selectedAgent = value ?? 'auto'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText:
+                      'Ex: Rédige une stratégie go-to-market pour notre produit…',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim().isNotEmpty),
+              child: const Text('Lancer'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim().isNotEmpty),
-            child: const Text('Lancer'),
-          ),
-        ],
       ),
     );
 
     if (ok == true && mounted) {
-      final success =
-          await context.read<RoomProvider>().createMission(ctrl.text.trim());
+      final success = await context.read<RoomProvider>().createMission(
+            ctrl.text.trim(),
+            agentType: selectedAgent,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            success ? 'Mission lancée ✦' : 'Impossible de lancer la mission',
+            success
+                ? 'Mission lancée avec ${selectedAgent == 'auto' ? 'agent auto' : selectedAgent} ✦'
+                : 'Impossible de lancer la mission',
           ),
         ),
       );
@@ -1366,7 +1399,8 @@ class _MeetingBriefCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final objective = message.data['objective']?.toString() ?? '';
-    final basedOn = int.tryParse(message.data['basedOnMessages']?.toString() ?? '') ?? 0;
+    final basedOn =
+        int.tryParse(message.data['basedOnMessages']?.toString() ?? '') ?? 0;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GlassPanel(
@@ -1389,7 +1423,9 @@ class _MeetingBriefCard extends StatelessWidget {
                 if (basedOn > 0)
                   Text(
                     '$basedOn msgs',
-                    style: TextStyle(fontSize: 11, color: scheme.onSurface.withValues(alpha: 0.55)),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withValues(alpha: 0.55)),
                   ),
               ],
             ),
@@ -1397,7 +1433,9 @@ class _MeetingBriefCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 'Objectif: $objective',
-                style: TextStyle(fontSize: 12, color: scheme.onSurface.withValues(alpha: 0.75)),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurface.withValues(alpha: 0.75)),
               ),
             ],
             const SizedBox(height: 10),
@@ -1411,12 +1449,16 @@ class _MeetingBriefCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 OutlinedButton.icon(
-                  onPressed: onInsertCommand == null ? null : () => onInsertCommand!('/decide'),
+                  onPressed: onInsertCommand == null
+                      ? null
+                      : () => onInsertCommand!('/decide'),
                   icon: const Icon(Icons.rule_folder_rounded, size: 16),
                   label: const Text('Valider via /decide'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: onInsertCommand == null ? null : () => onInsertCommand!('/doc'),
+                  onPressed: onInsertCommand == null
+                      ? null
+                      : () => onInsertCommand!('/doc'),
                   icon: const Icon(Icons.description_outlined, size: 16),
                   label: const Text('Convertir en /doc'),
                 ),
@@ -2278,7 +2320,7 @@ class _ContextPanel extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: Text(mission.status),
+                subtitle: Text('${mission.agentLabel} · ${mission.status}'),
               ),
             ),
         sectionTitle('Actions rapides'),

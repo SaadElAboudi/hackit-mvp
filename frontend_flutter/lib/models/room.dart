@@ -242,6 +242,8 @@ class RoomMission {
   final String status;
   final String requestedBy;
   final String requestedByName;
+  final String agentType;
+  final String agentLabel;
   final String? resultMessageId;
   final String? resultArtifactId;
   final String? promptPreview;
@@ -254,6 +256,8 @@ class RoomMission {
     required this.status,
     required this.requestedBy,
     required this.requestedByName,
+    required this.agentType,
+    required this.agentLabel,
     required this.resultMessageId,
     required this.resultArtifactId,
     required this.promptPreview,
@@ -267,6 +271,8 @@ class RoomMission {
         status: j['status']?.toString() ?? 'queued',
         requestedBy: j['requestedBy']?.toString() ?? '',
         requestedByName: j['requestedByName']?.toString() ?? 'Anonyme',
+        agentType: j['agentType']?.toString() ?? 'auto',
+        agentLabel: j['agentLabel']?.toString() ?? 'Agent auto',
         resultMessageId: j['resultMessageId']?.toString(),
         resultArtifactId: j['resultArtifactId']?.toString(),
         promptPreview: j['promptPreview']?.toString(),

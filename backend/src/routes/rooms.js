@@ -716,6 +716,7 @@ router.get('/:id/missions', async (req, res) => {
 router.post('/:id/missions', async (req, res) => {
     try {
         const prompt = String(req.body?.prompt || '').trim();
+        const agentType = String(req.body?.agentType || 'auto').trim();
         if (!prompt) {
             return res.status(400).json({ error: 'prompt is required' });
         }
@@ -735,6 +736,7 @@ router.post('/:id/missions', async (req, res) => {
                 senderId: req.userId,
                 senderName: req.displayName,
             },
+            options: { agentType },
             actor: { userId: req.userId, displayName: req.displayName },
         }).catch((err) => console.error('[rooms] mission async error:', err));
 
