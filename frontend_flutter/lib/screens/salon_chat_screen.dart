@@ -180,7 +180,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
               SnackBar(
                 content: Text(ok
                     ? 'Document partagé ✓'
-                    : (prov.actionError ?? 'Erreur lors du partage du document')),
+                    : (prov.actionError ??
+                        'Erreur lors du partage du document')),
                 action: ok
                     ? null
                     : SnackBarAction(
@@ -683,7 +684,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
-                        color: scheme.onSurface.withOpacity(0.45),
+                        color: scheme.onSurface.withValues(alpha: 0.45),
                       ),
                     ),
                   Row(
@@ -692,7 +693,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         '${room.memberCount} membre${room.memberCount > 1 ? 's' : ''}',
                         style: TextStyle(
                           fontSize: 11,
-                          color: scheme.onSurface.withOpacity(0.5),
+                          color: scheme.onSurface.withValues(alpha: 0.5),
                         ),
                       ),
                       if (onlineCount > 0) ...[
@@ -710,7 +711,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                           '$onlineCount en ligne',
                           style: TextStyle(
                             fontSize: 11,
-                            color: scheme.onSurface.withOpacity(0.5),
+                            color: scheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -872,7 +873,7 @@ class _MessageBubble extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         color: isAI
                             ? scheme.secondary
-                            : scheme.onSurface.withOpacity(0.6),
+                            : scheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                   ),
@@ -978,7 +979,7 @@ class _ArtifactCardState extends State<_ArtifactCard> {
                           '❆ Canvas IA • ${msg.challenges.length} challenge${msg.challenges.length != 1 ? 's' : ''}',
                           style: TextStyle(
                             fontSize: 11,
-                            color: scheme.onSurface.withOpacity(0.5),
+                            color: scheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -1020,7 +1021,7 @@ class _ArtifactCardState extends State<_ArtifactCard> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: scheme.onSurface.withOpacity(0.6),
+                    color: scheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ),
@@ -1031,7 +1032,7 @@ class _ArtifactCardState extends State<_ArtifactCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.reply_rounded,
-                          size: 14, color: scheme.onSurface.withOpacity(0.4)),
+                          size: 14, color: scheme.onSurface.withValues(alpha: 0.4)),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text.rich(
@@ -1041,7 +1042,7 @@ class _ArtifactCardState extends State<_ArtifactCard> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 12,
-                                color: scheme.onSurface.withOpacity(0.7),
+                                color: scheme.onSurface.withValues(alpha: 0.7),
                               ),
                             ),
                             TextSpan(
@@ -1116,7 +1117,7 @@ class _ArtifactCardState extends State<_ArtifactCard> {
               'Votre retour sera visible par tous et pourra guider l\'IA à réviser le document.',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6),
+                color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
             const SizedBox(height: 12),
@@ -1206,7 +1207,7 @@ class _DocumentCardState extends State<_DocumentCard> {
                           '${msg.isAI ? '✦ IA' : 'Partagé'} • ${msg.challenges.length} challenge${msg.challenges.length != 1 ? 's' : ''}',
                           style: TextStyle(
                             fontSize: 11,
-                            color: scheme.onSurface.withOpacity(0.5),
+                            color: scheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -1247,7 +1248,7 @@ class _DocumentCardState extends State<_DocumentCard> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: scheme.onSurface.withOpacity(0.6),
+                    color: scheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ),
@@ -1258,7 +1259,7 @@ class _DocumentCardState extends State<_DocumentCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.reply_rounded,
-                          size: 14, color: scheme.onSurface.withOpacity(0.4)),
+                          size: 14, color: scheme.onSurface.withValues(alpha: 0.4)),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text.rich(
@@ -1268,7 +1269,7 @@ class _DocumentCardState extends State<_DocumentCard> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 12,
-                                color: scheme.onSurface.withOpacity(0.7),
+                                color: scheme.onSurface.withValues(alpha: 0.7),
                               ),
                             ),
                             TextSpan(
@@ -1344,7 +1345,7 @@ class _DocumentCardState extends State<_DocumentCard> {
               'Votre retour sera visible par tous et pourra guider l\'IA à réviser le document.',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.6),
+                color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
             const SizedBox(height: 12),
@@ -1562,7 +1563,7 @@ class _SystemEventChip extends StatelessWidget {
             message.content,
             style: TextStyle(
               fontSize: 11,
-              color: scheme.onSurface.withOpacity(0.55),
+              color: scheme.onSurface.withValues(alpha: 0.55),
             ),
           ),
         ),
@@ -1698,7 +1699,7 @@ class _ResearchCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: scheme.onSurface.withOpacity(0.6),
+                    color: scheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1733,7 +1734,7 @@ class _ResearchCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: scheme.onSurface.withOpacity(0.6),
+                    color: scheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1763,7 +1764,7 @@ class _ResearchCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: scheme.onSurface.withOpacity(0.6),
+                    color: scheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1855,7 +1856,7 @@ class _DecisionCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: scheme.onSurface.withOpacity(0.6),
+                color: scheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
             const SizedBox(height: 6),
@@ -1981,7 +1982,7 @@ class _AITypingBubble extends StatelessWidget {
                   '✦ IA réfléchit',
                   style: TextStyle(
                     fontSize: 13,
-                    color: scheme.onSecondaryContainer.withOpacity(0.7),
+                    color: scheme.onSecondaryContainer.withValues(alpha: 0.7),
                     fontStyle: FontStyle.italic,
                   ),
                 ),
@@ -2057,7 +2058,7 @@ class _InputBar extends StatelessWidget {
           // Attach document button
           IconButton(
             icon: Icon(Icons.attach_file_rounded,
-                size: 22, color: scheme.onSurface.withOpacity(0.5)),
+                size: 22, color: scheme.onSurface.withValues(alpha: 0.5)),
             tooltip: 'Joindre un document',
             onPressed: onAttach,
           ),
@@ -2118,7 +2119,7 @@ class _EmptyChat extends StatelessWidget {
               'Envoyez un message pour démarrer.\nUtilisez @ia, /doc, /search, /decide ou /mission pour collaborer avec l’IA du channel.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: scheme.onSurface.withOpacity(0.55),
+                color: scheme.onSurface.withValues(alpha: 0.55),
                 height: 1.5,
               ),
             ),
@@ -2225,7 +2226,7 @@ class _ContextPanel extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     fontSize: 11,
-                    color: scheme.onSurface.withOpacity(0.55),
+                    color: scheme.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
               ),
@@ -2361,7 +2362,7 @@ class _ContextPanel extends StatelessWidget {
                   '${memory.type} • ${memory.createdByName}',
                   style: TextStyle(
                     fontSize: 11,
-                    color: scheme.onSurface.withOpacity(0.5),
+                    color: scheme.onSurface.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -2472,7 +2473,7 @@ class _ContextPanel extends StatelessWidget {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: scheme.onSurface.withOpacity(0.2),
+                  color: scheme.onSurface.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -2497,7 +2498,7 @@ class _ContextPanel extends StatelessWidget {
                     '${researchArtifacts.length}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: scheme.onSurface.withOpacity(0.55),
+                      color: scheme.onSurface.withValues(alpha: 0.55),
                     ),
                   ),
                 ],
@@ -2572,7 +2573,7 @@ class _MembersSheet extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: scheme.onSurface.withOpacity(0.2),
+                color: scheme.onSurface.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -2665,7 +2666,7 @@ class _MembersSheet extends StatelessWidget {
                       fontSize: 11,
                       color: isOnline
                           ? const Color(0xFF22c55e)
-                          : scheme.onSurface.withOpacity(0.4),
+                          : scheme.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 );
@@ -2742,7 +2743,7 @@ class _AttachDocumentSheetState extends State<_AttachDocumentSheet> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: scheme.onSurface.withOpacity(0.2),
+                  color: scheme.onSurface.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
