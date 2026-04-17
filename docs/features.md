@@ -1,103 +1,68 @@
-# Nouveautés 2025
-- Architecture épurée : 2 onglets (Recherche + Salons), suppression de toutes les vues et services morts
-- **Salons** : salons d'équipe temps réel via WebSocket, IA comme collaboratrice (`@ia`), directives, défi de documents
-- **Recherche structurée** : plan en streaming 4 axes (cadrer, produire, communiquer, audit), mode challenge adversarial
-- Circuit breaker Gemini + fallback heuristique
-- Mode invité : identifiant anonyme généré localement, aucune inscription requise
-- Conventions de code et process de contribution mis à jour
-# Hackit MVP — Liste des fonctionnalités
+# Hackit MVP — Fonctionnalités
 
-Ce document regroupe les fonctionnalités pertinentes et intéressantes pour Hackit (présentes, MVP à finir, et idées d'évolution).
+Ce document liste les fonctionnalités du produit dans son cadrage actuel : workspace collaboratif basé sur des canaux (`Salons`) et une IA partagée.
 
-Légende statut: `[x]` implémenté · `[~]` partiel/en cours · `[ ]` à faire. Les tags [MVP] / [Plus] / [Premium] indiquent la phase stratégique.
+Légende : `[x]` implémenté, `[~]` partiel, `[ ]` à planifier.
 
-## 1) Coeur du produit
-- [x] [MVP] Recherche question → résultats vidéo: Backend `/api/search` + écrans de base (React Native Home/Result, Flutter partiel).
-- [~] [MVP] Résumé IA par vidéo: Génération de résumé via OpenAI (Gemini optionnelle) mais format 5 points non encore standardisé côté affichage.
-- [ ] [MVP] Chat et suivi de contexte: Pas de gestion multi-tour ou contexte persistant actuellement.
-- [ ] [Plus] Comparaison de vidéos.
-- [ ] [Plus] Mode "pas-à-pas".
-- [ ] [Premium] Mode "quiz-moi".
+## 1) Collaboration en canaux
 
-## 2) Recherche & Découverte
-- [~] [MVP] Provider YouTube: Recherche + fallback `yt-search` OK, pas de tri avancé ni pagination (maxResults fixe=5).
-- [ ] [Plus] Multi-sources (TikTok/Vimeo).
-- [ ] [Plus] Filtres avancés.
-- [ ] [Plus] Tendances / sujets populaires.
-- [ ] [Plus] Recherche sémantique (expansion intelligente au-delà de simple reformulation).
+- [x] Salons temps réel avec historique de messages.
+- [x] Présence et diffusion d'événements via WebSocket.
+- [x] IA partagée dans le canal via `@ia`.
+- [~] Gestion avancée des rôles (owner/member/guest en progression selon routes).
 
-## 3) Traitement du contenu (IA)
-- [x] [MVP] Reformulation de requêtes: Implémentée (OpenAI `reformulateQuestion`, Gemini optionnelle via USE_GEMINI).
-- [ ] [MVP] Récupération & résumé de transcript: Pas de transcript fetch dans le code actuel.
-- [ ] [Plus] Temps forts horodatés.
-- [ ] [Plus] Extraction de procédures / checklists.
-- [ ] [Plus] Extraction de code/commandes.
-- [ ] [Premium] Synthèse multi-vidéos.
+## 2) Commandes IA du canal
 
-## 4) Expérience utilisateur (UX)
-- [~] [MVP] État de chargement & erreurs: Hooks `useSearch` gère loading/error mais pas encore UI complète (skeletons, retry distinct).
-- [ ] [MVP] Mini-lecteur intégré: Pas de lecteur embarqué (utilisation liens externes probable).
-- [x] [MVP] Mode sombre: Présent côté Flutter (`AppTheme.darkTheme` / `lightTheme`), persistance à ajouter.
-- [~] [Plus] Accessibilité AA: Présence de tests accessibilité (fichiers test) mais audit complet non confirmé.
-- [ ] [Plus] PiP.
-- [ ] [Plus] Voice input/output.
-- [ ] [Premium] Mode mains libres.
+- [x] `/doc` pour générer un artefact partagé.
+- [x] `/search` pour attacher une recherche au canal.
+- [x] `/decide` pour extraire décisions, risques et actions.
+- [x] `/brief` pour produire un brief de réunion.
+- [x] `/mission` pour lancer une mission IA avec profil spécialisé.
+- [x] `/share slack` et `/share notion` pour exporter un résumé.
 
-## 5) Personnalisation
-- [ ] [Plus] Historique & favoris.
-- [ ] [Plus] Collections/Playlists d’apprentissage.
-- [ ] [Plus] Profil d’apprentissage.
-- [ ] [Premium] Recommandations personnalisées.
+## 3) Artefacts, missions et mémoire
 
-## 6) Collaboration & Partage
-- [ ] [MVP] Partage de liens (simples liens possibles mais pas enrichis timecode/résumé packagé).
-- [ ] [Plus] Export PDF/Markdown.
-- [ ] [Plus] Commentaires/notes.
-- [ ] [Premium] Espaces d’équipe.
+- [x] Artefacts versionnés et affichage dans le flux.
+- [x] Missions avec suivi de statut.
+- [x] Mémoire room-scoped exploitable par l'orchestrateur.
+- [~] Workflow de revue d'artefact (commentaires, compare diff) à enrichir.
 
-## 7) Croissance & Rétention
-- [ ] [MVP] Feedback simple.
-- [ ] [Plus] Relances et suggestions.
-- [ ] [Plus] Onboarding guidé.
-- [ ] [Premium] Rappels intelligents.
+## 4) Proactivité contrôlée
 
-## 8) Monétisation
-- [ ] [MVP] Free tier avec limites.
-- [ ] [Plus] Pro individuel.
-- [ ] [Premium] Équipes/Enterprise.
+- [x] Suggestions automatiques de synthèse (seuil + cooldown).
+- [x] Suggestions automatiques de brief avant réunion.
+- [x] Intervention IA explicable via événements système.
 
-## 9) Qualité & Fiabilité
-- [~] [MVP] Bascule provider IA: Deux services séparés (OpenAI/Gemini) mais pas de failover automatique ni timeout orchestration.
-- [ ] [MVP] Cache des requêtes.
-- [ ] [MVP] Rate limiting & protection API.
-- [ ] [Plus] Circuit breaker provider.
-- [ ] [Plus] Tests de fumée réels (workflow réel partiel YouTube API – besoin vérification profondeur).
+## 5) Intégrations externes
 
-## 10) Sécurité & Confidentialité
-- [ ] [MVP] Politique de confidentialité (document à créer).
-- [ ] [MVP] Masquage/retention minimales (logs actuels simples, besoin de règles explicites).
-- [ ] [Plus] Conformité RGPD.
-- [ ] [Premium] Chiffrement au repos + BYO Keys.
+- [x] Slack: connect/disconnect/status/share.
+- [x] Notion: connect/disconnect/status/export.
+- [ ] Connecteurs additionnels (Drive/Jira/Asana) via couche d'abstraction.
 
-## 11) Observabilité & Analytics
-- [ ] [MVP] Logs structurés + corrélation (actuels: console.log / console.error).
-- [ ] [MVP] Métriques clés.
-- [ ] [Plus] Tableaux de bord.
-- [ ] [Plus] Événements produit.
+## 6) Frontend Flutter
 
-## 12) Plateformes & Intégrations
-- [~] [MVP] Flutter Mobile/Web: Thème et base présents, parcours search pas totalement finalisé (tests bloc présents mais feature incomplète).
-- [~] [Plus] React Native: Écrans basiques (Home/Result) sans navigation avancée ni deep linking.
-- [ ] [Plus] Extension navigateur.
-- [ ] [Plus] API publique + OpenAPI.
-- [ ] [Premium] Intégrations Slack/Teams.
+- [x] Écran principal de chat collaboratif (`salon_chat_screen.dart`).
+- [x] Cartes de synthèse/brief/recherche/artefact dans le timeline.
+- [x] Sélection de profil agent lors du lancement de mission.
+- [~] Centre d'état intégrations et historique de partages.
 
----
+## 7) Qualité et robustesse
 
-## Recommandations d’exécution (priorités pratiques)
-1. Standardiser affichage résumé (format 5 points) + ajouter gestion erreurs/retry UI.
-2. Implémenter pagination & rate limiting + couche validation (zod/joi).
-3. Unifier providers IA avec failover + ajouter cache & métriques.
-4. Introduire transcript fetch + feedback utilisateur.
-5. Étendre Flutter & RN pour parcours complet puis multi-sources TikTok.
+- [x] Tests backend orientées orchestrateur, WS et intégrations.
+- [~] Uniformisation enveloppe d'erreur + `requestId` sur tous les flux.
+- [~] Validation stricte des payloads écriture sur toutes les routes room.
+- [ ] Métriques opérationnelles (latence commande, fallback IA, erreurs WS).
+
+## 8) Priorités recommandées (prochaines itérations)
+
+1. Gouvernance API : validation schema, enveloppe erreur standard, requestId.
+2. Maturité artefacts : commentaires, diff de versions, transitions de statut.
+3. Intégrations : idempotence/retry des exports + historique de partage.
+4. Observabilité : métriques backend et alerting de dégradation.
+
+## Référence
+
+- `codex.md`
+- `docs/architecture.md`
+- `docs/implementation_roadmap.md`
 

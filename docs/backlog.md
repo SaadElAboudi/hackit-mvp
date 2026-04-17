@@ -1,3 +1,14 @@
+# Backlog
+
+## Important Context
+
+Primary source of truth for current direction:
+- `codex.md` for product specification and phase status.
+- `docs/architecture.md` for architecture boundaries.
+- `docs/implementation_roadmap.md` for next engineering phases.
+
+The sections below include historical backlog items from earlier product framing. Keep them as reference, but prioritize new work according to the documents above.
+
 # Ajouts UX/UI & Fonctionnalités 2025
 - [x] Refonte visuelle premium (headers, cards, navigation)
 - [x] Favoris & historique local-first (SharedPreferences, badge, suppression)

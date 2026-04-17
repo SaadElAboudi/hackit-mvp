@@ -12,7 +12,7 @@ export function buildSlackShareText({ roomName, summary, note = '' }) {
     const extra = String(note || '').trim();
     const lines = [`*${room}* — partage Hackit`];
     if (extra) lines.push(extra);
-    if (body) lines.push(`\n${body}`);
+    if (body) lines.push('', body);
     return lines.join('\n').slice(0, 3900);
 }
 
