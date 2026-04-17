@@ -60,6 +60,20 @@ class RoomProvider extends ChangeNotifier {
   List<RoomMission> missions = [];
   bool loadingMessages = false;
   String? messagesError;
+  String? actionError;
+
+  String _errorMessage(Object e) {
+    if (e is RoomServiceException) {
+      if (e.isRateLimited) {
+        return 'Trop de requetes. Reessayez dans quelques secondes.';
+      }
+      if (e.requestId != null && e.requestId!.isNotEmpty) {
+        return '${e.message} (id: ${e.requestId})';
+      }
+      return e.message;
+    }
+    return e.toString().replaceFirst('Exception: ', '');
+  }
 
   /// WS state
   bool aiThinking = false; // AI is currently generating a response
@@ -100,7 +114,7 @@ class RoomProvider extends ChangeNotifier {
       debugPrint('$_tag openRoom: loaded ${messages.length} messages');
     } catch (e) {
       debugPrint('$_tag openRoom: error loading messages — $e');
-      messagesError = e.toString().replaceFirst('Exception: ', '');
+      messagesError = _errorMessage(e);
     } finally {
       loadingMessages = false;
       notifyListeners();
@@ -307,7 +321,7 @@ class RoomProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      sendError = e.toString().replaceFirst('Exception: ', '');
+      sendError = _errorMessage(e);
       sendingMessage = false;
       notifyListeners();
       return false;
@@ -319,6 +333,7 @@ class RoomProvider extends ChangeNotifier {
   Future<bool> updateDirectives(String directives) async {
     final room = currentRoom;
     if (room == null) return false;
+    actionError = null;
     try {
       await _svc.updateDirectives(room.id, directives);
       currentRoom = Room(
@@ -336,7 +351,8 @@ class RoomProvider extends ChangeNotifier {
       );
       notifyListeners();
       return true;
-    } catch (_) {
+    } catch (e) {
+      actionError = _errorMessage(e);
       return false;
     }
   }
@@ -350,6 +366,7 @@ class RoomProvider extends ChangeNotifier {
   }) async {
     final room = currentRoom;
     if (room == null) return false;
+    actionError = null;
     try {
       final challenge = await _svc.addChallenge(
         room.id,
@@ -363,7 +380,8 @@ class RoomProvider extends ChangeNotifier {
         notifyListeners();
       }
       return true;
-    } catch (_) {
+    } catch (e) {
+      actionError = _errorMessage(e);
       return false;
     }
   }
@@ -377,6 +395,7 @@ class RoomProvider extends ChangeNotifier {
   }) async {
     final room = currentRoom;
     if (room == null) return false;
+    actionError = null;
     try {
       final msg = await _svc.uploadDocument(
         room.id,
@@ -391,7 +410,8 @@ class RoomProvider extends ChangeNotifier {
         notifyListeners();
       }
       return true;
-    } catch (_) {
+    } catch (e) {
+      actionError = _errorMessage(e);
       return false;
     }
   }
@@ -403,6 +423,7 @@ class RoomProvider extends ChangeNotifier {
   }) async {
     final room = currentRoom;
     if (room == null) return false;
+    actionError = null;
     try {
       final artifact = await _svc.createArtifact(
         room.id,
@@ -418,7 +439,8 @@ class RoomProvider extends ChangeNotifier {
       }
       notifyListeners();
       return true;
-    } catch (_) {
+    } catch (e) {
+      actionError = _errorMessage(e);
       return false;
     }
   }
@@ -429,6 +451,7 @@ class RoomProvider extends ChangeNotifier {
   ) async {
     final room = currentRoom;
     if (room == null) return false;
+    actionError = null;
     try {
       final artifact = await _svc.reviseArtifact(
         room.id,
@@ -443,7 +466,8 @@ class RoomProvider extends ChangeNotifier {
       }
       notifyListeners();
       return true;
-    } catch (_) {
+    } catch (e) {
+      actionError = _errorMessage(e);
       return false;
     }
   }
@@ -451,12 +475,14 @@ class RoomProvider extends ChangeNotifier {
   Future<bool> addMemory(String content, {String type = 'fact'}) async {
     final room = currentRoom;
     if (room == null) return false;
+    actionError = null;
     try {
       await _svc.addMemory(room.id, content: content, type: type);
       memoryItems = await _svc.listMemory(room.id);
       notifyListeners();
       return true;
-    } catch (_) {
+    } catch (e) {
+      actionError = _errorMessage(e);
       return false;
     }
   }
@@ -464,12 +490,14 @@ class RoomProvider extends ChangeNotifier {
   Future<bool> createMission(String prompt, {String agentType = 'auto'}) async {
     final room = currentRoom;
     if (room == null) return false;
+    actionError = null;
     try {
       await _svc.postMission(room.id, prompt, agentType: agentType);
       aiThinking = true;
       notifyListeners();
       return true;
-    } catch (_) {
+    } catch (e) {
+      actionError = _errorMessage(e);
       return false;
     }
   }
@@ -479,9 +507,11 @@ class RoomProvider extends ChangeNotifier {
   Future<String?> getInviteLink() async {
     final room = currentRoom;
     if (room == null) return null;
+    actionError = null;
     try {
       return await _svc.getInviteLink(room.id);
-    } catch (_) {
+    } catch (e) {
+      actionError = _errorMessage(e);
       return null;
     }
   }

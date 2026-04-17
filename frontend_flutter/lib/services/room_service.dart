@@ -10,6 +10,34 @@ import '../services/project_service.dart' show ProjectService;
 
 const _svcTag = '[RoomService]';
 
+class RoomServiceException implements Exception {
+  final int statusCode;
+  final String message;
+  final String? code;
+  final String? requestId;
+
+  const RoomServiceException({
+    required this.statusCode,
+    required this.message,
+    this.code,
+    this.requestId,
+  });
+
+  bool get isRateLimited => statusCode == 429 || code == 'RATE_LIMITED';
+
+  @override
+  String toString() {
+    final parts = <String>[message];
+    if (code != null && code!.isNotEmpty) {
+      parts.add('code: $code');
+    }
+    if (requestId != null && requestId!.isNotEmpty) {
+      parts.add('requestId: $requestId');
+    }
+    return parts.join(' | ');
+  }
+}
+
 /// REST + WebSocket client for the Salons (Rooms) feature.
 /// Mirrors the patterns in ProjectService; shares the same userId identity.
 class RoomService {
@@ -95,7 +123,16 @@ class RoomService {
       body = <String, dynamic>{};
     }
     if (r.statusCode >= 400) {
-      throw Exception(body['error'] ?? 'HTTP ${r.statusCode}');
+      final message = (body['message'] ?? body['error'] ?? 'HTTP ${r.statusCode}')
+          .toString();
+      final code = body['code']?.toString();
+      final requestId = body['requestId']?.toString();
+      throw RoomServiceException(
+        statusCode: r.statusCode,
+        message: message,
+        code: code,
+        requestId: requestId,
+      );
     }
     return body;
   }

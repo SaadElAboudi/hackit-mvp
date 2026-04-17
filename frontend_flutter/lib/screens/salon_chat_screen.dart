@@ -102,6 +102,19 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
         SnackBar(
           content: Text(prov.sendError ?? 'Erreur lors de l\'envoi'),
           backgroundColor: errorColor,
+          action: SnackBarAction(
+            label: 'Reessayer',
+            textColor: Colors.white,
+            onPressed: () async {
+              final retryOk =
+                  await prov.sendMessage(text, displayName: _displayName);
+              if (!mounted) return;
+              if (retryOk) {
+                _isAtBottom = true;
+                _scrollToBottom(animated: true);
+              }
+            },
+          ),
         ),
       );
     }
@@ -114,7 +127,10 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     if (!mounted) return;
     if (link == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Impossible de générer le lien')),
+        SnackBar(
+          content: Text(prov.actionError ?? 'Impossible de generer le lien'),
+          action: SnackBarAction(label: 'Reessayer', onPressed: _share),
+        ),
       );
       return;
     }
@@ -164,7 +180,13 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
               SnackBar(
                 content: Text(ok
                     ? 'Document partagé ✓'
-                    : 'Erreur lors du partage du document'),
+                    : (prov.actionError ?? 'Erreur lors du partage du document')),
+                action: ok
+                    ? null
+                    : SnackBarAction(
+                        label: 'Reessayer',
+                        onPressed: () => _showAttachDialog(),
+                      ),
               ),
             );
             if (ok) _scrollToBottom(animated: true);
@@ -249,7 +271,14 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(success
               ? 'Canvas "$title" créé ✓'
-              : 'Impossible de créer le canvas'),
+              : (context.read<RoomProvider>().actionError ??
+                  'Impossible de creer le canvas')),
+          action: success
+              ? null
+              : SnackBarAction(
+                  label: 'Reessayer',
+                  onPressed: _showCreateDocDialog,
+                ),
         ));
         if (success) _scrollToBottom(animated: true);
       }
@@ -325,8 +354,15 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           content: Text(
             success
                 ? 'Mission lancée avec ${selectedAgent == 'auto' ? 'agent auto' : selectedAgent} ✦'
-                : 'Impossible de lancer la mission',
+                : (context.read<RoomProvider>().actionError ??
+                    'Impossible de lancer la mission'),
           ),
+          action: success
+              ? null
+              : SnackBarAction(
+                  label: 'Reessayer',
+                  onPressed: _showLaunchMissionDialog,
+                ),
         ),
       );
     }
@@ -369,8 +405,17 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            success ? 'Révision IA lancée' : 'Impossible de lancer la révision',
+            success
+                ? 'Revision IA lancee'
+                : (context.read<RoomProvider>().actionError ??
+                    'Impossible de lancer la revision'),
           ),
+          action: success
+              ? null
+              : SnackBarAction(
+                  label: 'Reessayer',
+                  onPressed: () => _showReviseArtifactDialog(artifact),
+                ),
         ),
       );
     }
@@ -380,6 +425,32 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       RoomProvider prov, Room room, ColorScheme scheme) {
     if (prov.loadingMessages) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (prov.messagesError != null && prov.messages.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.wifi_off_rounded, size: 34),
+              const SizedBox(height: 10),
+              Text(
+                prov.messagesError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () => prov.openRoom(room),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Recharger'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     if (prov.messages.isEmpty && !prov.aiThinking) {
