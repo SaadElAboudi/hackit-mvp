@@ -88,3 +88,110 @@ export function validateTtvPayload(body) {
 
   return { requestId, ttvMs };
 }
+
+function normalizeMember(member) {
+  const userId = String(member?.userId || '').trim();
+  const displayName = String(member?.displayName || '').trim();
+  const rawRole = String(member?.role || 'member').trim();
+  const role = ['owner', 'member', 'guest'].includes(rawRole) ? rawRole : 'member';
+
+  return {
+    userId,
+    displayName: displayName || (userId ? `User_${userId.slice(-6)}` : ''),
+    role,
+  };
+}
+
+export function validateCreateRoomPayload(body) {
+  const name = String(body?.name || '').trim().slice(0, 120);
+  const type = String(body?.type || 'group').trim();
+  const purpose = String(body?.purpose || '').trim().slice(0, 240);
+  const visibility = String(body?.visibility || 'invite_only').trim();
+
+  if (!['dm', 'group'].includes(type)) {
+    throw badRequest('type must be "dm" or "group"', { field: 'type' });
+  }
+  if (!['invite_only', 'public'].includes(visibility)) {
+    throw badRequest('visibility must be "invite_only" or "public"', { field: 'visibility' });
+  }
+
+  const rawMembers = Array.isArray(body?.members) ? body.members : [];
+  const members = rawMembers
+    .map((member) => normalizeMember(member))
+    .filter((member) => member.userId);
+
+  return { name, type, purpose, visibility, members };
+}
+
+export function validateSendMessagePayload(body) {
+  const content = String(body?.content || '').trim();
+  if (!content) {
+    throw badRequest('content is required', { field: 'content' });
+  }
+  if (content.length > 8000) {
+    throw badRequest('content is too long', { field: 'content', max: 8000 });
+  }
+  return { content };
+}
+
+export function validateDirectivesPayload(body) {
+  const directives = String(body?.directives || '').slice(0, 2000);
+  return { directives };
+}
+
+export function validateAddMemberPayload(body) {
+  const userId = String(body?.userId || '').trim();
+  if (!userId) {
+    throw badRequest('userId is required', { field: 'userId' });
+  }
+  const displayName = String(body?.displayName || '').trim();
+  const rawRole = String(body?.role || 'member').trim();
+  const role = ['owner', 'member', 'guest'].includes(rawRole) ? rawRole : 'member';
+  return {
+    userId,
+    displayName,
+    role,
+  };
+}
+
+export function validateCreateArtifactPayload(body) {
+  const title = String(body?.title || '').trim().slice(0, 140);
+  const content = String(body?.content || '').trim();
+  if (!content) {
+    throw badRequest('content is required', { field: 'content' });
+  }
+  const rawKind = String(body?.kind || 'canvas').trim();
+  const kind = ['canvas', 'document', 'decision', 'research'].includes(rawKind) ? rawKind : 'canvas';
+  return {
+    title,
+    content,
+    kind,
+  };
+}
+
+export function validateCreateMissionPayload(body) {
+  const prompt = String(body?.prompt || '').trim();
+  if (!prompt) {
+    throw badRequest('prompt is required', { field: 'prompt' });
+  }
+  const agentType = String(body?.agentType || 'auto').trim().toLowerCase();
+  return {
+    prompt,
+    agentType,
+  };
+}
+
+export function validateCreateMemoryPayload(body) {
+  const content = String(body?.content || '').trim();
+  if (!content) {
+    throw badRequest('content is required', { field: 'content' });
+  }
+  const rawType = String(body?.type || 'fact').trim();
+  const type = ['fact', 'preference', 'decision'].includes(rawType) ? rawType : 'fact';
+  const pinned = body?.pinned !== false;
+  return {
+    content,
+    type,
+    pinned,
+  };
+}

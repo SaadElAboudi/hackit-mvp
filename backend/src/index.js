@@ -39,6 +39,11 @@ app.use(cors({
 }));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
 app.use((req, res, next) => {
+  req.requestId = randomBytes(8).toString('hex');
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
+app.use((req, res, next) => {
   const startedAt = Date.now();
   res.on('finish', () => {
     const resolvedPath = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : req.path;
@@ -98,6 +103,7 @@ async function simpleRateLimit(key, maxPerMinute = 30) {
   rateLimit[key].push(now);
   return true;
 }
+app.locals.simpleRateLimit = simpleRateLimit;
 // Enable concise logging in all non-test environments
 if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
@@ -2084,11 +2090,23 @@ app.use((req, res) => {
 app.use((err, _req, res, next) => {
   if (res.headersSent) return next(err);
   if (err instanceof SyntaxError && Object.prototype.hasOwnProperty.call(err, 'body')) {
-    return res.status(400).json({ error: 'Invalid JSON payload' });
+    return res.status(400).json({
+      ok: false,
+      code: 'BAD_REQUEST',
+      message: 'Invalid JSON payload',
+      details: null,
+      requestId: _req.requestId || null,
+    });
   }
   const status = Number(err?.status || err?.statusCode) || 500;
-  const detail = err?.message || 'Unexpected error';
-  return res.status(status).json({ error: status >= 500 ? 'Internal server error' : 'Request failed', detail });
+  const code = err?.code || (status >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST');
+  return res.status(status).json({
+    ok: false,
+    code,
+    message: status >= 500 ? 'Internal server error' : (err?.message || 'Request failed'),
+    details: err?.details || null,
+    requestId: _req.requestId || null,
+  });
 });
 
 if (isDirectRun) {

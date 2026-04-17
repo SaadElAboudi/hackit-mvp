@@ -129,8 +129,8 @@ function _send(ws, payload) {
 
 // ── Exported helpers (called by roomGemini.js and rooms.js) ──────────────────
 
-export function broadcastRoomMessage(roomId, message) {
-  _broadcast(roomId, { type: 'message', roomId, message });
+export function broadcastRoomMessage(roomId, message, requestId = null) {
+  _broadcast(roomId, { type: 'message', roomId, message, requestId });
 }
 
 export function broadcastRoomTyping(roomId, userId) {
@@ -159,8 +159,8 @@ export function broadcastRoomArtifactVersionCreated(roomId, artifactId, version)
   });
 }
 
-export function broadcastRoomMissionStatus(roomId, mission) {
-  _broadcast(roomId, { type: 'mission_status', roomId, mission });
+export function broadcastRoomMissionStatus(roomId, mission, requestId = null) {
+  _broadcast(roomId, { type: 'mission_status', roomId, mission, requestId });
 }
 
 export function broadcastRoomDecisionCreated(roomId, message) {
@@ -179,8 +179,8 @@ export function broadcastRoomBriefSuggested(roomId, message) {
   _broadcast(roomId, { type: 'brief_suggested', roomId, message });
 }
 
-export function broadcastRoomShareResult(roomId, message) {
-  _broadcast(roomId, { type: 'share_result', roomId, message });
+export function broadcastRoomShareResult(roomId, message, requestId = null) {
+  _broadcast(roomId, { type: 'share_result', roomId, message, requestId });
 }
 
 export function broadcastRoomNotionExported(roomId, message) {

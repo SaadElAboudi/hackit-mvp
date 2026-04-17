@@ -29,6 +29,16 @@ import {
     broadcastRoomMessage,
     getOnlineUserIds,
 } from '../services/roomWS.js';
+import {
+    validateAddMemberPayload,
+    validateBody,
+    validateCreateArtifactPayload,
+    validateCreateMemoryPayload,
+    validateCreateMissionPayload,
+    validateCreateRoomPayload,
+    validateDirectivesPayload,
+    validateSendMessagePayload,
+} from '../middleware/validation.js';
 
 const router = express.Router();
 const APP_BASE_URL =
@@ -101,6 +111,14 @@ function artifactSummary(artifact, version) {
     };
 }
 
+function tooManyRequestsError(message = 'Too many requests') {
+    const err = new Error(message);
+    err.status = 429;
+    err.code = 'RATE_LIMITED';
+    err.details = null;
+    return err;
+}
+
 router.get('/', async (req, res) => {
     try {
         const rooms = await Room.find({ 'members.userId': req.userId })
@@ -113,24 +131,9 @@ router.get('/', async (req, res) => {
     }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', validateBody(validateCreateRoomPayload), async (req, res, next) => {
     try {
-        const {
-            name,
-            type = 'group',
-            members = [],
-            purpose = '',
-            visibility = 'invite_only',
-        } = req.body || {};
-
-        if (!['dm', 'group'].includes(type)) {
-            return res.status(400).json({ error: 'type must be "dm" or "group"' });
-        }
-        if (!['invite_only', 'public'].includes(visibility)) {
-            return res.status(400).json({
-                error: 'visibility must be "invite_only" or "public"',
-            });
-        }
+        const { name, type, members, purpose, visibility } = req.validatedBody;
 
         const allMembers = [
             {
@@ -164,7 +167,7 @@ router.post('/', async (req, res) => {
         res.status(201).json({ room: roomResponse(room) });
     } catch (err) {
         console.error('[rooms] create error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -189,11 +192,15 @@ router.get('/:id/messages', async (req, res) => {
     }
 });
 
-router.post('/:id/messages', async (req, res) => {
+router.post('/:id/messages', validateBody(validateSendMessagePayload), async (req, res, next) => {
     try {
-        const { content } = req.body || {};
-        if (!String(content || '').trim()) {
-            return res.status(400).json({ error: 'content is required' });
+        const { content } = req.validatedBody;
+        const limiter = req.app?.locals?.simpleRateLimit;
+        if (typeof limiter === 'function') {
+            const allowed = await limiter(`room-msg:${req.userId}:${req.params.id}`, 40);
+            if (!allowed) {
+                throw tooManyRequestsError('Rate limit exceeded for room messages');
+            }
         }
 
         const room = await loadRoomOr404(req.params.id, res);
@@ -214,7 +221,7 @@ router.post('/:id/messages', async (req, res) => {
             },
         });
 
-        broadcastRoomMessage(req.params.id, message.toObject());
+        broadcastRoomMessage(req.params.id, message.toObject(), req.requestId || null);
 
         room.lastActivityAt = new Date();
         await room.save();
@@ -257,15 +264,13 @@ router.post('/:id/messages', async (req, res) => {
         }
     } catch (err) {
         console.error('[rooms] send message error:', err);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Internal server error' });
-        }
+        next(err);
     }
 });
 
-router.patch('/:id/directives', async (req, res) => {
+router.patch('/:id/directives', validateBody(validateDirectivesPayload), async (req, res, next) => {
     try {
-        const directives = String(req.body?.directives || '');
+        const { directives } = req.validatedBody;
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
         if (!isRoomMember(room, req.userId)) {
@@ -277,7 +282,7 @@ router.patch('/:id/directives', async (req, res) => {
         res.json({ room: roomResponse(room) });
     } catch (err) {
         console.error('[rooms] directives error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -360,14 +365,9 @@ router.get('/:id/members', async (req, res) => {
     }
 });
 
-router.post('/:id/members', async (req, res) => {
+router.post('/:id/members', validateBody(validateAddMemberPayload), async (req, res, next) => {
     try {
-        const userId = String(req.body?.userId || '').trim();
-        const displayName = String(req.body?.displayName || '').trim();
-        const role = String(req.body?.role || 'member').trim();
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
+        const { userId, displayName, role } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -390,7 +390,7 @@ router.post('/:id/members', async (req, res) => {
         res.status(201).json({ room: roomResponse(room) });
     } catch (err) {
         console.error('[rooms] add member error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -471,14 +471,9 @@ router.get('/:id/artifacts', async (req, res) => {
     }
 });
 
-router.post('/:id/artifacts', async (req, res) => {
+router.post('/:id/artifacts', validateBody(validateCreateArtifactPayload), async (req, res, next) => {
     try {
-        const title = String(req.body?.title || '').trim();
-        const content = String(req.body?.content || '').trim();
-        const kind = String(req.body?.kind || 'canvas').trim();
-        if (!content) {
-            return res.status(400).json({ error: 'content is required' });
-        }
+        const { title, content, kind } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -513,7 +508,7 @@ router.post('/:id/artifacts', async (req, res) => {
         });
     } catch (err) {
         console.error('[rooms] artifact create error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -713,13 +708,9 @@ router.get('/:id/missions', async (req, res) => {
     }
 });
 
-router.post('/:id/missions', async (req, res) => {
+router.post('/:id/missions', validateBody(validateCreateMissionPayload), async (req, res, next) => {
     try {
-        const prompt = String(req.body?.prompt || '').trim();
-        const agentType = String(req.body?.agentType || 'auto').trim();
-        if (!prompt) {
-            return res.status(400).json({ error: 'prompt is required' });
-        }
+        const { prompt, agentType } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -746,7 +737,7 @@ router.post('/:id/missions', async (req, res) => {
         res.status(202).json({ ok: true, message: 'Mission queued' });
     } catch (err) {
         console.error('[rooms] mission create error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -769,14 +760,9 @@ router.get('/:id/memory', async (req, res) => {
     }
 });
 
-router.post('/:id/memory', async (req, res) => {
+router.post('/:id/memory', validateBody(validateCreateMemoryPayload), async (req, res, next) => {
     try {
-        const content = String(req.body?.content || '').trim();
-        const type = String(req.body?.type || 'fact').trim();
-        const pinned = req.body?.pinned !== false;
-        if (!content) {
-            return res.status(400).json({ error: 'content is required' });
-        }
+        const { content, type, pinned } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -798,7 +784,7 @@ router.post('/:id/memory', async (req, res) => {
         res.status(201).json({ memory });
     } catch (err) {
         console.error('[rooms] memory create error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
