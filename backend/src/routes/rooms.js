@@ -31,12 +31,15 @@ import {
 } from '../services/roomWS.js';
 import {
     validateAddMemberPayload,
+    validateArtifactStatusPayload,
     validateBody,
     validateCreateArtifactPayload,
     validateCreateMemoryPayload,
     validateCreateMissionPayload,
     validateCreateRoomPayload,
     validateDirectivesPayload,
+    validateResolveCommentPayload,
+    validateReviseArtifactPayload,
     validateSendMessagePayload,
 } from '../middleware/validation.js';
 
@@ -512,7 +515,7 @@ router.post('/:id/artifacts', validateBody(validateCreateArtifactPayload), async
     }
 });
 
-router.get('/:id/artifacts/:artifactId/versions', async (req, res) => {
+router.get('/:id/artifacts/:artifactId/versions', async (req, res, next) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -539,57 +542,57 @@ router.get('/:id/artifacts/:artifactId/versions', async (req, res) => {
             })),
         });
     } catch (err) {
-        console.error('[rooms] artifact versions error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
-router.post('/:id/artifacts/:artifactId/revise', async (req, res) => {
-    try {
-        const instructions = String(req.body?.instructions || '').trim();
-        if (!instructions) {
-            return res.status(400).json({ error: 'instructions is required' });
+router.post(
+    '/:id/artifacts/:artifactId/revise',
+    validateBody(validateReviseArtifactPayload),
+    async (req, res, next) => {
+        try {
+            const { instructions, changeSummary } = req.validatedBody;
+
+            const room = await loadRoomOr404(req.params.id, res);
+            if (!room) return;
+            if (!isRoomMember(room, req.userId)) {
+                return res.status(403).json({ error: 'Not a member of this room' });
+            }
+
+            const artifact = await RoomArtifact.findOne({
+                _id: req.params.artifactId,
+                roomId: req.params.id,
+            });
+            if (!artifact) {
+                return res.status(404).json({ error: 'Artifact not found' });
+            }
+
+            const result = await reviseRoomArtifact({
+                room,
+                artifact,
+                instructions,
+                changeSummary,
+                actor: {
+                    userId: req.userId,
+                    displayName: req.displayName,
+                },
+            });
+
+            room.lastActivityAt = new Date();
+            await room.save();
+
+            res.status(201).json({
+                artifact: artifactSummary(artifact, result.version),
+                version: result.version,
+                message: result.message,
+            });
+        } catch (err) {
+            next(err);
         }
-
-        const room = await loadRoomOr404(req.params.id, res);
-        if (!room) return;
-        if (!isRoomMember(room, req.userId)) {
-            return res.status(403).json({ error: 'Not a member of this room' });
-        }
-
-        const artifact = await RoomArtifact.findOne({
-            _id: req.params.artifactId,
-            roomId: req.params.id,
-        });
-        if (!artifact) {
-            return res.status(404).json({ error: 'Artifact not found' });
-        }
-
-        const result = await reviseRoomArtifact({
-            room,
-            artifact,
-            instructions,
-            actor: {
-                userId: req.userId,
-                displayName: req.displayName,
-            },
-        });
-
-        room.lastActivityAt = new Date();
-        await room.save();
-
-        res.status(201).json({
-            artifact: artifactSummary(artifact, result.version),
-            version: result.version,
-            message: result.message,
-        });
-    } catch (err) {
-        console.error('[rooms] artifact revise error:', err);
-        res.status(500).json({ error: 'Internal server error' });
     }
-});
+);
 
-router.post('/:id/artifacts/:artifactId/versions/:versionId/approve', async (req, res) => {
+router.post('/:id/artifacts/:artifactId/versions/:versionId/approve', async (req, res, next) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -630,16 +633,19 @@ router.post('/:id/artifacts/:artifactId/versions/:versionId/approve', async (req
             version,
         });
     } catch (err) {
-        console.error('[rooms] artifact version approve error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
-router.post('/:id/artifacts/:artifactId/versions/:versionId/comment', async (req, res) => {
+router.post('/:id/artifacts/:artifactId/versions/:versionId/comment', async (req, res, next) => {
     try {
         const content = String(req.body?.content || '').trim();
         if (!content) {
-            return res.status(400).json({ error: 'content is required' });
+            const err = new Error('content is required');
+            err.status = 400;
+            err.code = 'BAD_REQUEST';
+            err.details = { field: 'content' };
+            return next(err);
         }
 
         const room = await loadRoomOr404(req.params.id, res);
@@ -685,10 +691,157 @@ router.post('/:id/artifacts/:artifactId/versions/:versionId/comment', async (req
             comment: version.comments[version.comments.length - 1],
         });
     } catch (err) {
-        console.error('[rooms] artifact version comment error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
+
+router.patch(
+    '/:id/artifacts/:artifactId/status',
+    validateBody(validateArtifactStatusPayload),
+    async (req, res, next) => {
+        try {
+            const { status } = req.validatedBody;
+
+            const room = await loadRoomOr404(req.params.id, res);
+            if (!room) return;
+
+            // Only owners can validate or archive; members can move to review
+            if (['validated', 'archived'].includes(status) && !isRoomOwner(room, req.userId)) {
+                return res.status(403).json({ error: 'Owner role required for this transition' });
+            }
+            if (!isRoomMember(room, req.userId)) {
+                return res.status(403).json({ error: 'Not a member of this room' });
+            }
+
+            const artifact = await RoomArtifact.findOne({
+                _id: req.params.artifactId,
+                roomId: req.params.id,
+            });
+            if (!artifact) {
+                return res.status(404).json({ error: 'Artifact not found' });
+            }
+
+            artifact.status = status;
+            artifact.updatedAt = new Date();
+            await artifact.save();
+
+            room.lastActivityAt = new Date();
+            await room.save();
+
+            res.json({ artifact: artifactSummary(artifact) });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.post(
+    '/:id/artifacts/:artifactId/versions/:versionId/reject',
+    async (req, res, next) => {
+        try {
+            const room = await loadRoomOr404(req.params.id, res);
+            if (!room) return;
+            if (!isRoomOwner(room, req.userId)) {
+                return res.status(403).json({ error: 'Owner role required' });
+            }
+
+            const artifact = await RoomArtifact.findOne({
+                _id: req.params.artifactId,
+                roomId: req.params.id,
+            });
+            if (!artifact) {
+                return res.status(404).json({ error: 'Artifact not found' });
+            }
+
+            const version = await ArtifactVersion.findOne({
+                _id: req.params.versionId,
+                artifactId: artifact._id,
+                roomId: req.params.id,
+            });
+            if (!version) {
+                return res.status(404).json({ error: 'Version not found' });
+            }
+
+            const reason = String(req.body?.reason || '').trim().slice(0, 400);
+            version.status = 'rejected';
+            if (reason) {
+                version.comments.push({
+                    authorId: req.userId,
+                    authorName: req.displayName,
+                    text: `[Rejet] ${reason}`,
+                    resolved: false,
+                });
+            }
+            await version.save();
+
+            // Move artifact back to draft if current version was rejected
+            if (String(artifact.currentVersionId) === String(version._id)) {
+                artifact.status = 'draft';
+                artifact.updatedAt = new Date();
+                await artifact.save();
+            }
+
+            room.lastActivityAt = new Date();
+            await room.save();
+
+            res.json({ artifact: artifactSummary(artifact, version), version });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.patch(
+    '/:id/artifacts/:artifactId/versions/:versionId/comments/:commentId/resolve',
+    validateBody(validateResolveCommentPayload),
+    async (req, res, next) => {
+        try {
+            const { resolved } = req.validatedBody;
+
+            const room = await loadRoomOr404(req.params.id, res);
+            if (!room) return;
+            if (!isRoomMember(room, req.userId)) {
+                return res.status(403).json({ error: 'Not a member of this room' });
+            }
+
+            const artifact = await RoomArtifact.findOne({
+                _id: req.params.artifactId,
+                roomId: req.params.id,
+            });
+            if (!artifact) {
+                return res.status(404).json({ error: 'Artifact not found' });
+            }
+
+            const version = await ArtifactVersion.findOne({
+                _id: req.params.versionId,
+                artifactId: artifact._id,
+                roomId: req.params.id,
+            });
+            if (!version) {
+                return res.status(404).json({ error: 'Version not found' });
+            }
+
+            const comment = version.comments.id(req.params.commentId);
+            if (!comment) {
+                return res.status(404).json({ error: 'Comment not found' });
+            }
+
+            // Only the comment author or an owner can resolve/unresolve
+            if (comment.authorId !== req.userId && !isRoomOwner(room, req.userId)) {
+                return res.status(403).json({ error: 'Not authorized to resolve this comment' });
+            }
+
+            comment.resolved = resolved;
+            await version.save();
+
+            res.json({ comment, version: { _id: version._id, number: version.number } });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+
 
 router.get('/:id/missions', async (req, res) => {
     try {

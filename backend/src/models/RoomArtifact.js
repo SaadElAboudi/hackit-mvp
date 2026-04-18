@@ -16,7 +16,7 @@ const RoomArtifactSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['draft', 'validated', 'archived'],
+      enum: ['draft', 'review', 'validated', 'archived'],
       default: 'draft',
     },
     createdBy: { type: String, required: true, trim: true, maxlength: 120 },

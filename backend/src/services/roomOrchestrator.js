@@ -577,6 +577,7 @@ export async function reviseRoomArtifact({
   room,
   artifact,
   instructions,
+  changeSummary = '',
   actor,
 }) {
   const currentVersion = artifact.currentVersionId
@@ -621,7 +622,9 @@ export async function reviseRoomArtifact({
     number: versionCount + 1,
     content,
     createdBy: actor.userId,
+    authorName: actor.displayName || '',
     sourcePrompt: clip(instructions, 4000),
+    changeSummary: String(changeSummary || '').trim().slice(0, 400),
     status: 'draft',
   });
 

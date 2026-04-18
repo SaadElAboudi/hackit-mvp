@@ -27,7 +27,9 @@ const ArtifactVersionSchema = new mongoose.Schema(
     number: { type: Number, required: true },
     content: { type: String, required: true, trim: true },
     createdBy: { type: String, required: true, trim: true, maxlength: 120 },
+    authorName: { type: String, trim: true, maxlength: 120, default: '' },
     sourcePrompt: { type: String, trim: true, maxlength: 4000, default: '' },
+    changeSummary: { type: String, trim: true, maxlength: 400, default: '' },
     status: {
       type: String,
       enum: ['draft', 'approved', 'rejected', 'merged'],

@@ -195,3 +195,38 @@ export function validateCreateMemoryPayload(body) {
     pinned,
   };
 }
+
+export function validateArtifactStatusPayload(body) {
+  const VALID_STATUSES = ['draft', 'review', 'validated', 'archived'];
+  const status = String(body?.status || '').trim();
+  if (!status) {
+    throw badRequest('status is required', { field: 'status' });
+  }
+  if (!VALID_STATUSES.includes(status)) {
+    throw badRequest(
+      `status must be one of: ${VALID_STATUSES.join(', ')}`,
+      { field: 'status', received: status }
+    );
+  }
+  return { status };
+}
+
+export function validateReviseArtifactPayload(body) {
+  const instructions = String(body?.instructions || '').trim();
+  if (!instructions) {
+    throw badRequest('instructions is required', { field: 'instructions' });
+  }
+  if (instructions.length > 2000) {
+    throw badRequest('instructions must be 2000 characters or fewer', {
+      field: 'instructions',
+      maxLength: 2000,
+    });
+  }
+  const changeSummary = String(body?.changeSummary || '').trim().slice(0, 400);
+  return { instructions, changeSummary };
+}
+
+export function validateResolveCommentPayload(body) {
+  const resolved = body?.resolved !== false;
+  return { resolved };
+}
