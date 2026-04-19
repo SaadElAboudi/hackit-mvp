@@ -14,6 +14,7 @@ import RoomArtifact from '../models/RoomArtifact.js';
 import RoomMemory from '../models/RoomMemory.js';
 import RoomMessage from '../models/RoomMessage.js';
 import RoomMission from '../models/RoomMission.js';
+import RoomShareHistory from '../models/RoomShareHistory.js';
 import {
     createRoomArtifact,
     parseRoomCommand,
@@ -22,8 +23,8 @@ import {
     triggerRoomAutomation,
     suggestRoomSynthesisIfNeeded,
 } from '../services/roomOrchestrator.js';
-import { buildSlackShareText, postSlackMessage } from '../services/slack.js';
-import { createNotionPage, validateNotionToken } from '../services/notion.js';
+import { validateNotionToken } from '../services/notion.js';
+import { executeWithRetry, getExportConnector } from '../services/exportConnectors.js';
 import {
     broadcastRoomChallenge,
     broadcastRoomMessage,
@@ -40,6 +41,8 @@ import {
     validateDirectivesPayload,
     validateResolveCommentPayload,
     validateReviseArtifactPayload,
+    validateShareHistoryQuery,
+    validateSharePayload,
     validateSendMessagePayload,
 } from '../middleware/validation.js';
 
@@ -120,6 +123,24 @@ function tooManyRequestsError(message = 'Too many requests') {
     err.code = 'RATE_LIMITED';
     err.details = null;
     return err;
+}
+
+async function buildShareSummary(room, artifactId = '') {
+    const roomId = String(room?._id || room?.id || '');
+    const artifactFilter = artifactId ? { _id: artifactId, roomId } : { roomId };
+    const [artifact, lastMsg] = await Promise.all([
+        RoomArtifact.findOne(artifactFilter).sort({ updatedAt: -1 }).lean(),
+        RoomMessage.findOne({ roomId, isAI: false }).sort({ createdAt: -1 }).lean(),
+    ]);
+
+    const summary = artifact?.title
+        ? String(artifact.title)
+        : String(lastMsg?.content || room?.purpose || 'Partage Hackit').slice(0, 500);
+
+    return {
+        summary,
+        artifactId: artifact?._id || null,
+    };
 }
 
 router.get('/', async (req, res) => {
@@ -1196,51 +1217,150 @@ router.delete('/:id/integrations/slack', async (req, res) => {
 
 /**
  * POST /api/rooms/:id/share
- * Manual share endpoint: posts last artifact / summary to the connected Slack channel.
- * Accepts optional { note } in body.
+ * Manual share endpoint with connector abstraction, retries and idempotency.
+ * Accepts optional { note, target, artifactId, idempotencyKey } in body.
  */
-router.post('/:id/share', async (req, res) => {
+router.post('/:id/share', validateBody(validateSharePayload), async (req, res, next) => {
     try {
-        const note = String(req.body?.note || '').trim().slice(0, 300);
+        const { note, target, artifactId, idempotencyKey } = req.validatedBody;
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
         if (!isRoomMember(room, req.userId)) {
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
-        const slack = room.integrations?.slack || {};
-        if (!slack.enabled || !String(slack.botToken || '').trim()) {
-            return res.status(409).json({ error: 'Slack not connected for this room. Connect via POST /integrations/slack first.' });
+        const connector = getExportConnector(target);
+        if (!connector) {
+            return res.status(400).json({ error: 'Unsupported share target' });
+        }
+        if (!connector.isConfigured(room)) {
+            return res.status(409).json({
+                error: `${target} not connected for this room. Connect via /integrations/${target} first.`,
+            });
         }
 
-        // Grab the most recent humanly-readable artifact or message
-        const [lastArtifact, lastMsg] = await Promise.all([
-            RoomArtifact.findOne({ roomId: req.params.id })
-                .sort({ updatedAt: -1 })
-                .lean(),
-            RoomMessage.findOne({ roomId: req.params.id, isAI: false })
-                .sort({ createdAt: -1 })
-                .lean(),
-        ]);
+        if (idempotencyKey) {
+            const existing = await RoomShareHistory.findOne({
+                roomId: req.params.id,
+                idempotencyKey,
+            }).lean();
+            if (existing) {
+                return res.json({
+                    ok: existing.status === 'success',
+                    replayed: true,
+                    status: existing.status,
+                    target: existing.target,
+                    externalId: existing.externalId || '',
+                    externalUrl: existing.externalUrl || '',
+                    historyId: String(existing._id),
+                });
+            }
+        }
 
-        // eslint-disable-next-line prefer-destructuring
-        const rawContent = lastArtifact?.title
-            ? `${lastArtifact.title}`
-            : String(lastMsg?.content || room.purpose || 'Partage Hackit').slice(0, 500);
-        const text = buildSlackShareText({ roomName: room.name, summary: rawContent, note });
+        const { summary, artifactId: matchedArtifactId } = await buildShareSummary(room, artifactId);
 
-        const sent = await postSlackMessage({
-            botToken: slack.botToken,
-            channelId: slack.channelId,
-            text,
-        });
+        let history;
+        try {
+            history = await RoomShareHistory.create({
+                roomId: req.params.id,
+                artifactId: matchedArtifactId,
+                target,
+                status: 'pending',
+                idempotencyKey,
+                actorId: req.userId,
+                actorName: req.displayName,
+                note,
+                summary: String(summary).slice(0, 1000),
+            });
+        } catch (createErr) {
+            if (createErr?.code === 11000 && idempotencyKey) {
+                const existing = await RoomShareHistory.findOne({
+                    roomId: req.params.id,
+                    idempotencyKey,
+                }).lean();
+                if (existing) {
+                    return res.json({
+                        ok: existing.status === 'success',
+                        replayed: true,
+                        status: existing.status,
+                        target: existing.target,
+                        externalId: existing.externalId || '',
+                        externalUrl: existing.externalUrl || '',
+                        historyId: String(existing._id),
+                    });
+                }
+            }
+            throw createErr;
+        }
 
-        res.json({ ok: true, channel: sent.channel, ts: sent.ts });
+        try {
+            const { result, attempts } = await executeWithRetry(
+                () => connector.send({ room, summary, note }),
+                {
+                    maxAttempts: 3,
+                    baseDelayMs: 200,
+                }
+            );
+
+            history.status = 'success';
+            history.retries = Math.max(0, attempts - 1);
+            history.externalId = String(result.externalId || '');
+            history.externalUrl = String(result.externalUrl || '');
+            history.metadata = result.metadata || null;
+            history.errorCode = '';
+            history.errorMessage = '';
+            await history.save();
+
+            res.json({
+                ok: true,
+                replayed: false,
+                target,
+                retries: history.retries,
+                externalId: history.externalId,
+                externalUrl: history.externalUrl,
+                historyId: String(history._id),
+            });
+        } catch (err) {
+            history.status = 'failed';
+            history.retries = Number(err?.retries || 0);
+            history.errorCode = String(err?.code || '').slice(0, 120);
+            history.errorMessage = String(err?.message || 'Share failed').slice(0, 3000);
+            await history.save();
+            throw err;
+        }
     } catch (err) {
-        console.error('[rooms/share] error:', err);
-        if (!res.headersSent) {
-            res.status(502).json({ error: err?.message || 'Share failed' });
+        next(err);
+    }
+});
+
+router.get('/:id/share/history', async (req, res, next) => {
+    try {
+        const filters = validateShareHistoryQuery(req.query || {});
+
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
         }
+
+        const query = { roomId: req.params.id };
+        if (filters.target) query.target = filters.target;
+        if (filters.status) query.status = filters.status;
+        if (filters.artifactId) query.artifactId = filters.artifactId;
+
+        const history = await RoomShareHistory.find(query)
+            .sort({ createdAt: -1 })
+            .limit(filters.limit)
+            .lean();
+
+        res.json({
+            history: history.map((item) => ({
+                ...item,
+                requestId: req.requestId || null,
+            })),
+        });
+    } catch (err) {
+        next(err);
     }
 });
 

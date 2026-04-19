@@ -230,3 +230,55 @@ export function validateResolveCommentPayload(body) {
   const resolved = body?.resolved !== false;
   return { resolved };
 }
+
+export function validateSharePayload(body) {
+  const target = String(body?.target || 'slack').trim().toLowerCase();
+  if (!['slack', 'notion'].includes(target)) {
+    throw badRequest('target must be one of: slack, notion', {
+      field: 'target',
+      received: target,
+    });
+  }
+
+  const note = String(body?.note || '').trim().slice(0, 300);
+  const artifactId = String(body?.artifactId || '').trim();
+  const idempotencyKey = String(body?.idempotencyKey || '').trim().slice(0, 120);
+
+  return {
+    target,
+    note,
+    artifactId,
+    idempotencyKey,
+  };
+}
+
+export function validateShareHistoryQuery(query) {
+  const target = String(query?.target || '').trim().toLowerCase();
+  const status = String(query?.status || '').trim().toLowerCase();
+  const artifactId = String(query?.artifactId || '').trim();
+  const limitRaw = Number(query?.limit || 20);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(100, Math.max(1, Math.floor(limitRaw)))
+    : 20;
+
+  if (target && !['slack', 'notion'].includes(target)) {
+    throw badRequest('target must be one of: slack, notion', {
+      field: 'target',
+      received: target,
+    });
+  }
+
+  if (status && !['pending', 'success', 'failed'].includes(status)) {
+    throw badRequest('status must be one of: pending, success, failed', {
+      field: 'status',
+      received: status,
+    });
+  }
+
+  return {
+    target,
+    status,
+    artifactId,
+    limit,
+  };
+}
