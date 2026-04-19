@@ -310,6 +310,90 @@ class RoomMemory {
       );
 }
 
+class RoomIntegrationStatus {
+  final String provider; // slack | notion
+  final bool enabled;
+  final bool connected;
+  final String connectedBy;
+  final DateTime? connectedAt;
+  final String channelId;
+  final String parentPageId;
+
+  const RoomIntegrationStatus({
+    required this.provider,
+    required this.enabled,
+    required this.connected,
+    required this.connectedBy,
+    required this.connectedAt,
+    required this.channelId,
+    required this.parentPageId,
+  });
+
+  factory RoomIntegrationStatus.fromJson(
+    String provider,
+    Map<String, dynamic> j,
+  ) =>
+      RoomIntegrationStatus(
+        provider: provider,
+        enabled: j['enabled'] == true,
+        connected: j['connected'] == true,
+        connectedBy: j['connectedBy']?.toString() ?? '',
+        connectedAt: DateTime.tryParse(j['connectedAt']?.toString() ?? ''),
+        channelId: j['channelId']?.toString() ?? '',
+        parentPageId: j['parentPageId']?.toString() ?? '',
+      );
+}
+
+class RoomShareHistoryItem {
+  final String id;
+  final String target;
+  final String status; // pending | success | failed
+  final String actorName;
+  final String note;
+  final String summary;
+  final int retries;
+  final String errorCode;
+  final String errorMessage;
+  final String externalId;
+  final String externalUrl;
+  final DateTime createdAt;
+
+  const RoomShareHistoryItem({
+    required this.id,
+    required this.target,
+    required this.status,
+    required this.actorName,
+    required this.note,
+    required this.summary,
+    required this.retries,
+    required this.errorCode,
+    required this.errorMessage,
+    required this.externalId,
+    required this.externalUrl,
+    required this.createdAt,
+  });
+
+  factory RoomShareHistoryItem.fromJson(Map<String, dynamic> j) =>
+      RoomShareHistoryItem(
+        id: j['_id']?.toString() ?? j['id']?.toString() ?? '',
+        target: j['target']?.toString() ?? '',
+        status: j['status']?.toString() ?? 'pending',
+        actorName: j['actorName']?.toString() ?? 'Anonyme',
+        note: j['note']?.toString() ?? '',
+        summary: j['summary']?.toString() ?? '',
+        retries: int.tryParse(j['retries']?.toString() ?? '') ?? 0,
+        errorCode: j['errorCode']?.toString() ?? '',
+        errorMessage: j['errorMessage']?.toString() ?? '',
+        externalId: j['externalId']?.toString() ?? '',
+        externalUrl: j['externalUrl']?.toString() ?? '',
+        createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
+            DateTime.now(),
+      );
+
+  bool get isSuccess => status == 'success';
+  bool get isFailed => status == 'failed';
+}
+
 // ─── WebSocket events ─────────────────────────────────────────────────────────
 
 enum WsRoomEventType {

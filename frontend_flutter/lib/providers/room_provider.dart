@@ -58,6 +58,11 @@ class RoomProvider extends ChangeNotifier {
   List<RoomArtifact> artifacts = [];
   List<RoomMemory> memoryItems = [];
   List<RoomMission> missions = [];
+  List<RoomShareHistoryItem> shareHistory = [];
+  RoomIntegrationStatus? slackIntegration;
+  RoomIntegrationStatus? notionIntegration;
+  bool loadingShareHistory = false;
+  bool loadingIntegrations = false;
   bool loadingMessages = false;
   String? messagesError;
   String? actionError;
@@ -111,6 +116,21 @@ class RoomProvider extends ChangeNotifier {
       artifacts = contextResults[0] as List<RoomArtifact>;
       memoryItems = contextResults[1] as List<RoomMemory>;
       missions = contextResults[2] as List<RoomMission>;
+
+      // Keep integration/status loading best-effort so chat load never fails
+      // due to optional side panels.
+      try {
+        final slackFuture = _svc.getSlackIntegrationStatus(room.id);
+        final notionFuture = _svc.getNotionIntegrationStatus(room.id);
+        final historyFuture = _svc.listShareHistory(room.id, limit: 12);
+        slackIntegration = await slackFuture;
+        notionIntegration = await notionFuture;
+        shareHistory = await historyFuture;
+      } catch (_) {
+        slackIntegration = null;
+        notionIntegration = null;
+        shareHistory = [];
+      }
       debugPrint('$_tag openRoom: loaded ${messages.length} messages');
     } catch (e) {
       debugPrint('$_tag openRoom: error loading messages — $e');
@@ -502,6 +522,50 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshIntegrationStatus() async {
+    final room = currentRoom;
+    if (room == null) return;
+    loadingIntegrations = true;
+    notifyListeners();
+    try {
+      final results = await Future.wait<RoomIntegrationStatus>([
+        _svc.getSlackIntegrationStatus(room.id),
+        _svc.getNotionIntegrationStatus(room.id),
+      ]);
+      slackIntegration = results[0];
+      notionIntegration = results[1];
+    } catch (e) {
+      actionError = _errorMessage(e);
+    } finally {
+      loadingIntegrations = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshShareHistory({
+    String? target,
+    String? status,
+    int limit = 12,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return;
+    loadingShareHistory = true;
+    notifyListeners();
+    try {
+      shareHistory = await _svc.listShareHistory(
+        room.id,
+        target: target,
+        status: status,
+        limit: limit,
+      );
+    } catch (e) {
+      actionError = _errorMessage(e);
+    } finally {
+      loadingShareHistory = false;
+      notifyListeners();
+    }
+  }
+
   // ── Invite link ────────────────────────────────────────────────────────────────
 
   Future<String?> getInviteLink() async {
@@ -529,6 +593,11 @@ class RoomProvider extends ChangeNotifier {
     artifacts = [];
     memoryItems = [];
     missions = [];
+    shareHistory = [];
+    slackIntegration = null;
+    notionIntegration = null;
+    loadingShareHistory = false;
+    loadingIntegrations = false;
     aiThinking = false;
     wsReconnecting = false;
     onlineUserIds = [];

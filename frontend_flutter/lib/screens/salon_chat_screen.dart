@@ -615,11 +615,18 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         artifacts: prov.artifacts,
                         memoryItems: prov.memoryItems,
                         missions: prov.missions,
+                        slackIntegration: prov.slackIntegration,
+                        notionIntegration: prov.notionIntegration,
+                        shareHistory: prov.shareHistory,
+                        loadingIntegrations: prov.loadingIntegrations,
+                        loadingShareHistory: prov.loadingShareHistory,
                         onlineUserIds: prov.onlineUserIds,
                         useNeumorphControls: _useNeumorphControls,
                         onInsertCommand: _insertCommand,
                         onReviseArtifact: _showReviseArtifactDialog,
                         onLaunchMission: _showLaunchMissionDialog,
+                        onRefreshIntegrations: prov.refreshIntegrationStatus,
+                        onRefreshShareHistory: () => prov.refreshShareHistory(),
                         onOpenCanvas: (artifact) => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1032,7 +1039,8 @@ class _ArtifactCardState extends State<_ArtifactCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.reply_rounded,
-                          size: 14, color: scheme.onSurface.withValues(alpha: 0.4)),
+                          size: 14,
+                          color: scheme.onSurface.withValues(alpha: 0.4)),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text.rich(
@@ -1117,7 +1125,8 @@ class _ArtifactCardState extends State<_ArtifactCard> {
               'Votre retour sera visible par tous et pourra guider l\'IA à réviser le document.',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.6),
+                color:
+                    Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
             const SizedBox(height: 12),
@@ -1259,7 +1268,8 @@ class _DocumentCardState extends State<_DocumentCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.reply_rounded,
-                          size: 14, color: scheme.onSurface.withValues(alpha: 0.4)),
+                          size: 14,
+                          color: scheme.onSurface.withValues(alpha: 0.4)),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text.rich(
@@ -1345,7 +1355,8 @@ class _DocumentCardState extends State<_DocumentCard> {
               'Votre retour sera visible par tous et pourra guider l\'IA à réviser le document.',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.6),
+                color:
+                    Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.6),
               ),
             ),
             const SizedBox(height: 12),
@@ -2182,11 +2193,18 @@ class _ContextPanel extends StatelessWidget {
   final List<RoomArtifact> artifacts;
   final List<RoomMemory> memoryItems;
   final List<RoomMission> missions;
+  final RoomIntegrationStatus? slackIntegration;
+  final RoomIntegrationStatus? notionIntegration;
+  final List<RoomShareHistoryItem> shareHistory;
+  final bool loadingIntegrations;
+  final bool loadingShareHistory;
   final List<String> onlineUserIds;
   final bool useNeumorphControls;
   final void Function(String command) onInsertCommand;
   final Future<void> Function(RoomArtifact artifact) onReviseArtifact;
   final VoidCallback onLaunchMission;
+  final Future<void> Function() onRefreshIntegrations;
+  final Future<void> Function() onRefreshShareHistory;
   final void Function(RoomArtifact artifact) onOpenCanvas;
 
   const _ContextPanel({
@@ -2194,13 +2212,28 @@ class _ContextPanel extends StatelessWidget {
     required this.artifacts,
     required this.memoryItems,
     required this.missions,
+    required this.slackIntegration,
+    required this.notionIntegration,
+    required this.shareHistory,
+    required this.loadingIntegrations,
+    required this.loadingShareHistory,
     required this.onlineUserIds,
     required this.useNeumorphControls,
     required this.onInsertCommand,
     required this.onReviseArtifact,
     required this.onLaunchMission,
+    required this.onRefreshIntegrations,
+    required this.onRefreshShareHistory,
     required this.onOpenCanvas,
   });
+
+  String _timeAgo(DateTime at) {
+    final delta = DateTime.now().difference(at);
+    if (delta.inMinutes < 1) return 'a l\'instant';
+    if (delta.inHours < 1) return 'il y a ${delta.inMinutes} min';
+    if (delta.inDays < 1) return 'il y a ${delta.inHours} h';
+    return 'il y a ${delta.inDays} j';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2395,6 +2428,131 @@ class _ContextPanel extends StatelessWidget {
                 subtitle: Text('${mission.agentLabel} · ${mission.status}'),
               ),
             ),
+        sectionTitle(
+          'Intégrations',
+          subtitle:
+              'Statut de connexion Slack/Notion et dernier état de synchronisation.',
+        ),
+        if (loadingIntegrations)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+        ...[
+          ('Slack', slackIntegration, Icons.tag_rounded),
+          ('Notion', notionIntegration, Icons.note_alt_outlined),
+        ].map(
+          (entry) {
+            final label = entry.$1;
+            final status = entry.$2;
+            final icon = entry.$3;
+            final connected = status?.connected == true;
+            return ListTile(
+              dense: true,
+              leading: Icon(
+                icon,
+                color: connected ? Colors.green : scheme.onSurface,
+                size: 18,
+              ),
+              title:
+                  Text('$label · ${connected ? 'Connecte' : 'Non connecte'}'),
+              subtitle: Text(
+                status == null || status.connectedAt == null
+                    ? 'Aucune synchronisation recente.'
+                    : '${status.connectedBy.isEmpty ? 'inconnu' : status.connectedBy} · ${_timeAgo(status.connectedAt!)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Icon(
+                connected
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.error_outline_rounded,
+                size: 17,
+                color: connected ? Colors.green : scheme.error,
+              ),
+            );
+          },
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onRefreshIntegrations,
+              icon: const Icon(Icons.sync_rounded, size: 16),
+              label: const Text('Actualiser'),
+            ),
+          ),
+        ),
+        sectionTitle(
+          'Historique de partage',
+          subtitle: shareHistory.isEmpty
+              ? 'Aucun export vers Slack/Notion pour ce channel.'
+              : null,
+        ),
+        if (loadingShareHistory)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+        if (shareHistory.length > 4)
+          Padding(
+            padding: const EdgeInsets.only(right: 8, bottom: 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _openShareHistorySheet(context, shareHistory),
+                icon: const Icon(Icons.history_rounded, size: 16),
+                label: const Text('Voir tout'),
+              ),
+            ),
+          ),
+        ...shareHistory.take(4).map(
+              (item) => ListTile(
+                dense: true,
+                leading: Icon(
+                  item.target == 'slack'
+                      ? Icons.tag_rounded
+                      : Icons.note_alt_outlined,
+                  size: 18,
+                  color: item.isSuccess
+                      ? Colors.green
+                      : item.isFailed
+                          ? scheme.error
+                          : scheme.tertiary,
+                ),
+                title: Text(
+                  '${item.target.toUpperCase()} · ${item.status}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  item.note.isNotEmpty
+                      ? '${item.note} · ${_timeAgo(item.createdAt)}'
+                      : '${item.summary.isEmpty ? 'Sans resume' : item.summary} · ${_timeAgo(item.createdAt)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: item.retries > 0
+                    ? Chip(
+                        label: Text('retry ${item.retries}'),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      )
+                    : null,
+              ),
+            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onRefreshShareHistory,
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Rafraichir l\'historique'),
+            ),
+          ),
+        ),
         sectionTitle('Actions rapides'),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -2445,6 +2603,104 @@ class _ContextPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  void _openShareHistorySheet(
+    BuildContext context,
+    List<RoomShareHistoryItem> items,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.72,
+        maxChildSize: 0.92,
+        minChildSize: 0.4,
+        builder: (_, scrollCtrl) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.onSurface.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded, color: scheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Historique de partage',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${items.length}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurface.withValues(alpha: 0.55),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollCtrl,
+                itemCount: items.length,
+                itemBuilder: (ctx, i) {
+                  final item = items[i];
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(
+                      item.target == 'slack'
+                          ? Icons.tag_rounded
+                          : Icons.note_alt_outlined,
+                      color: item.isSuccess ? Colors.green : scheme.tertiary,
+                    ),
+                    title: Text(
+                      '${item.target.toUpperCase()} · ${item.status}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      item.errorMessage.isNotEmpty
+                          ? item.errorMessage
+                          : (item.note.isNotEmpty ? item.note : item.summary),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Text(
+                      _timeAgo(item.createdAt),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: scheme.onSurface.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

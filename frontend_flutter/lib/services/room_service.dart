@@ -123,8 +123,9 @@ class RoomService {
       body = <String, dynamic>{};
     }
     if (r.statusCode >= 400) {
-      final message = (body['message'] ?? body['error'] ?? 'HTTP ${r.statusCode}')
-          .toString();
+      final message =
+          (body['message'] ?? body['error'] ?? 'HTTP ${r.statusCode}')
+              .toString();
       final code = body['code']?.toString();
       final requestId = body['requestId']?.toString();
       throw RoomServiceException(
@@ -362,6 +363,39 @@ class RoomService {
       'completed': completed,
       if (rating != null) 'rating': rating,
     });
+  }
+
+  Future<RoomIntegrationStatus> getSlackIntegrationStatus(String roomId) async {
+    final r = await _get('/api/rooms/$roomId/integrations/slack');
+    return RoomIntegrationStatus.fromJson('slack', r);
+  }
+
+  Future<RoomIntegrationStatus> getNotionIntegrationStatus(
+      String roomId) async {
+    final r = await _get('/api/rooms/$roomId/integrations/notion');
+    return RoomIntegrationStatus.fromJson('notion', r);
+  }
+
+  Future<List<RoomShareHistoryItem>> listShareHistory(
+    String roomId, {
+    String? target,
+    String? status,
+    int limit = 20,
+  }) async {
+    final qp = <String, String>{
+      'limit': '${limit.clamp(1, 100)}',
+      if (target != null && target.trim().isNotEmpty) 'target': target.trim(),
+      if (status != null && status.trim().isNotEmpty) 'status': status.trim(),
+    };
+    final uri = Uri.parse('$_base/api/rooms/$roomId/share/history')
+        .replace(queryParameters: qp);
+    final r = await _http
+        .get(uri, headers: await _headers())
+        .timeout(const Duration(seconds: 15));
+    final json = _parse(r);
+    return (json['history'] as List? ?? [])
+        .map((j) => RoomShareHistoryItem.fromJson(j as Map<String, dynamic>))
+        .toList();
   }
 
   // ── WebSocket (per room) ──────────────────────────────────────────────────────
