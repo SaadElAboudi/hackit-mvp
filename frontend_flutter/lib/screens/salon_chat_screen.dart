@@ -11,6 +11,7 @@ import '../services/room_service.dart';
 import '../utils/web_download.dart';
 import '../widgets/glass_panel.dart';
 import '../widgets/neumorphic_action_button.dart';
+import 'artifact_review_screen.dart';
 import 'canvas_screen.dart';
 import 'profile_screen.dart';
 
@@ -2322,10 +2323,27 @@ class _ContextPanel extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 onTap: () => onOpenCanvas(artifact),
-                trailing: IconButton(
-                  icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
-                  tooltip: 'Réviser avec IA',
-                  onPressed: () => onReviseArtifact(artifact),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon:
+                          const Icon(Icons.rate_review_outlined, size: 18),
+                      tooltip: 'Revue',
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ArtifactReviewScreen(artifact: artifact),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+                      tooltip: 'Réviser avec IA',
+                      onPressed: () => onReviseArtifact(artifact),
+                    ),
+                  ],
                 ),
               ),
             ),

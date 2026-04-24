@@ -338,6 +338,48 @@ class RoomService {
     return ArtifactVersion.fromJson(r['version'] as Map<String, dynamic>);
   }
 
+  Future<ArtifactVersion> rejectArtifactVersion(
+    String roomId,
+    String artifactId,
+    String versionId, {
+    String reason = '',
+  }) async {
+    final body = reason.trim().isNotEmpty
+        ? {'reason': reason.trim()}
+        : const <String, dynamic>{};
+    final r = await _post(
+      '/api/rooms/$roomId/artifacts/$artifactId/versions/$versionId/reject',
+      body,
+    );
+    return ArtifactVersion.fromJson(r['version'] as Map<String, dynamic>);
+  }
+
+  Future<ArtifactVersion> resolveArtifactComment(
+    String roomId,
+    String artifactId,
+    String versionId,
+    String commentId, {
+    bool resolved = true,
+  }) async {
+    final r = await _patch(
+      '/api/rooms/$roomId/artifacts/$artifactId/versions/$versionId/comments/$commentId/resolve',
+      {'resolved': resolved},
+    );
+    return ArtifactVersion.fromJson(r['version'] as Map<String, dynamic>);
+  }
+
+  Future<RoomArtifact> updateArtifactStatus(
+    String roomId,
+    String artifactId,
+    String status,
+  ) async {
+    final r = await _patch(
+      '/api/rooms/$roomId/artifacts/$artifactId/status',
+      {'status': status},
+    );
+    return RoomArtifact.fromJson(r['artifact'] as Map<String, dynamic>);
+  }
+
   Future<void> addMemory(
     String roomId, {
     required String content,

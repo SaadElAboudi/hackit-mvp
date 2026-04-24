@@ -492,6 +492,129 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<List<ArtifactVersion>> fetchVersions(String artifactId) async {
+    final room = currentRoom;
+    if (room == null) return [];
+    actionError = null;
+    try {
+      return await _svc.fetchArtifactVersions(room.id, artifactId);
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return [];
+    }
+  }
+
+  Future<bool> approveVersion(String artifactId, String versionId) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    try {
+      await _svc.approveArtifactVersion(room.id, artifactId, versionId);
+      await _refreshArtifact(room.id, artifactId);
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    }
+  }
+
+  Future<bool> rejectVersion(
+    String artifactId,
+    String versionId, {
+    String reason = '',
+  }) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    try {
+      await _svc.rejectArtifactVersion(room.id, artifactId, versionId,
+          reason: reason);
+      await _refreshArtifact(room.id, artifactId);
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    }
+  }
+
+  Future<bool> updateArtifactStatus(String artifactId, String status) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    try {
+      final updated =
+          await _svc.updateArtifactStatus(room.id, artifactId, status);
+      final idx = artifacts.indexWhere((a) => a.id == artifactId);
+      if (idx >= 0) artifacts[idx] = updated;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    }
+  }
+
+  Future<ArtifactVersion?> addComment(
+    String artifactId,
+    String versionId,
+    String content, {
+    String? displayName,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      final version = await _svc.commentArtifactVersion(
+        room.id,
+        artifactId,
+        versionId,
+        content: content,
+        displayName: displayName,
+      );
+      return version;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return null;
+    }
+  }
+
+  Future<ArtifactVersion?> resolveComment(
+    String artifactId,
+    String versionId,
+    String commentId, {
+    bool resolved = true,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      return await _svc.resolveArtifactComment(
+        room.id,
+        artifactId,
+        versionId,
+        commentId,
+        resolved: resolved,
+      );
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return null;
+    }
+  }
+
+  Future<void> _refreshArtifact(String roomId, String artifactId) async {
+    final list = await _svc.listArtifacts(roomId);
+    final updated = list.firstWhere(
+      (a) => a.id == artifactId,
+      orElse: () => artifacts.firstWhere(
+        (a) => a.id == artifactId,
+        orElse: () => artifacts.first,
+      ),
+    );
+    final idx = artifacts.indexWhere((a) => a.id == artifactId);
+    if (idx >= 0) artifacts[idx] = updated;
+    notifyListeners();
+  }
+
   Future<bool> addMemory(String content, {String type = 'fact'}) async {
     final room = currentRoom;
     if (room == null) return false;

@@ -162,15 +162,45 @@ class RoomMessage {
       );
 }
 
+class ArtifactComment {
+  final String id;
+  final String content;
+  final String authorId;
+  final String authorName;
+  final bool resolved;
+  final DateTime createdAt;
+
+  const ArtifactComment({
+    required this.id,
+    required this.content,
+    required this.authorId,
+    required this.authorName,
+    required this.resolved,
+    required this.createdAt,
+  });
+
+  factory ArtifactComment.fromJson(Map<String, dynamic> j) => ArtifactComment(
+        id: j['_id']?.toString() ?? j['id']?.toString() ?? '',
+        content: j['content']?.toString() ?? '',
+        authorId: j['authorId']?.toString() ?? '',
+        authorName: j['authorName']?.toString() ?? '',
+        resolved: (j['resolved'] as bool?) ?? false,
+        createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
+            DateTime.now(),
+      );
+}
+
 class ArtifactVersion {
   final String id;
   final String artifactId;
   final int number;
   final String content;
   final String status;
-  final List<Map<String, dynamic>> comments;
+  final List<ArtifactComment> comments;
   final DateTime createdAt;
   final String? contentPreview;
+  final String changeSummary;
+  final String authorName;
 
   const ArtifactVersion({
     required this.id,
@@ -181,6 +211,8 @@ class ArtifactVersion {
     required this.comments,
     required this.createdAt,
     this.contentPreview,
+    this.changeSummary = '',
+    this.authorName = '',
   });
 
   factory ArtifactVersion.fromJson(Map<String, dynamic> j) => ArtifactVersion(
@@ -191,11 +223,13 @@ class ArtifactVersion {
         status: j['status']?.toString() ?? 'draft',
         comments: (j['comments'] as List? ?? [])
             .whereType<Map>()
-            .map((comment) => comment.cast<String, dynamic>())
+            .map((c) => ArtifactComment.fromJson(c.cast<String, dynamic>()))
             .toList(),
         createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
             DateTime.now(),
         contentPreview: j['contentPreview']?.toString(),
+        changeSummary: j['changeSummary']?.toString() ?? '',
+        authorName: j['authorName']?.toString() ?? '',
       );
 }
 
