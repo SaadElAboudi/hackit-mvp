@@ -271,21 +271,52 @@ function buildHeuristicReply({ roomName, prompt, command, missionAgentLabel = 'A
   }
 
   if (command === 'mission') {
+    const isGoToMarket = /(go\s*to\s*market|gtm|lancement|launch|acquisition|positionnement|marque|brand)/i.test(topic);
+    const isEco = /(eco|e?co[-\s]?responsable|durable|sustainable|green|impact)/i.test(topic);
+    const icpHint = isEco
+      ? '- Segment 1: 22-35 ans urbains sensibles a l\'impact, pouvoir d\'achat moyen+'
+      : '- Segment 1: adopteurs precoces avec douleur forte et budget identifiable';
+    const channelsHint = isGoToMarket
+      ? ['- Owned: social + email + landing orientee preuve', '- Earned: micro-influence et partenariats niches', '- Paid: tests creatives courts avec CAC plafond']
+      : ['- Canal principal a fort signal d\'intention', '- Canal secondaire pour preuve sociale', '- Canal relationnel pour closing'];
+
     return [
       `# Mission IA — ${slugTitle(topic, 'Mission partagée')}`,
       '',
       `## Agent`,
       `- ${missionAgentLabel}`,
       '',
-      '## Résultat',
-      '- Analyse initiale produite',
-      '- Plan d’action priorisé',
-      '- Points à confirmer par l’équipe',
+      '## Hypothese directrice',
+      isGoToMarket
+        ? '- La traction viendra d\'un positionnement tres net (style + preuve d\'impact) avant l\'optimisation paid.'
+        : '- La priorite est de valider l\'offre et le canal avec le meilleur ratio impact/effort.',
       '',
-      '## Actions proposées',
-      '1. Vérifier le besoin réel',
-      '2. Valider le niveau de détail attendu',
-      '3. Convertir ceci en artefact si besoin',
+      '## ICP et proposition de valeur',
+      icpHint,
+      '- Segment 2: acheteurs pragmatiques cherchant qualite/prix clair',
+      isEco
+        ? '- Message cle: design desirable + transparence matieres + preuve d\'impact mesurable'
+        : '- Message cle: resultat concret + delai court + preuve avant engagement',
+      '',
+      '## Plan 90 jours (priorise)',
+      '1. Semaines 1-2: cadrer offre, pricing, promesse et preuves',
+      '2. Semaines 3-4: produire 3 creatives, 1 landing, 1 tunnel email',
+      '3. Semaines 5-8: lancer 2-3 canaux en tests A/B et couper vite les perdants',
+      '4. Semaines 9-12: scaler le canal gagnant et industrialiser le reporting',
+      '',
+      '## Canaux d\'acquisition recommandes',
+      ...channelsHint,
+      '',
+      '## KPI de pilotage',
+      '- Taux de conversion landing',
+      '- CAC par canal vs marge contribution',
+      '- Repeat purchase a 30/60 jours',
+      '- Taux de retention email/SMS',
+      '',
+      '## Decisions a valider avec l\'equipe',
+      '- Budget test mensuel et seuil d\'arret par canal',
+      '- Priorite collection hero vs largeur de catalogue',
+      '- Niveau de preuve requis (labels, tracabilite, impact)',
     ].join('\n');
   }
 
@@ -883,12 +914,34 @@ async function handleConversationCommand({
     formatContextForPrompt({ room, context }),
   ].join('\n\n');
 
-  const maxTokens = command === 'doc' ? 1100 : 700;
+  const maxTokens = (command === 'doc' || command === 'mission') ? 1200 : 700;
   const tempId = `stream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
   // Try token-by-token streaming first; degraded silently to a single-shot call
   let geminiText = await tryGeminiStreaming(geminiPrompt, roomId, tempId, maxTokens);
   if (!geminiText) geminiText = await tryGemini(geminiPrompt, maxTokens);
+
+  // Mission quality safety net: retry once with a shorter, stricter prompt
+  // when the rich contextual prompt times out or fails.
+  if (!geminiText && command === 'mission') {
+    const missionFallbackPrompt = [
+      'Tu dois produire un livrable mission directement actionnable.',
+      modeInstruction ? `Posture: ${modeInstruction}` : '',
+      `Demande: ${effectivePrompt}`,
+      'Format obligatoire markdown:',
+      '# Titre',
+      '## Hypothese directrice',
+      '## Plan 30/60/90 jours',
+      '## KPI',
+      '## Risques et mitigations',
+      '## Decisions a valider',
+      'Interdiction: phrases generiques, placeholders, recommandations vagues.',
+      `Contexte channel: ${room.name || 'Channel'}${room.purpose ? ` | ${clip(room.purpose, 220)}` : ''}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    geminiText = await tryGemini(missionFallbackPrompt, 1200);
+  }
 
   const content =
     geminiText || buildHeuristicReply({
