@@ -9,9 +9,9 @@
  * can render it as a challengeable deliverable.
  */
 
-import axios from 'axios';
 import RoomMessage from '../models/RoomMessage.js';
 import { broadcastRoomMessage, broadcastRoomTyping } from './roomWS.js';
+import { generateWithGemini } from './gemini.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.0-flash-lite';
@@ -191,9 +191,6 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
   // Signal that AI is "typing" so everyone sees the indicator
   broadcastRoomTyping(roomId, 'ai');
 
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-  console.log(`[roomGemini] POST ${geminiUrl.replace(GEMINI_API_KEY, '***')}`);
-
   const roomName = room.name || 'Salon';
   const directives = room.aiDirectives?.trim()
     ? `\nDirectives des membres du salon :\n${room.aiDirectives}\n`
@@ -207,7 +204,10 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
   const systemPrompt =
     `Tu es IA, un collègue IA intégré dans un salon de discussion collaboratif nommé "${roomName}". ` +
     `Tu es un participant à part entière, au même titre que les humains. ` +
-    `Tu réponds uniquement quand on t'interpelle (via @ia). Sois concis et utile. ` +
+    `Tu réponds uniquement quand on t'interpelle (via @ia). Sois concis, utile et très spécifique au contexte du salon. ` +
+    `Interdiction: réponses vagues, phrases passe-partout, templates génériques. ` +
+    `Ancre explicitement ta réponse dans l'historique (décisions, contraintes, formulations membres). ` +
+    `Si le contexte est insuffisant, pose au plus 2 questions ciblées au lieu d'inventer. ` +
     `Si tu produis un document structuré (plan, rapport, cahier des charges, analyse, etc.), ` +
     `commence par un titre principal en markdown (ex: # Titre du document) afin qu'il soit ` +
     `reconnu comme un livrable challengeable par les membres.` +
@@ -216,20 +216,14 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
   const fullPrompt = `${systemPrompt}\n\nHistorique de la conversation :\n${history}`;
 
   try {
-    const { data } = await axios.post(
-      geminiUrl,
-      {
-        contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
-      },
-      { timeout: GEMINI_TIMEOUT_MS }
-    );
-
-    console.log(`[roomGemini] Gemini response received — candidates: ${data?.candidates?.length ?? 0} finishReason: ${data?.candidates?.[0]?.finishReason}`);
-
-    const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
-      "Je n'ai pas pu générer de réponse.";
+    const text = await generateWithGemini(fullPrompt, 2048, {
+      model: GEMINI_MODEL,
+      preferModels: [GEMINI_MODEL],
+      timeoutMs: GEMINI_TIMEOUT_MS,
+      temperature: 0.45,
+      maxAttemptsPerModel: 2,
+      allowQualityRepair: true,
+    });
 
     console.log(`[roomGemini] AI text length=${text.length} isDocument=${/^#{1,3}\s+\S/.test(text)} preview="${text.slice(0, 80).replace(/\n/g, '↵')}"`);
 
@@ -266,7 +260,7 @@ export async function triggerRoomAI(room, recentMessages, roomId) {
     });
 
     // Respect server-advised retry window on quota/rate limits.
-    if (errStatus === 429) {
+    if (errStatus === 429 || /quota|rate limit|too many requests|429/i.test(String(errMessage || ''))) {
       const retryDelayMs = parseRetryDelayMs(errData) || 45000;
       roomRetryAfterUntil.set(roomId, Date.now() + retryDelayMs);
       const waitSec = Math.max(1, Math.ceil(retryDelayMs / 1000));

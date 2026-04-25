@@ -12,6 +12,7 @@ import morgan from 'morgan';
 import { getFeatureFlags } from './config/featureFlags.js';
 import roomsRouter from './routes/rooms.js';
 import { attachWebSocketServer } from './services/threadRooms.js';
+import { generateWithGemini as generateWithGeminiShared } from './services/gemini.js';
 import { validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
 import { getChapters, extractDesiredChapters } from './services/chapters.js';
 import { getTranscript } from './services/transcript.js';
@@ -2030,52 +2031,40 @@ app.post('/api/ai/chat', async (req, res) => {
       return res.status(503).json({ error: 'Service IA non configuré côté serveur.' });
     }
 
-    const contents = [
-      ...history.map((m) => ({
-        role: m.role === 'model' ? 'model' : 'user',
-        parts: [{ text: String(m.text || '') }],
-      })),
-      { role: 'user', parts: [{ text: message.trim() }] },
-    ];
+    const compactHistory = Array.isArray(history)
+      ? history
+        .slice(-16)
+        .map((m) => {
+          const role = m?.role === 'model' ? 'assistant' : 'user';
+          const text = String(m?.text || '').trim();
+          return text ? `[${role}] ${text}` : null;
+        })
+        .filter(Boolean)
+      : [];
 
-    const body = {
-      contents,
-      ...(systemPrompt
-        ? { system_instruction: { parts: [{ text: String(systemPrompt) }] } }
-        : {}),
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
-    };
+    const prompt = [
+      'Tu es un copilote IA personnel. Reponds de facon claire, concrete et actionnable.',
+      'Interdiction: formules vagues, reponse template, generalites sans lien avec la demande.',
+      compactHistory.length ? `Historique recent:\n${compactHistory.join('\n\n')}` : '',
+      `Demande utilisateur:\n${message.trim()}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
 
-    // gemini-2.0-flash-lite: 30 RPM on free tier (2× more than flash).
-    // Retry up to 2 extra times on 429 with incremental back-off.
-    const aiChatUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`;
-    let geminiRes;
-    for (let attempt = 0; attempt <= 2; attempt++) {
-      try {
-        geminiRes = await axios.post(aiChatUrl, body, {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 30000,
-        });
-        break; // success — exit retry loop
-      } catch (e) {
-        const status = e.response?.status;
-        const geminiMsg = e.response?.data?.error?.message ?? e.message;
-        if (status === 429 && attempt < 2) {
-          console.warn(`[ai/chat] 429 on attempt ${attempt + 1}, retrying in ${(attempt + 1) * 1500}ms — ${geminiMsg}`);
-          await new Promise((r) => setTimeout(r, (attempt + 1) * 1500));
-          continue;
-        }
-        // Log full Gemini error detail to help diagnose quota=0 vs rate-limit
-        console.error(`[ai/chat] Gemini error (attempt ${attempt + 1}, HTTP ${status}):`, geminiMsg);
-        throw e;
-      }
-    }
+    const reply = await generateWithGeminiShared(prompt, 1024, {
+      model: 'models/gemini-2.0-flash-lite',
+      preferModels: ['models/gemini-2.0-flash-lite'],
+      timeoutMs: 30000,
+      temperature: 0.55,
+      maxAttemptsPerModel: 2,
+      allowQualityRepair: true,
+      systemInstruction: String(systemPrompt || '').trim(),
+    });
 
-    const parts = geminiRes.data?.candidates?.[0]?.content?.parts ?? [];
-    const reply = parts[0]?.text ?? '';
     return res.json({ reply });
   } catch (err) {
-    if (err.response?.status === 429) {
+    const message = String(err?.message || '');
+    if (err.response?.status === 429 || /quota|rate limit|too many requests|429/i.test(message)) {
       return res.status(429).json({ error: 'Quota IA dépassé, réessaie dans quelques secondes.' });
     }
     console.error('[ai/chat]', err.message);

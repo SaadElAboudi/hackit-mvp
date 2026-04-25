@@ -4,21 +4,113 @@ import axios from "axios";
  * Service Gemini - Gère toutes les interactions avec l'API Gemini de Google
  */
 
+const DEFAULT_MODEL = process.env.GEMINI_MODEL || "models/gemini-2.0-flash-lite";
+
+const RETRYABLE_NETWORK_CODES = new Set([
+  "ECONNRESET",
+  "ECONNABORTED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+]);
+
+const GENERIC_PHRASES = [
+  "je peux vous aider",
+  "voici quelques pistes",
+  "en mode hors-ligne",
+  "réponse générique",
+  "structure générique",
+  "few ideas",
+  "generic response",
+];
+
+const STOPWORDS = new Set([
+  "avec", "pour", "dans", "cette", "cet", "quoi", "comment", "pourquoi", "which", "what", "when", "where", "have", "will", "would", "your", "vous", "nous", "leur", "leurs", "être", "faire", "plus", "moins", "tout", "tous", "from", "that", "this", "there", "here", "est", "sont", "des", "les", "une", "the", "and", "mais", "donc", "avec", "sans", "about", "into", "over", "under", "than", "bien", "very", "just", "only", "aussi",
+]);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractKeywords(text = "") {
+  return Array.from(
+    new Set(
+      String(text)
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+        .split(/\s+/)
+        .map((word) => word.trim())
+        .filter((word) => word.length >= 5 && !STOPWORDS.has(word))
+    )
+  );
+}
+
+function looksGenericResponse(text = "", prompt = "") {
+  const value = String(text || "").trim();
+  if (!value) return true;
+
+  const lower = value.toLowerCase();
+  if (GENERIC_PHRASES.some((phrase) => lower.includes(phrase))) {
+    return true;
+  }
+
+  const promptKeywords = extractKeywords(prompt).slice(0, 18);
+  if (!promptKeywords.length) return false;
+
+  const overlap = promptKeywords.filter((keyword) => lower.includes(keyword)).length;
+  const veryShort = value.length < 140;
+  const weakOverlap = overlap === 0;
+
+  return veryShort && weakOverlap;
+}
+
+function buildSpecificityRepairPrompt({ originalPrompt, draft }) {
+  return [
+    "Ameliore la reponse ci-dessous.",
+    "Contraintes obligatoires:",
+    "- Pas de formulation generique (ex: \"voici quelques pistes\", \"je peux aider\")",
+    "- Appuie-toi sur des elements concrets de la demande",
+    "- Donne des propositions directement executables",
+    "- Garde le meme format de sortie attendu",
+    "",
+    "Demande originale:",
+    originalPrompt,
+    "",
+    "Brouillon a corriger:",
+    draft,
+  ].join("\n");
+}
+
+function isRetryableGeminiError(error) {
+  const status = error?.response?.status;
+  if (status === 429) return true;
+  if (typeof status === "number" && status >= 500) return true;
+  if (RETRYABLE_NETWORK_CODES.has(String(error?.code || ""))) return true;
+  return false;
+}
+
 /**
  * Generate text using Gemini API
- * @param {string} prompt - Le prompt à envoyer à Gemini
- * @param {number} maxOutputTokens - Nombre maximum de tokens dans la réponse
- * @returns {Promise<string>} - Texte généré
+ * @param {string} prompt - Le prompt a envoyer a Gemini
+ * @param {number} maxOutputTokens - Nombre maximum de tokens dans la reponse
+ * @param {object} options - Options avancees (temperature, model, preferModels, systemInstruction)
+ * @returns {Promise<string>} - Texte genere
  */
-export const generateWithGemini = async (prompt, maxOutputTokens = 256) => {
+export const generateWithGemini = async (prompt, maxOutputTokens = 256, options = {}) => {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const CONFIG_MODEL = "models/gemini-1.5-flash";
+  const timeoutMs = Number(options.timeoutMs || process.env.GEMINI_TIMEOUT_MS || 15000);
+  const temperature = Number.isFinite(options.temperature)
+    ? options.temperature
+    : 0.2;
+  const maxAttemptsPerModel = Math.max(1, Number(options.maxAttemptsPerModel || 2));
+  const allowQualityRepair = options.allowQualityRepair !== false;
+  const systemInstruction = String(options.systemInstruction || "").trim();
 
   if (!GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY manquante dans les variables d'environnement");
   }
 
-  const buildRequest = (model) => {
+  const buildRequest = (model, inputPrompt) => {
     const isLegacyPalm = /bison/i.test(model);
     const url = isLegacyPalm
       ? `https://generativelanguage.googleapis.com/v1beta2/${model}:generateText?key=${GEMINI_API_KEY}`
@@ -26,21 +118,24 @@ export const generateWithGemini = async (prompt, maxOutputTokens = 256) => {
 
     const body = isLegacyPalm
       ? {
-        prompt: { text: prompt },
+        prompt: { text: inputPrompt },
         maxOutputTokens,
-        temperature: 0.2,
+        temperature,
       }
       : {
         contents: [
           {
             role: "user",
-            parts: [{ text: prompt }],
+            parts: [{ text: inputPrompt }],
           },
         ],
         generationConfig: {
           maxOutputTokens,
-          temperature: 0.2,
+          temperature,
         },
+        ...(systemInstruction
+          ? { system_instruction: { parts: [{ text: systemInstruction }] } }
+          : {}),
         // Reduce unexpected safety blocks for benign prompts
         safetySettings: [
           { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -72,55 +167,106 @@ export const generateWithGemini = async (prompt, maxOutputTokens = 256) => {
   };
 
   const tryModels = [];
-  // 1) configured model
-  tryModels.push(CONFIG_MODEL);
-  // 2) if ends with -latest, try base name
-  if (/-latest$/i.test(CONFIG_MODEL)) {
-    tryModels.push(CONFIG_MODEL.replace(/-latest$/i, ""));
+  const preferred = [
+    ...(Array.isArray(options.preferModels) ? options.preferModels : []),
+    options.model,
+    DEFAULT_MODEL,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  for (const model of preferred) {
+    if (!tryModels.includes(model)) tryModels.push(model);
+    if (/-latest$/i.test(model)) {
+      const base = model.replace(/-latest$/i, "");
+      if (!tryModels.includes(base)) tryModels.push(base);
+    }
   }
-  // 3) modern defaults
+
+  // modern defaults
   for (const candidate of [
     "models/gemini-2.5-flash",
     "models/gemini-2.5-pro",
     "models/gemini-2.0-flash",
+    "models/gemini-2.0-flash-lite",
     "models/gemini-1.5-flash",
   ]) {
     if (!tryModels.includes(candidate)) tryModels.push(candidate);
   }
-  // 4) legacy fallback if v1 model not available
+
+  // legacy fallback if v1 model not available
   if (!tryModels.includes("models/text-bison-001")) {
     tryModels.push("models/text-bison-001");
   }
 
   let lastError;
   for (const model of tryModels) {
-    try {
-      const { url, body, parse } = buildRequest(model);
-      const resp = await axios.post(url, body, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 15000,
-      });
-      const text = parse(resp.data);
-      if (!text) throw new Error(`Pas de contenu généré par Gemini (${model})`);
-      return text;
-    } catch (error) {
-      lastError = error;
-      const status = error?.response?.status;
-      const message = error?.response?.data?.error?.message || error.message;
-      const isNotFound = status === 404 || /not\s*found/i.test(message || "");
-      const isBlocked = /blocked|safety/i.test(message || "") || /Contenu bloqué/.test(error?.message || "");
-      // Continue on NOT_FOUND or BLOCKED; otherwise break early
-      if (!isNotFound && !isBlocked) {
+    for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt++) {
+      try {
+        const { url, body, parse } = buildRequest(model, prompt);
+        const resp = await axios.post(url, body, {
+          headers: { "Content-Type": "application/json" },
+          timeout: timeoutMs,
+        });
+        const text = parse(resp.data);
+        if (!text) throw new Error(`Pas de contenu genere par Gemini (${model})`);
+
+        if (
+          allowQualityRepair &&
+          !options.__qualityRepairAttempt &&
+          looksGenericResponse(text, prompt)
+        ) {
+          const repairedPrompt = buildSpecificityRepairPrompt({
+            originalPrompt: prompt,
+            draft: text,
+          });
+          try {
+            const repaired = await generateWithGemini(repairedPrompt, maxOutputTokens, {
+              ...options,
+              model,
+              allowQualityRepair: false,
+              __qualityRepairAttempt: true,
+              maxAttemptsPerModel: 1,
+            });
+            if (repaired && !looksGenericResponse(repaired, prompt)) {
+              return repaired;
+            }
+          } catch (_) {
+            // keep original response if repair pass fails
+          }
+        }
+
+        return text;
+      } catch (error) {
+        lastError = error;
+        const status = error?.response?.status;
+        const message = error?.response?.data?.error?.message || error.message;
+        const isNotFound = status === 404 || /not\s*found/i.test(message || "");
+        const isBlocked =
+          /blocked|safety/i.test(message || "") ||
+          /Contenu bloqu[eé]/i.test(error?.message || "");
+
+        if (isNotFound || isBlocked) {
+          if (attempt >= maxAttemptsPerModel) {
+            console.warn(`Modele indisponible ou bloque (${model}), tentative du modele suivant...`);
+          }
+          break;
+        }
+
+        if (attempt < maxAttemptsPerModel && isRetryableGeminiError(error)) {
+          const backoff = Math.min(4000, 400 * attempt + Math.floor(Math.random() * 150));
+          await sleep(backoff);
+          continue;
+        }
+
         console.error("Erreur API Gemini:", error?.response?.data || error.message);
         throw error;
       }
-      console.warn(`Modèle indisponible ou sortie bloquée (${model}), tentative avec un autre modèle...`);
-      // loop continues
     }
   }
 
   console.error("Erreur API Gemini:", lastError?.response?.data || lastError?.message || lastError);
-  throw lastError || new Error("Échec de génération Gemini");
+  throw lastError || new Error("Echec de generation Gemini");
 };
 
 /**
@@ -138,7 +284,7 @@ export const streamWithGemini = async (prompt, onChunk, maxOutputTokens = 900) =
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) return null;
 
-  const model = 'models/gemini-2.0-flash-lite';
+  const model = process.env.GEMINI_STREAM_MODEL || 'models/gemini-2.0-flash-lite';
   const url =
     `https://generativelanguage.googleapis.com/v1/${model}:streamGenerateContent` +
     `?key=${GEMINI_API_KEY}&alt=sse`;

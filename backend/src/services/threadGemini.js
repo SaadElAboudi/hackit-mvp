@@ -16,12 +16,11 @@
  *   Body: { prompt: string, pin?: boolean, versionLabel?: string }
  */
 
-import axios from 'axios';
-
 import Project from '../models/Project.js';
 import Thread from '../models/Thread.js';
 import Version from '../models/Version.js';
 import { broadcastMessage, broadcastVersion, broadcastTyping } from './threadRooms.js';
+import { generateWithGemini } from './gemini.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'models/gemini-2.0-flash-lite';
@@ -145,7 +144,9 @@ function _buildSystemPreamble(thread) {
     : '';
   return [
     'You are a collaborative AI assistant helping a team work on a shared project.',
-    'Be structured, actionable, and concise.',
+    'Be structured, actionable, specific, and concise.',
+    'Avoid generic filler. Ground your response in the thread context and user request details.',
+    'If context is missing, ask at most 2 targeted clarification questions instead of giving a vague template.',
     mode,
     ctx,
   ]
@@ -155,27 +156,14 @@ function _buildSystemPreamble(thread) {
 
 async function _callGemini(prompt) {
   if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY missing');
-  const url = `https://generativelanguage.googleapis.com/v1/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-  const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 2048, temperature: 0.3 },
-    safetySettings: [
-      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-    ],
-  };
-
-  const resp = await axios.post(url, body, {
-    headers: { 'Content-Type': 'application/json' },
-    timeout: GEMINI_TIMEOUT_MS,
+  return await generateWithGemini(prompt, 2048, {
+    model: GEMINI_MODEL,
+    preferModels: [GEMINI_MODEL],
+    timeoutMs: GEMINI_TIMEOUT_MS,
+    temperature: 0.35,
+    maxAttemptsPerModel: 2,
+    allowQualityRepair: true,
   });
-
-  const parts = resp.data?.candidates?.[0]?.content?.parts || [];
-  const text = parts.map((p) => p?.text).filter(Boolean).join('\n').trim();
-  if (!text) throw new Error('Empty Gemini response');
-  return text;
 }
 
 /** Strip heavy content field for WS broadcast */
