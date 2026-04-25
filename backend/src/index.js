@@ -1200,51 +1200,22 @@ async function generateWithGemini(prompt, maxOutputTokens = 256, options = {}) {
   const currentModel = options.model || GEMINI_MODEL;
   const allowModelFallback = options.allowModelFallback !== false;
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
-  // Use v1 generateContent endpoint for modern models; fall back to legacy if needed.
-  const isLegacy = /bison|text-bison/i.test(currentModel);
-  const baseUrl = isLegacy
-    ? `https://generativelanguage.googleapis.com/v1beta2/${currentModel}:generateText?key=${GEMINI_API_KEY}`
-    : `https://generativelanguage.googleapis.com/v1/${currentModel}:generateContent?key=${GEMINI_API_KEY}`;
-
-
-  const body = isLegacy
-    ? { prompt: { text: prompt }, maxOutputTokens, temperature: 0.2 }
-    : {
-      contents: [
-        { role: "user", parts: [{ text: prompt }] }
-      ],
-      generationConfig: { maxOutputTokens, temperature: 0.2 },
-      safetySettings: [
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-      ]
-    };
 
   try {
-    const resp = await axios.post(baseUrl, body, { headers: { "Content-Type": "application/json" }, timeout: GEMINI_TIMEOUT_MS });
-    if (isLegacy) {
-      const txt = resp.data?.candidates?.[0]?.output;
-      if (!txt) throw new Error("Empty Gemini legacy output");
-      return txt.trim();
-    } else {
-      const block = resp.data?.promptFeedback?.blockReason;
-      if (block && block !== "BLOCK_NONE") {
-        throw new Error(`Gemini blocked content: ${block}`);
-      }
-      const parts = resp.data?.candidates?.[0]?.content?.parts || [];
-      let txt = parts.map(p => p?.text).filter(Boolean).join("\n").trim();
-      if (!txt) txt = (resp.data?.candidates?.[0]?.text || "").trim();
-      if (!txt) txt = (resp.data?.candidates?.[0]?.output || "").trim();
-      if (!txt) throw new Error("Empty Gemini response");
-      // success resets failure counters and closes breaker
-      GEMINI_OPERATIONAL = true;
-      GEMINI_FAILURE_TIMESTAMPS = [];
-      GEMINI_BREAKER_UNTIL = 0;
-      observeExternal('gemini', 'success');
-      return txt;
-    }
+    const txt = await generateWithGeminiShared(prompt, maxOutputTokens, {
+      model: currentModel,
+      preferModels: [currentModel],
+      timeoutMs: GEMINI_TIMEOUT_MS,
+      temperature: Number.isFinite(options.temperature) ? options.temperature : 0.2,
+      maxAttemptsPerModel: 1,
+      allowQualityRepair: true,
+      systemInstruction: options.systemInstruction || '',
+    });
+    GEMINI_OPERATIONAL = true;
+    GEMINI_FAILURE_TIMESTAMPS = [];
+    GEMINI_BREAKER_UNTIL = 0;
+    observeExternal('gemini', 'success');
+    return txt;
   } catch (error) {
     const status = error?.response?.status;
     const message = error?.response?.data?.error?.message || error.message;
@@ -1274,7 +1245,11 @@ async function generateWithGemini(prompt, maxOutputTokens = 256, options = {}) {
       });
     }
     observeExternal('gemini', 'error');
-    if (status === 404) {
+    if (
+      status === 404 ||
+      status === 429 ||
+      /quota|rate limit|too many requests|timeout/i.test(String(message || ''))
+    ) {
       // mark non-operational and record failure
       GEMINI_OPERATIONAL = false;
       const now = Date.now();
