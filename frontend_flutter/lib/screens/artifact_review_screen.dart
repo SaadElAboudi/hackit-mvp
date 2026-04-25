@@ -110,8 +110,8 @@ class _ArtifactReviewScreenState extends State<ArtifactReviewScreen> {
     if (reason == null || !mounted) return;
     setState(() => _submitting = true);
     final prov = context.read<RoomProvider>();
-    final ok = await prov.rejectVersion(_artifact.id, _selected!.id,
-        reason: reason);
+    final ok =
+        await prov.rejectVersion(_artifact.id, _selected!.id, reason: reason);
     if (!mounted) return;
     setState(() => _submitting = false);
     if (ok) {
@@ -156,8 +156,7 @@ class _ArtifactReviewScreenState extends State<ArtifactReviewScreen> {
     if (text.isEmpty || _selected == null) return;
     setState(() => _submitting = true);
     final prov = context.read<RoomProvider>();
-    final updated =
-        await prov.addComment(_artifact.id, _selected!.id, text);
+    final updated = await prov.addComment(_artifact.id, _selected!.id, text);
     if (!mounted) return;
     setState(() => _submitting = false);
     if (updated != null) {
@@ -194,8 +193,7 @@ class _ArtifactReviewScreenState extends State<ArtifactReviewScreen> {
   }
 
   void _showSnack(String msg) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   void _showError(String msg) {
@@ -396,8 +394,8 @@ class _ReviewBody extends StatelessWidget {
                   ),
                   child: Text(
                     '${version.comments.length}',
-                    style: tt.labelSmall
-                        ?.copyWith(color: cs.onPrimaryContainer),
+                    style:
+                        tt.labelSmall?.copyWith(color: cs.onPrimaryContainer),
                   ),
                 ),
               ],
@@ -413,8 +411,7 @@ class _ReviewBody extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Text(
                     'Aucun commentaire pour cette version.',
-                    style:
-                        tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                   ),
                 ),
               )
@@ -538,8 +535,8 @@ class _CommentTile extends StatelessWidget {
                       const Spacer(),
                       Text(
                         _timeAgo(comment.createdAt),
-                        style: tt.labelSmall
-                            ?.copyWith(color: cs.onSurfaceVariant),
+                        style:
+                            tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                       ),
                       const SizedBox(width: 4),
                       if (resolved)
@@ -563,9 +560,8 @@ class _CommentTile extends StatelessWidget {
                             : Icons.check_circle_outline,
                         size: 14,
                       ),
-                      label:
-                          Text(resolved ? 'Rouvrir' : 'Résoudre',
-                              style: tt.labelSmall),
+                      label: Text(resolved ? 'Rouvrir' : 'Résoudre',
+                          style: tt.labelSmall),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 2),
@@ -708,8 +704,7 @@ class _StatusChip extends StatelessWidget {
   final Color fg;
   final Color bg;
 
-  const _StatusChip(
-      {required this.label, required this.fg, required this.bg});
+  const _StatusChip({required this.label, required this.fg, required this.bg});
 
   @override
   Widget build(BuildContext context) {

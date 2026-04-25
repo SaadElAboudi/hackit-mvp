@@ -2327,8 +2327,7 @@ class _ContextPanel extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon:
-                          const Icon(Icons.rate_review_outlined, size: 18),
+                      icon: const Icon(Icons.rate_review_outlined, size: 18),
                       tooltip: 'Revue',
                       onPressed: () => Navigator.push(
                         context,

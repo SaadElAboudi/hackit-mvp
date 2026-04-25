@@ -413,8 +413,9 @@ class _ContentView extends StatelessWidget {
                   )
                 else
                   ...version!.comments.reversed.map((comment) {
-                    final author =
-                        comment.authorName.isNotEmpty ? comment.authorName : 'Anonyme';
+                    final author = comment.authorName.isNotEmpty
+                        ? comment.authorName
+                        : 'Anonyme';
                     final text = comment.content;
                     return Container(
                       width: double.infinity,
