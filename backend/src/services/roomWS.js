@@ -115,6 +115,7 @@ function _broadcastPresence(roomId) {
     .map((s) => meta.get(s)?.userId)
     .filter(Boolean);
   _broadcast(roomId, { type: 'presence', roomId, userIds });
+  _broadcast(roomId, { type: 'presence.updated', roomId, userIds });
 }
 
 function _broadcast(roomId, payload) {
@@ -185,6 +186,18 @@ export function broadcastRoomShareResult(roomId, message, requestId = null) {
 
 export function broadcastRoomNotionExported(roomId, message) {
   _broadcast(roomId, { type: 'notion_exported', roomId, message });
+}
+
+export function broadcastPageBlockUpdated(roomId, payload, requestId = null) {
+  _broadcast(roomId, { type: 'page.block.updated', roomId, ...payload, requestId });
+}
+
+export function broadcastCommentCreated(roomId, payload, requestId = null) {
+  _broadcast(roomId, { type: 'comment.created', roomId, ...payload, requestId });
+}
+
+export function broadcastCommentResolved(roomId, payload, requestId = null) {
+  _broadcast(roomId, { type: 'comment.resolved', roomId, ...payload, requestId });
 }
 
 /** Returns the list of currently online userIds for a room (used by REST endpoint). */

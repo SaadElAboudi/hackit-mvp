@@ -152,3 +152,86 @@ await test('PATCH workspace block invalid checked type returns BAD_REQUEST envel
     assert.match(String(json.message || ''), /checked/i);
     assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
 });
+
+await test('PATCH workspace block invalid expectedVersion returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakePageId = '507f191e810c19729de860eb';
+    const fakeBlockId = '507f191e810c19729de860ec';
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/pages/${fakePageId}/blocks/${fakeBlockId}`,
+        method: 'PATCH',
+        body: { expectedVersion: 0, text: 'x' },
+        headers: { 'x-user-id': 'user_workspace_4' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /expectedVersion/i);
+    assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+});
+
+await test('PATCH workspace comment invalid resolved type returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakePageId = '507f191e810c19729de860eb';
+    const fakeCommentId = '507f191e810c19729de860ed';
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/pages/${fakePageId}/comments/${fakeCommentId}`,
+        method: 'PATCH',
+        body: { resolved: 'yes' },
+        headers: { 'x-user-id': 'user_workspace_5' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /resolved/i);
+    assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+});
+
+await test('PATCH workspace blocks reorder with empty orders returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakePageId = '507f191e810c19729de860eb';
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/pages/${fakePageId}/blocks/reorder`,
+        method: 'PATCH',
+        body: { orders: [] },
+        headers: { 'x-user-id': 'user_workspace_6' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /orders/i);
+    assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+});

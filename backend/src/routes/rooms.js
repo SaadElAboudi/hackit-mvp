@@ -16,6 +16,7 @@ import RoomMessage from '../models/RoomMessage.js';
 import RoomMission from '../models/RoomMission.js';
 import RoomShareHistory from '../models/RoomShareHistory.js';
 import WorkspaceBlock from '../models/WorkspaceBlock.js';
+import WorkspaceComment from '../models/WorkspaceComment.js';
 import WorkspacePage from '../models/WorkspacePage.js';
 import {
     createRoomArtifact,
@@ -29,6 +30,9 @@ import { validateNotionToken } from '../services/notion.js';
 import { executeWithRetry, getExportConnector } from '../services/exportConnectors.js';
 import {
     broadcastRoomChallenge,
+    broadcastCommentCreated,
+    broadcastCommentResolved,
+    broadcastPageBlockUpdated,
     broadcastRoomMessage,
     getOnlineUserIds,
 } from '../services/roomWS.js';
@@ -41,9 +45,12 @@ import {
     validateCreateMissionPayload,
     validateCreateRoomPayload,
     validateCreateWorkspaceBlockPayload,
+    validateCreateWorkspaceCommentPayload,
     validateCreateWorkspacePagePayload,
     validateDirectivesPayload,
     validateResolveCommentPayload,
+    validateResolveWorkspaceCommentPayload,
+    validateReorderWorkspaceBlocksPayload,
     validateReviseArtifactPayload,
     validateShareHistoryQuery,
     validateSharePayload,
@@ -132,6 +139,13 @@ function workspacePageSummary(page) {
 
 function workspaceBlockSummary(block) {
     const json = block?.toObject ? block.toObject() : block;
+    return {
+        ...json,
+    };
+}
+
+function workspaceCommentSummary(comment) {
+    const json = comment?.toObject ? comment.toObject() : comment;
     return {
         ...json,
     };
@@ -394,6 +408,59 @@ router.get('/:id/pages/:pageId', async (req, res, next) => {
     }
 });
 
+router.get('/:id/pages/:pageId/state', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const [blocks, comments] = await Promise.all([
+            WorkspaceBlock.find({
+                pageId: page._id,
+                roomId: req.params.id,
+            })
+                .sort({ order: 1 })
+                .lean(),
+            WorkspaceComment.find({
+                pageId: page._id,
+                roomId: req.params.id,
+            })
+                .sort({ createdAt: -1 })
+                .limit(300)
+                .lean(),
+        ]);
+
+        const latestVersion = blocks.reduce(
+            (max, block) => Math.max(max, Number(block?.version || 1)),
+            1
+        );
+        const requestedLastVersion = Number(req.query?.lastVersion || 0);
+        const stale = Number.isFinite(requestedLastVersion)
+            ? requestedLastVersion > 0 && requestedLastVersion !== latestVersion
+            : false;
+
+        res.json({
+            page: workspacePageSummary(page),
+            blocks: blocks.map((block) => workspaceBlockSummary(block)),
+            comments: comments.map((comment) => workspaceCommentSummary(comment)),
+            lastVersion: latestVersion,
+            stale,
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
 router.patch('/:id/pages/:pageId', validateBody(validateUpdateWorkspacePagePayload), async (req, res, next) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);
@@ -494,6 +561,7 @@ router.post('/:id/pages/:pageId/blocks', validateBody(validateCreateWorkspaceBlo
             checked,
             attrs,
             order,
+            version: 1,
             createdBy: req.userId,
             createdByName: req.displayName,
             updatedBy: req.userId,
@@ -508,7 +576,123 @@ router.post('/:id/pages/:pageId/blocks', validateBody(validateCreateWorkspaceBlo
         room.lastActivityAt = new Date();
         await room.save();
 
+        broadcastPageBlockUpdated(
+            req.params.id,
+            {
+                action: 'created',
+                pageId: String(page._id),
+                block: workspaceBlockSummary(block),
+                pageRevision: page.revision,
+                lastVersion: Number(block.version || 1),
+            },
+            req.requestId || null
+        );
+
         res.status(201).json({ block: workspaceBlockSummary(block), page: workspacePageSummary(page) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.patch('/:id/pages/:pageId/blocks/reorder', validateBody(validateReorderWorkspaceBlocksPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const { orders } = req.validatedBody;
+        const blockIds = orders.map((entry) => entry.blockId);
+        const uniqueBlockIds = new Set(blockIds);
+        if (uniqueBlockIds.size !== blockIds.length) {
+            return res.status(400).json({
+                ok: false,
+                code: 'BAD_REQUEST',
+                message: 'orders contains duplicate blockId values',
+                details: { field: 'orders' },
+                requestId: req.requestId || null,
+            });
+        }
+        const uniqueOrders = new Set(orders.map((entry) => entry.order));
+        if (uniqueOrders.size !== orders.length) {
+            return res.status(400).json({
+                ok: false,
+                code: 'BAD_REQUEST',
+                message: 'orders contains duplicate order values',
+                details: { field: 'orders' },
+                requestId: req.requestId || null,
+            });
+        }
+
+        const existing = await WorkspaceBlock.find({
+            _id: { $in: blockIds },
+            pageId: page._id,
+            roomId: req.params.id,
+        }).lean();
+        if (existing.length !== blockIds.length) {
+            return res.status(404).json({ error: 'One or more blocks were not found' });
+        }
+
+        await Promise.all(
+            orders.map((entry) =>
+                WorkspaceBlock.updateOne(
+                    { _id: entry.blockId, pageId: page._id, roomId: req.params.id },
+                    {
+                        $set: {
+                            order: entry.order,
+                            updatedBy: req.userId,
+                            updatedByName: req.displayName,
+                        },
+                        $inc: { version: 1 },
+                    }
+                )
+            )
+        );
+
+        page.lastEditedBy = req.userId;
+        page.lastEditedByName = req.displayName;
+        page.revision = Number(page.revision || 1) + 1;
+        await page.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        const blocks = await WorkspaceBlock.find({
+            pageId: page._id,
+            roomId: req.params.id,
+        })
+            .sort({ order: 1 })
+            .lean();
+        const lastVersion = blocks.reduce(
+            (max, block) => Math.max(max, Number(block?.version || 1)),
+            1
+        );
+
+        broadcastPageBlockUpdated(
+            req.params.id,
+            {
+                action: 'reordered',
+                pageId: String(page._id),
+                pageRevision: page.revision,
+                lastVersion,
+                blocks: blocks.map((block) => workspaceBlockSummary(block)),
+            },
+            req.requestId || null
+        );
+
+        res.json({
+            blocks: blocks.map((block) => workspaceBlockSummary(block)),
+            page: workspacePageSummary(page),
+        });
     } catch (err) {
         next(err);
     }
@@ -539,9 +723,29 @@ router.patch('/:id/pages/:pageId/blocks/:blockId', validateBody(validateUpdateWo
             return res.status(404).json({ error: 'Block not found' });
         }
 
-        Object.assign(block, req.validatedBody, {
+        const { expectedVersion, ...nextValues } = req.validatedBody;
+
+        if (
+            Number.isInteger(expectedVersion)
+            && Number(block.version || 1) !== expectedVersion
+        ) {
+            return res.status(409).json({
+                ok: false,
+                code: 'STALE_VERSION',
+                message: 'Block has been updated by another client',
+                details: {
+                    expectedVersion,
+                    currentVersion: Number(block.version || 1),
+                    block: workspaceBlockSummary(block),
+                },
+                requestId: req.requestId || null,
+            });
+        }
+
+        Object.assign(block, nextValues, {
             updatedBy: req.userId,
             updatedByName: req.displayName,
+            version: Number(block.version || 1) + 1,
         });
         await block.save();
 
@@ -552,6 +756,18 @@ router.patch('/:id/pages/:pageId/blocks/:blockId', validateBody(validateUpdateWo
 
         room.lastActivityAt = new Date();
         await room.save();
+
+        broadcastPageBlockUpdated(
+            req.params.id,
+            {
+                action: 'updated',
+                pageId: String(page._id),
+                block: workspaceBlockSummary(block),
+                pageRevision: page.revision,
+                lastVersion: Number(block.version || 1),
+            },
+            req.requestId || null
+        );
 
         res.json({ block: workspaceBlockSummary(block), page: workspacePageSummary(page) });
     } catch (err) {
@@ -599,7 +815,129 @@ router.delete('/:id/pages/:pageId/blocks/:blockId', async (req, res, next) => {
         room.lastActivityAt = new Date();
         await room.save();
 
+        broadcastPageBlockUpdated(
+            req.params.id,
+            {
+                action: 'deleted',
+                pageId: String(page._id),
+                blockId: String(block._id),
+                pageRevision: page.revision,
+            },
+            req.requestId || null
+        );
+
         res.json({ ok: true, blockId: String(block._id), page: workspacePageSummary(page) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/pages/:pageId/comments', validateBody(validateCreateWorkspaceCommentPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const { blockId, text } = req.validatedBody;
+        const block = await WorkspaceBlock.findOne({
+            _id: blockId,
+            pageId: page._id,
+            roomId: req.params.id,
+        });
+        if (!block) {
+            return res.status(404).json({ error: 'Block not found' });
+        }
+
+        const comment = await WorkspaceComment.create({
+            roomId: req.params.id,
+            pageId: page._id,
+            blockId: block._id,
+            text,
+            createdBy: req.userId,
+            createdByName: req.displayName,
+        });
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        broadcastCommentCreated(
+            req.params.id,
+            {
+                pageId: String(page._id),
+                blockId: String(block._id),
+                comment: workspaceCommentSummary(comment),
+            },
+            req.requestId || null
+        );
+
+        res.status(201).json({ comment: workspaceCommentSummary(comment) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.patch('/:id/pages/:pageId/comments/:commentId', validateBody(validateResolveWorkspaceCommentPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const comment = await WorkspaceComment.findOne({
+            _id: req.params.commentId,
+            pageId: page._id,
+            roomId: req.params.id,
+        });
+        if (!comment) {
+            return res.status(404).json({ error: 'Comment not found' });
+        }
+
+        const { resolved } = req.validatedBody;
+        comment.resolved = resolved;
+        if (resolved) {
+            comment.resolvedAt = new Date();
+            comment.resolvedBy = req.userId;
+            comment.resolvedByName = req.displayName;
+        } else {
+            comment.resolvedAt = null;
+            comment.resolvedBy = '';
+            comment.resolvedByName = '';
+        }
+        await comment.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        broadcastCommentResolved(
+            req.params.id,
+            {
+                pageId: String(page._id),
+                blockId: String(comment.blockId),
+                comment: workspaceCommentSummary(comment),
+            },
+            req.requestId || null
+        );
+
+        res.json({ comment: workspaceCommentSummary(comment) });
     } catch (err) {
         next(err);
     }

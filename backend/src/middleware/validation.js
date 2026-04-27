@@ -347,6 +347,15 @@ export function validateCreateWorkspaceBlockPayload(body) {
 
 export function validateUpdateWorkspaceBlockPayload(body) {
   const next = {};
+  if (body?.expectedVersion !== undefined) {
+    const expectedVersion = Number(body.expectedVersion);
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw badRequest('expectedVersion must be an integer >= 1', {
+        field: 'expectedVersion',
+      });
+    }
+    next.expectedVersion = expectedVersion;
+  }
   if (body?.type !== undefined) {
     const type = String(body.type || '').trim();
     const valid = ['paragraph', 'heading1', 'heading2', 'heading3', 'checklist', 'quote', 'callout', 'divider'];
@@ -383,4 +392,56 @@ export function validateUpdateWorkspaceBlockPayload(body) {
     });
   }
   return next;
+}
+
+export function validateReorderWorkspaceBlocksPayload(body) {
+  const orders = Array.isArray(body?.orders) ? body.orders : null;
+  if (!orders || !orders.length) {
+    throw badRequest('orders is required and must be a non-empty array', {
+      field: 'orders',
+    });
+  }
+
+  const normalized = orders.map((entry) => {
+    const blockId = String(entry?.blockId || '').trim();
+    const order = Number(entry?.order);
+    if (!blockId) {
+      throw badRequest('orders[].blockId is required', { field: 'orders.blockId' });
+    }
+    if (!Number.isInteger(order) || order < 0) {
+      throw badRequest('orders[].order must be an integer >= 0', {
+        field: 'orders.order',
+      });
+    }
+    return { blockId, order };
+  });
+
+  return { orders: normalized };
+}
+
+export function validateCreateWorkspaceCommentPayload(body) {
+  const blockId = String(body?.blockId || '').trim();
+  if (!blockId) {
+    throw badRequest('blockId is required', { field: 'blockId' });
+  }
+  const text = String(body?.text || '').trim();
+  if (!text) {
+    throw badRequest('text is required', { field: 'text' });
+  }
+  if (text.length > 2000) {
+    throw badRequest('text must be 2000 characters or fewer', {
+      field: 'text',
+      maxLength: 2000,
+    });
+  }
+  return { blockId, text };
+}
+
+export function validateResolveWorkspaceCommentPayload(body) {
+  if (body?.resolved !== undefined && typeof body.resolved !== 'boolean') {
+    throw badRequest('resolved must be a boolean', { field: 'resolved' });
+  }
+  return {
+    resolved: body?.resolved !== false,
+  };
 }

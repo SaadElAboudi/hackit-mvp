@@ -24,6 +24,8 @@ const WorkspaceBlockSchema = new mongoose.Schema(
         checked: { type: Boolean, default: false },
         order: { type: Number, min: 0, required: true },
         attrs: { type: mongoose.Schema.Types.Mixed, default: {} },
+        // Incremented on each update to support optimistic concurrency.
+        version: { type: Number, min: 1, default: 1 },
         createdBy: { type: String, trim: true, maxlength: 120, default: '' },
         createdByName: { type: String, trim: true, maxlength: 120, default: '' },
         updatedBy: { type: String, trim: true, maxlength: 120, default: '' },
@@ -33,5 +35,6 @@ const WorkspaceBlockSchema = new mongoose.Schema(
 );
 
 WorkspaceBlockSchema.index({ pageId: 1, order: 1 }, { unique: true });
+WorkspaceBlockSchema.index({ pageId: 1, updatedAt: -1 });
 
 export default mongoose.model('WorkspaceBlock', WorkspaceBlockSchema);
