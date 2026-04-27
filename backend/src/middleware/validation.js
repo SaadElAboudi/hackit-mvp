@@ -445,3 +445,118 @@ export function validateResolveWorkspaceCommentPayload(body) {
     resolved: body?.resolved !== false,
   };
 }
+
+export function validateCreateWorkspaceDecisionPayload(body) {
+  const title = String(body?.title || '').trim();
+  if (!title) {
+    throw badRequest('title is required', { field: 'title' });
+  }
+  const sourceType = String(body?.sourceType || 'manual').trim();
+  const validSourceTypes = ['manual', 'mission', 'message', 'artifact'];
+  if (!validSourceTypes.includes(sourceType)) {
+    throw badRequest(`sourceType must be one of: ${validSourceTypes.join(', ')}`, {
+      field: 'sourceType',
+      received: sourceType,
+    });
+  }
+
+  const summary = String(body?.summary || '').trim().slice(0, 2000);
+  const sourceId = String(body?.sourceId || '').trim().slice(0, 120);
+  const pageId = String(body?.pageId || '').trim();
+
+  return {
+    title: title.slice(0, 180),
+    summary,
+    sourceType,
+    sourceId,
+    pageId,
+  };
+}
+
+export function validateConvertDecisionToTasksPayload(body) {
+  const tasks = Array.isArray(body?.tasks) ? body.tasks : [];
+  if (!tasks.length) {
+    throw badRequest('tasks is required and must be a non-empty array', {
+      field: 'tasks',
+    });
+  }
+
+  return {
+    tasks: tasks.map((task, index) => {
+      const title = String(task?.title || '').trim();
+      if (!title) {
+        throw badRequest(`tasks[${index}].title is required`, {
+          field: `tasks.${index}.title`,
+        });
+      }
+
+      const dueDateRaw = String(task?.dueDate || '').trim();
+      let dueDate = null;
+      if (dueDateRaw) {
+        const parsed = new Date(dueDateRaw);
+        if (Number.isNaN(parsed.getTime())) {
+          throw badRequest(`tasks[${index}].dueDate must be a valid date`, {
+            field: `tasks.${index}.dueDate`,
+          });
+        }
+        dueDate = parsed;
+      }
+
+      return {
+        title: title.slice(0, 180),
+        description: String(task?.description || '').trim().slice(0, 2000),
+        ownerId: String(task?.ownerId || '').trim().slice(0, 120),
+        ownerName: String(task?.ownerName || '').trim().slice(0, 120),
+        dueDate,
+      };
+    }),
+  };
+}
+
+export function validateUpdateWorkspaceTaskPayload(body) {
+  const next = {};
+  if (body?.title !== undefined) {
+    const title = String(body.title || '').trim();
+    if (!title) {
+      throw badRequest('title must not be empty', { field: 'title' });
+    }
+    next.title = title.slice(0, 180);
+  }
+  if (body?.description !== undefined) {
+    next.description = String(body.description || '').trim().slice(0, 2000);
+  }
+  if (body?.status !== undefined) {
+    const status = String(body.status || '').trim();
+    const validStatuses = ['todo', 'in_progress', 'blocked', 'done'];
+    if (!validStatuses.includes(status)) {
+      throw badRequest(`status must be one of: ${validStatuses.join(', ')}`, {
+        field: 'status',
+        received: status,
+      });
+    }
+    next.status = status;
+  }
+  if (body?.ownerId !== undefined) {
+    next.ownerId = String(body.ownerId || '').trim().slice(0, 120);
+  }
+  if (body?.ownerName !== undefined) {
+    next.ownerName = String(body.ownerName || '').trim().slice(0, 120);
+  }
+  if (body?.dueDate !== undefined) {
+    if (!body.dueDate) {
+      next.dueDate = null;
+    } else {
+      const parsed = new Date(String(body.dueDate));
+      if (Number.isNaN(parsed.getTime())) {
+        throw badRequest('dueDate must be a valid date', { field: 'dueDate' });
+      }
+      next.dueDate = parsed;
+    }
+  }
+  if (!Object.keys(next).length) {
+    throw badRequest('at least one field must be provided', {
+      field: 'body',
+    });
+  }
+  return next;
+}

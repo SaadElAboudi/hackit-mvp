@@ -17,7 +17,10 @@ import RoomMission from '../models/RoomMission.js';
 import RoomShareHistory from '../models/RoomShareHistory.js';
 import WorkspaceBlock from '../models/WorkspaceBlock.js';
 import WorkspaceComment from '../models/WorkspaceComment.js';
+import WorkspaceDecision from '../models/WorkspaceDecision.js';
+import WorkspaceMilestone from '../models/WorkspaceMilestone.js';
 import WorkspacePage from '../models/WorkspacePage.js';
+import WorkspaceTask from '../models/WorkspaceTask.js';
 import {
     createRoomArtifact,
     parseRoomCommand,
@@ -33,6 +36,7 @@ import {
     broadcastCommentCreated,
     broadcastCommentResolved,
     broadcastPageBlockUpdated,
+    broadcastRoomDecisionCreated,
     broadcastRoomMessage,
     getOnlineUserIds,
 } from '../services/roomWS.js';
@@ -46,7 +50,9 @@ import {
     validateCreateRoomPayload,
     validateCreateWorkspaceBlockPayload,
     validateCreateWorkspaceCommentPayload,
+    validateCreateWorkspaceDecisionPayload,
     validateCreateWorkspacePagePayload,
+    validateConvertDecisionToTasksPayload,
     validateDirectivesPayload,
     validateResolveCommentPayload,
     validateResolveWorkspaceCommentPayload,
@@ -57,6 +63,7 @@ import {
     validateSendMessagePayload,
     validateUpdateWorkspaceBlockPayload,
     validateUpdateWorkspacePagePayload,
+    validateUpdateWorkspaceTaskPayload,
 } from '../middleware/validation.js';
 
 const router = express.Router();
@@ -146,6 +153,27 @@ function workspaceBlockSummary(block) {
 
 function workspaceCommentSummary(comment) {
     const json = comment?.toObject ? comment.toObject() : comment;
+    return {
+        ...json,
+    };
+}
+
+function workspaceDecisionSummary(decision) {
+    const json = decision?.toObject ? decision.toObject() : decision;
+    return {
+        ...json,
+    };
+}
+
+function workspaceTaskSummary(task) {
+    const json = task?.toObject ? task.toObject() : task;
+    return {
+        ...json,
+    };
+}
+
+function workspaceMilestoneSummary(milestone) {
+    const json = milestone?.toObject ? milestone.toObject() : milestone;
     return {
         ...json,
     };
@@ -938,6 +966,238 @@ router.patch('/:id/pages/:pageId/comments/:commentId', validateBody(validateReso
         );
 
         res.json({ comment: workspaceCommentSummary(comment) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/decisions', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const decisions = await WorkspaceDecision.find({ roomId: req.params.id })
+            .sort({ createdAt: -1 })
+            .limit(200)
+            .lean();
+
+        res.json({ decisions: decisions.map((decision) => workspaceDecisionSummary(decision)) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/decisions', validateBody(validateCreateWorkspaceDecisionPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { title, summary, sourceType, sourceId, pageId } = req.validatedBody;
+        const decision = await WorkspaceDecision.create({
+            roomId: req.params.id,
+            pageId: pageId || null,
+            sourceType,
+            sourceId,
+            title,
+            summary,
+            createdBy: req.userId,
+            createdByName: req.displayName,
+        });
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        broadcastRoomDecisionCreated(req.params.id, {
+            type: 'workspace_decision',
+            data: {
+                decisionId: String(decision._id),
+                title: decision.title,
+                sourceType: decision.sourceType,
+            },
+            authorId: req.userId,
+            authorName: req.displayName,
+            createdAt: decision.createdAt,
+        });
+
+        res.status(201).json({ decision: workspaceDecisionSummary(decision) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/decisions/:decisionId/convert', validateBody(validateConvertDecisionToTasksPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const decision = await WorkspaceDecision.findOne({
+            _id: req.params.decisionId,
+            roomId: req.params.id,
+        });
+        if (!decision) {
+            return res.status(404).json({ error: 'Decision not found' });
+        }
+
+        const { tasks } = req.validatedBody;
+        const createdTasks = await WorkspaceTask.insertMany(
+            tasks.map((task) => ({
+                roomId: req.params.id,
+                decisionId: decision._id,
+                title: task.title,
+                description: task.description,
+                ownerId: task.ownerId,
+                ownerName: task.ownerName,
+                dueDate: task.dueDate || null,
+                createdBy: req.userId,
+                createdByName: req.displayName,
+                lastUpdatedBy: req.userId,
+                lastUpdatedByName: req.displayName,
+            }))
+        );
+
+        decision.convertedAt = new Date();
+        await decision.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.status(201).json({
+            decision: workspaceDecisionSummary(decision),
+            tasks: createdTasks.map((task) => workspaceTaskSummary(task)),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/tasks', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const status = String(req.query?.status || '').trim();
+        const ownerId = String(req.query?.ownerId || '').trim();
+        const filter = { roomId: req.params.id };
+        if (status) filter.status = status;
+        if (ownerId) filter.ownerId = ownerId;
+
+        const tasks = await WorkspaceTask.find(filter)
+            .sort({ updatedAt: -1 })
+            .limit(500)
+            .lean();
+
+        res.json({ tasks: tasks.map((task) => workspaceTaskSummary(task)) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.patch('/:id/tasks/:taskId', validateBody(validateUpdateWorkspaceTaskPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const task = await WorkspaceTask.findOne({
+            _id: req.params.taskId,
+            roomId: req.params.id,
+        });
+        if (!task) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+
+        Object.assign(task, req.validatedBody, {
+            lastUpdatedBy: req.userId,
+            lastUpdatedByName: req.displayName,
+        });
+        await task.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.json({ task: workspaceTaskSummary(task) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/milestones', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const milestones = await WorkspaceMilestone.find({ roomId: req.params.id })
+            .sort({ targetDate: 1, createdAt: 1 })
+            .limit(200)
+            .lean();
+
+        res.json({ milestones: milestones.map((m) => workspaceMilestoneSummary(m)) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/milestones', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const title = String(req.body?.title || '').trim();
+        if (!title) {
+            return res.status(400).json({
+                ok: false,
+                code: 'BAD_REQUEST',
+                message: 'title is required',
+                details: { field: 'title' },
+                requestId: req.requestId || null,
+            });
+        }
+
+        const targetDateRaw = String(req.body?.targetDate || '').trim();
+        const targetDate = targetDateRaw ? new Date(targetDateRaw) : null;
+        if (targetDateRaw && Number.isNaN(targetDate?.getTime())) {
+            return res.status(400).json({
+                ok: false,
+                code: 'BAD_REQUEST',
+                message: 'targetDate must be a valid date',
+                details: { field: 'targetDate' },
+                requestId: req.requestId || null,
+            });
+        }
+
+        const milestone = await WorkspaceMilestone.create({
+            roomId: req.params.id,
+            title: title.slice(0, 180),
+            description: String(req.body?.description || '').trim().slice(0, 2000),
+            targetDate,
+            createdBy: req.userId,
+            createdByName: req.displayName,
+        });
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.status(201).json({ milestone: workspaceMilestoneSummary(milestone) });
     } catch (err) {
         next(err);
     }
