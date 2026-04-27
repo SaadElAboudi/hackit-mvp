@@ -15,6 +15,8 @@ import RoomMemory from '../models/RoomMemory.js';
 import RoomMessage from '../models/RoomMessage.js';
 import RoomMission from '../models/RoomMission.js';
 import RoomShareHistory from '../models/RoomShareHistory.js';
+import WorkspaceBlock from '../models/WorkspaceBlock.js';
+import WorkspacePage from '../models/WorkspacePage.js';
 import {
     createRoomArtifact,
     parseRoomCommand,
@@ -38,12 +40,16 @@ import {
     validateCreateMemoryPayload,
     validateCreateMissionPayload,
     validateCreateRoomPayload,
+    validateCreateWorkspaceBlockPayload,
+    validateCreateWorkspacePagePayload,
     validateDirectivesPayload,
     validateResolveCommentPayload,
     validateReviseArtifactPayload,
     validateShareHistoryQuery,
     validateSharePayload,
     validateSendMessagePayload,
+    validateUpdateWorkspaceBlockPayload,
+    validateUpdateWorkspacePagePayload,
 } from '../middleware/validation.js';
 
 const router = express.Router();
@@ -114,6 +120,20 @@ function artifactSummary(artifact, version) {
                 contentPreview: String(version.content || '').slice(0, 240),
             }
             : null,
+    };
+}
+
+function workspacePageSummary(page) {
+    const json = page?.toObject ? page.toObject() : page;
+    return {
+        ...json,
+    };
+}
+
+function workspaceBlockSummary(block) {
+    const json = block?.toObject ? block.toObject() : block;
+    return {
+        ...json,
     };
 }
 
@@ -288,6 +308,299 @@ router.post('/:id/messages', validateBody(validateSendMessagePayload), async (re
         }
     } catch (err) {
         console.error('[rooms] send message error:', err);
+        next(err);
+    }
+});
+
+router.get('/:id/pages', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const pages = await WorkspacePage.find({ roomId: req.params.id })
+            .sort({ updatedAt: -1 })
+            .limit(120)
+            .lean();
+
+        res.json({ pages: pages.map((page) => workspacePageSummary(page)) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/pages', validateBody(validateCreateWorkspacePagePayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { title, icon, coverUrl, summary } = req.validatedBody;
+        const page = await WorkspacePage.create({
+            roomId: req.params.id,
+            title,
+            icon,
+            coverUrl,
+            summary,
+            createdBy: req.userId,
+            createdByName: req.displayName,
+            lastEditedBy: req.userId,
+            lastEditedByName: req.displayName,
+            revision: 1,
+        });
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.status(201).json({ page: workspacePageSummary(page) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/pages/:pageId', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const blocks = await WorkspaceBlock.find({
+            pageId: page._id,
+            roomId: req.params.id,
+        })
+            .sort({ order: 1 })
+            .lean();
+
+        res.json({
+            page: workspacePageSummary(page),
+            blocks: blocks.map((block) => workspaceBlockSummary(block)),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.patch('/:id/pages/:pageId', validateBody(validateUpdateWorkspacePagePayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        Object.assign(page, req.validatedBody, {
+            lastEditedBy: req.userId,
+            lastEditedByName: req.displayName,
+            revision: (Number(page.revision || 1) + 1),
+        });
+        await page.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.json({ page: workspacePageSummary(page) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.delete('/:id/pages/:pageId', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const canDelete = isRoomOwner(room, req.userId) || String(page.createdBy) === String(req.userId);
+        if (!canDelete) {
+            return res.status(403).json({ error: 'Owner or page author required' });
+        }
+
+        await Promise.all([
+            WorkspaceBlock.deleteMany({ pageId: page._id, roomId: req.params.id }),
+            WorkspacePage.deleteOne({ _id: page._id }),
+        ]);
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.json({ ok: true, pageId: String(page._id) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/pages/:pageId/blocks', validateBody(validateCreateWorkspaceBlockPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const last = await WorkspaceBlock.findOne({
+            pageId: page._id,
+            roomId: req.params.id,
+        })
+            .sort({ order: -1 })
+            .lean();
+        const order = Number(last?.order ?? -1) + 1;
+
+        const { type, text, checked, attrs } = req.validatedBody;
+        const block = await WorkspaceBlock.create({
+            roomId: req.params.id,
+            pageId: page._id,
+            type,
+            text,
+            checked,
+            attrs,
+            order,
+            createdBy: req.userId,
+            createdByName: req.displayName,
+            updatedBy: req.userId,
+            updatedByName: req.displayName,
+        });
+
+        page.lastEditedBy = req.userId;
+        page.lastEditedByName = req.displayName;
+        page.revision = Number(page.revision || 1) + 1;
+        await page.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.status(201).json({ block: workspaceBlockSummary(block), page: workspacePageSummary(page) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.patch('/:id/pages/:pageId/blocks/:blockId', validateBody(validateUpdateWorkspaceBlockPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const block = await WorkspaceBlock.findOne({
+            _id: req.params.blockId,
+            pageId: page._id,
+            roomId: req.params.id,
+        });
+        if (!block) {
+            return res.status(404).json({ error: 'Block not found' });
+        }
+
+        Object.assign(block, req.validatedBody, {
+            updatedBy: req.userId,
+            updatedByName: req.displayName,
+        });
+        await block.save();
+
+        page.lastEditedBy = req.userId;
+        page.lastEditedByName = req.displayName;
+        page.revision = Number(page.revision || 1) + 1;
+        await page.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.json({ block: workspaceBlockSummary(block), page: workspacePageSummary(page) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.delete('/:id/pages/:pageId/blocks/:blockId', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const page = await WorkspacePage.findOne({
+            _id: req.params.pageId,
+            roomId: req.params.id,
+        });
+        if (!page) {
+            return res.status(404).json({ error: 'Page not found' });
+        }
+
+        const block = await WorkspaceBlock.findOne({
+            _id: req.params.blockId,
+            pageId: page._id,
+            roomId: req.params.id,
+        });
+        if (!block) {
+            return res.status(404).json({ error: 'Block not found' });
+        }
+
+        const removedOrder = block.order;
+        await WorkspaceBlock.deleteOne({ _id: block._id });
+        await WorkspaceBlock.updateMany(
+            { pageId: page._id, roomId: req.params.id, order: { $gt: removedOrder } },
+            { $inc: { order: -1 } }
+        );
+
+        page.lastEditedBy = req.userId;
+        page.lastEditedByName = req.displayName;
+        page.revision = Number(page.revision || 1) + 1;
+        await page.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.json({ ok: true, blockId: String(block._id), page: workspacePageSummary(page) });
+    } catch (err) {
         next(err);
     }
 });

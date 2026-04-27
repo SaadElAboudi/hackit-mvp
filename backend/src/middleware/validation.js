@@ -282,3 +282,105 @@ export function validateShareHistoryQuery(query) {
     limit,
   };
 }
+
+export function validateCreateWorkspacePagePayload(body) {
+  const title = String(body?.title || '').trim().slice(0, 180) || 'Untitled page';
+  const icon = String(body?.icon || '').trim().slice(0, 8);
+  const coverUrl = String(body?.coverUrl || '').trim().slice(0, 500);
+  const summary = String(body?.summary || '').trim().slice(0, 500);
+  return { title, icon, coverUrl, summary };
+}
+
+export function validateUpdateWorkspacePagePayload(body) {
+  const next = {};
+  if (body?.title !== undefined) {
+    const title = String(body.title || '').trim().slice(0, 180);
+    if (!title) {
+      throw badRequest('title must not be empty', { field: 'title' });
+    }
+    next.title = title;
+  }
+  if (body?.icon !== undefined) {
+    next.icon = String(body.icon || '').trim().slice(0, 8);
+  }
+  if (body?.coverUrl !== undefined) {
+    next.coverUrl = String(body.coverUrl || '').trim().slice(0, 500);
+  }
+  if (body?.summary !== undefined) {
+    next.summary = String(body.summary || '').trim().slice(0, 500);
+  }
+  if (body?.status !== undefined) {
+    const status = String(body.status || '').trim();
+    const valid = ['draft', 'review', 'published', 'archived'];
+    if (!valid.includes(status)) {
+      throw badRequest(`status must be one of: ${valid.join(', ')}`, {
+        field: 'status',
+        received: status,
+      });
+    }
+    next.status = status;
+  }
+  if (!Object.keys(next).length) {
+    throw badRequest('at least one field must be provided', {
+      field: 'body',
+    });
+  }
+  return next;
+}
+
+export function validateCreateWorkspaceBlockPayload(body) {
+  const type = String(body?.type || 'paragraph').trim();
+  const valid = ['paragraph', 'heading1', 'heading2', 'heading3', 'checklist', 'quote', 'callout', 'divider'];
+  if (!valid.includes(type)) {
+    throw badRequest(`type must be one of: ${valid.join(', ')}`, {
+      field: 'type',
+      received: type,
+    });
+  }
+  const text = String(body?.text || '').trim().slice(0, 10000);
+  const checked = body?.checked === true;
+  const attrs = body?.attrs && typeof body.attrs === 'object' && !Array.isArray(body.attrs)
+    ? body.attrs
+    : {};
+  return { type, text, checked, attrs };
+}
+
+export function validateUpdateWorkspaceBlockPayload(body) {
+  const next = {};
+  if (body?.type !== undefined) {
+    const type = String(body.type || '').trim();
+    const valid = ['paragraph', 'heading1', 'heading2', 'heading3', 'checklist', 'quote', 'callout', 'divider'];
+    if (!valid.includes(type)) {
+      throw badRequest(`type must be one of: ${valid.join(', ')}`, {
+        field: 'type',
+        received: type,
+      });
+    }
+    next.type = type;
+  }
+  if (body?.text !== undefined) {
+    next.text = String(body.text || '').trim().slice(0, 10000);
+  }
+  if (body?.checked !== undefined) {
+    if (typeof body.checked !== 'boolean') {
+      throw badRequest('checked must be a boolean', {
+        field: 'checked',
+      });
+    }
+    next.checked = body.checked;
+  }
+  if (body?.attrs !== undefined) {
+    if (!body.attrs || typeof body.attrs !== 'object' || Array.isArray(body.attrs)) {
+      throw badRequest('attrs must be an object', {
+        field: 'attrs',
+      });
+    }
+    next.attrs = body.attrs;
+  }
+  if (!Object.keys(next).length) {
+    throw badRequest('at least one field must be provided', {
+      field: 'body',
+    });
+  }
+  return next;
+}
