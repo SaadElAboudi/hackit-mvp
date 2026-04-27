@@ -566,6 +566,7 @@ export function validateExtractWorkspaceDecisionsPayload(body) {
   const maxDecisionsRaw = Number(body?.maxDecisions ?? 5);
   const maxTasksPerDecisionRaw = Number(body?.maxTasksPerDecision ?? 4);
   const persist = body?.persist !== false;
+  const missionId = String(body?.missionId || '').trim();
 
   if (!Number.isInteger(recentLimitRaw) || recentLimitRaw < 5 || recentLimitRaw > 120) {
     throw badRequest('recentLimit must be an integer between 5 and 120', {
@@ -585,11 +586,17 @@ export function validateExtractWorkspaceDecisionsPayload(body) {
   if (body?.persist !== undefined && typeof body.persist !== 'boolean') {
     throw badRequest('persist must be a boolean', { field: 'persist' });
   }
+  if (body?.missionId !== undefined && !missionId) {
+    throw badRequest('missionId must be a non-empty string when provided', {
+      field: 'missionId',
+    });
+  }
 
   return {
     recentLimit: recentLimitRaw,
     maxDecisions: maxDecisionsRaw,
     maxTasksPerDecision: maxTasksPerDecisionRaw,
     persist,
+    missionId,
   };
 }

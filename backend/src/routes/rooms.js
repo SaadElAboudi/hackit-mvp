@@ -1094,7 +1094,7 @@ router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecis
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
-        const { recentLimit, maxDecisions, maxTasksPerDecision, persist } = req.validatedBody;
+        const { recentLimit, maxDecisions, maxTasksPerDecision, persist, missionId } = req.validatedBody;
 
         const recentMessages = await RoomMessage.find({ roomId: req.params.id })
             .sort({ createdAt: -1 })
@@ -1112,8 +1112,40 @@ router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecis
             .filter((line) => line.length > 4)
             .slice(-recentLimit);
 
+        let missionContext = null;
+        if (missionId) {
+            const mission = await RoomMission.findOne({
+                _id: missionId,
+                roomId: req.params.id,
+            }).lean();
+            if (mission) {
+                const resultMessage = mission.resultMessageId
+                    ? await RoomMessage.findOne({
+                        _id: mission.resultMessageId,
+                        roomId: req.params.id,
+                    }).lean()
+                    : null;
+                const missionPrompt = String(mission.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 600);
+                const missionResult = String(resultMessage?.content || '').replace(/\s+/g, ' ').trim().slice(0, 900);
+                missionContext = {
+                    missionId: String(mission._id),
+                    prompt: missionPrompt,
+                    result: missionResult,
+                };
+            }
+        }
+
+        const contextLines = [];
+        if (missionContext?.prompt) {
+            contextLines.push(`Mission prompt: ${missionContext.prompt}`);
+        }
+        if (missionContext?.result) {
+            contextLines.push(`Mission result: ${missionContext.result}`);
+        }
+        const extractionLines = [...contextLines, ...chronology].slice(-Math.max(recentLimit, 10));
+
         let extracted = [];
-        if (chronology.length) {
+        if (extractionLines.length) {
             const prompt = [
                 'Tu es un facilitateur operationnel.',
                 'A partir de la conversation suivante, extrais des decisions actionnables et des taches associees.',
@@ -1124,7 +1156,7 @@ router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecis
                 'La reponse doit etre en francais, concrete, sans formulations generiques.',
                 '',
                 'Conversation:',
-                chronology.join('\n'),
+                extractionLines.join('\n'),
             ].join('\n');
 
             try {
@@ -1158,7 +1190,12 @@ router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecis
         }
 
         if (!extracted.length) {
-            extracted = fallbackExtractDecisionsFromMessages(recentMessages, maxDecisions, maxTasksPerDecision)
+            const fallbackSource = [
+                ...(missionContext?.prompt ? [{ content: missionContext.prompt }] : []),
+                ...(missionContext?.result ? [{ content: missionContext.result }] : []),
+                ...recentMessages,
+            ];
+            extracted = fallbackExtractDecisionsFromMessages(fallbackSource, maxDecisions, maxTasksPerDecision)
                 .slice(0, maxDecisions);
         }
 
@@ -1166,7 +1203,8 @@ router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecis
             return res.json({
                 extracted,
                 persisted: false,
-                sourceMessageCount: chronology.length,
+                sourceMessageCount: extractionLines.length,
+                missionContext: missionContext ? { missionId: missionContext.missionId } : null,
             });
         }
 
@@ -1175,7 +1213,8 @@ router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecis
         for (const item of extracted) {
             const decision = await WorkspaceDecision.create({
                 roomId: req.params.id,
-                sourceType: 'message',
+                sourceType: missionContext ? 'mission' : 'message',
+                sourceId: missionContext?.missionId || '',
                 title: item.title,
                 summary: item.summary,
                 createdBy: req.userId,
@@ -1221,7 +1260,8 @@ router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecis
         return res.status(201).json({
             extracted,
             persisted: true,
-            sourceMessageCount: chronology.length,
+            sourceMessageCount: extractionLines.length,
+            missionContext: missionContext ? { missionId: missionContext.missionId } : null,
             decisions: createdDecisions.map((decision) => workspaceDecisionSummary(decision)),
             tasks: createdTasks.map((task) => workspaceTaskSummary(task)),
         });
