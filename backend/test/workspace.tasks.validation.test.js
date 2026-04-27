@@ -123,3 +123,55 @@ await test('PATCH workspace task invalid status returns BAD_REQUEST envelope', a
     assert.match(String(json.message || ''), /status/i);
     assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
 });
+
+await test('POST workspace decisions extract invalid recentLimit returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/decisions/extract`,
+        method: 'POST',
+        body: { recentLimit: 2 },
+        headers: { 'x-user-id': 'user_workspace_9' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /recentLimit/i);
+    assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+});
+
+await test('POST workspace decisions extract invalid persist type returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/decisions/extract`,
+        method: 'POST',
+        body: { persist: 'yes' },
+        headers: { 'x-user-id': 'user_workspace_10' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /persist/i);
+    assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+});

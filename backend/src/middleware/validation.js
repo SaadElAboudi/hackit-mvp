@@ -560,3 +560,36 @@ export function validateUpdateWorkspaceTaskPayload(body) {
   }
   return next;
 }
+
+export function validateExtractWorkspaceDecisionsPayload(body) {
+  const recentLimitRaw = Number(body?.recentLimit ?? 30);
+  const maxDecisionsRaw = Number(body?.maxDecisions ?? 5);
+  const maxTasksPerDecisionRaw = Number(body?.maxTasksPerDecision ?? 4);
+  const persist = body?.persist !== false;
+
+  if (!Number.isInteger(recentLimitRaw) || recentLimitRaw < 5 || recentLimitRaw > 120) {
+    throw badRequest('recentLimit must be an integer between 5 and 120', {
+      field: 'recentLimit',
+    });
+  }
+  if (!Number.isInteger(maxDecisionsRaw) || maxDecisionsRaw < 1 || maxDecisionsRaw > 12) {
+    throw badRequest('maxDecisions must be an integer between 1 and 12', {
+      field: 'maxDecisions',
+    });
+  }
+  if (!Number.isInteger(maxTasksPerDecisionRaw) || maxTasksPerDecisionRaw < 1 || maxTasksPerDecisionRaw > 10) {
+    throw badRequest('maxTasksPerDecision must be an integer between 1 and 10', {
+      field: 'maxTasksPerDecision',
+    });
+  }
+  if (body?.persist !== undefined && typeof body.persist !== 'boolean') {
+    throw badRequest('persist must be a boolean', { field: 'persist' });
+  }
+
+  return {
+    recentLimit: recentLimitRaw,
+    maxDecisions: maxDecisionsRaw,
+    maxTasksPerDecision: maxTasksPerDecisionRaw,
+    persist,
+  };
+}

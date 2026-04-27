@@ -29,6 +29,7 @@ import {
     triggerRoomAutomation,
     suggestRoomSynthesisIfNeeded,
 } from '../services/roomOrchestrator.js';
+import { generateWithGemini as generateWithGeminiShared } from '../services/gemini.js';
 import { validateNotionToken } from '../services/notion.js';
 import { executeWithRetry, getExportConnector } from '../services/exportConnectors.js';
 import {
@@ -56,6 +57,7 @@ import {
     validateDirectivesPayload,
     validateResolveCommentPayload,
     validateResolveWorkspaceCommentPayload,
+    validateExtractWorkspaceDecisionsPayload,
     validateReorderWorkspaceBlocksPayload,
     validateReviseArtifactPayload,
     validateShareHistoryQuery,
@@ -177,6 +179,59 @@ function workspaceMilestoneSummary(milestone) {
     return {
         ...json,
     };
+}
+
+function extractJsonObject(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw);
+    } catch (_) {
+        // continue to fenced block extraction
+    }
+
+    const fenced = raw.match(/```json\s*([\s\S]*?)```/i) || raw.match(/```\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) {
+        try {
+            return JSON.parse(String(fenced[1]).trim());
+        } catch (_) {
+            // keep searching below
+        }
+    }
+
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+        const candidate = raw.slice(firstBrace, lastBrace + 1);
+        try {
+            return JSON.parse(candidate);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    return null;
+}
+
+function fallbackExtractDecisionsFromMessages(messages, maxDecisions = 5, maxTasksPerDecision = 4) {
+    const lines = messages
+        .map((msg) => String(msg?.content || '').trim())
+        .filter(Boolean)
+        .slice(0, 20);
+
+    const seeds = lines.slice(0, Math.max(1, Math.min(maxDecisions, lines.length || 1)));
+    return seeds.map((line, idx) => {
+        const compact = line.replace(/\s+/g, ' ').slice(0, 180);
+        return {
+            title: `Decision ${idx + 1}: ${compact.slice(0, 80)}`,
+            summary: `Decision derivee du contexte recent: ${compact}`.slice(0, 500),
+            tasks: [
+                { title: `Clarifier l'objectif pour: ${compact.slice(0, 60)}`.slice(0, 180), description: '' },
+                { title: `Definir le proprietaire et la deadline`, description: '' },
+                { title: `Valider en reunion d'equipe`, description: '' },
+            ].slice(0, maxTasksPerDecision),
+        };
+    });
 }
 
 function tooManyRequestsError(message = 'Too many requests') {
@@ -1026,6 +1081,150 @@ router.post('/:id/decisions', validateBody(validateCreateWorkspaceDecisionPayloa
         });
 
         res.status(201).json({ decision: workspaceDecisionSummary(decision) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecisionsPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { recentLimit, maxDecisions, maxTasksPerDecision, persist } = req.validatedBody;
+
+        const recentMessages = await RoomMessage.find({ roomId: req.params.id })
+            .sort({ createdAt: -1 })
+            .limit(recentLimit)
+            .lean();
+
+        const chronology = recentMessages
+            .slice()
+            .reverse()
+            .map((msg) => {
+                const sender = msg?.isAI ? 'AI' : String(msg?.senderName || 'Member').slice(0, 40);
+                const content = String(msg?.content || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+                return `${sender}: ${content}`;
+            })
+            .filter((line) => line.length > 4)
+            .slice(-recentLimit);
+
+        let extracted = [];
+        if (chronology.length) {
+            const prompt = [
+                'Tu es un facilitateur operationnel.',
+                'A partir de la conversation suivante, extrais des decisions actionnables et des taches associees.',
+                `Contraintes: max ${maxDecisions} decisions, max ${maxTasksPerDecision} taches par decision.`,
+                'Reponds STRICTEMENT en JSON valide, sans texte hors JSON.',
+                'Schema:',
+                '{"decisions":[{"title":"...","summary":"...","tasks":[{"title":"...","description":"..."}]}]}',
+                'La reponse doit etre en francais, concrete, sans formulations generiques.',
+                '',
+                'Conversation:',
+                chronology.join('\n'),
+            ].join('\n');
+
+            try {
+                const llmText = await generateWithGeminiShared(prompt, 1400, {
+                    model: 'models/gemini-2.0-flash-lite',
+                    preferModels: ['models/gemini-2.0-flash-lite', 'models/gemini-2.0-flash'],
+                    timeoutMs: 25000,
+                    temperature: 0.25,
+                    maxAttemptsPerModel: 2,
+                    allowQualityRepair: true,
+                });
+                const parsed = extractJsonObject(llmText);
+                const list = Array.isArray(parsed?.decisions) ? parsed.decisions : [];
+                extracted = list
+                    .map((entry) => ({
+                        title: String(entry?.title || '').trim().slice(0, 180),
+                        summary: String(entry?.summary || '').trim().slice(0, 2000),
+                        tasks: (Array.isArray(entry?.tasks) ? entry.tasks : [])
+                            .map((task) => ({
+                                title: String(task?.title || '').trim().slice(0, 180),
+                                description: String(task?.description || '').trim().slice(0, 2000),
+                            }))
+                            .filter((task) => task.title)
+                            .slice(0, maxTasksPerDecision),
+                    }))
+                    .filter((entry) => entry.title)
+                    .slice(0, maxDecisions);
+            } catch (extractErr) {
+                console.warn('[rooms] decisions extract fallback:', extractErr?.message || extractErr);
+            }
+        }
+
+        if (!extracted.length) {
+            extracted = fallbackExtractDecisionsFromMessages(recentMessages, maxDecisions, maxTasksPerDecision)
+                .slice(0, maxDecisions);
+        }
+
+        if (!persist) {
+            return res.json({
+                extracted,
+                persisted: false,
+                sourceMessageCount: chronology.length,
+            });
+        }
+
+        const createdDecisions = [];
+        const createdTasks = [];
+        for (const item of extracted) {
+            const decision = await WorkspaceDecision.create({
+                roomId: req.params.id,
+                sourceType: 'message',
+                title: item.title,
+                summary: item.summary,
+                createdBy: req.userId,
+                createdByName: req.displayName,
+            });
+            createdDecisions.push(decision);
+
+            if (item.tasks?.length) {
+                const tasks = await WorkspaceTask.insertMany(
+                    item.tasks.map((task) => ({
+                        roomId: req.params.id,
+                        decisionId: decision._id,
+                        title: task.title,
+                        description: task.description || '',
+                        createdBy: req.userId,
+                        createdByName: req.displayName,
+                        lastUpdatedBy: req.userId,
+                        lastUpdatedByName: req.displayName,
+                    }))
+                );
+                createdTasks.push(...tasks);
+            }
+
+            decision.convertedAt = new Date();
+            await decision.save();
+
+            broadcastRoomDecisionCreated(req.params.id, {
+                type: 'workspace_decision_extracted',
+                data: {
+                    decisionId: String(decision._id),
+                    title: decision.title,
+                    sourceType: decision.sourceType,
+                },
+                authorId: req.userId,
+                authorName: req.displayName,
+                createdAt: decision.createdAt,
+            });
+        }
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        return res.status(201).json({
+            extracted,
+            persisted: true,
+            sourceMessageCount: chronology.length,
+            decisions: createdDecisions.map((decision) => workspaceDecisionSummary(decision)),
+            tasks: createdTasks.map((task) => workspaceTaskSummary(task)),
+        });
     } catch (err) {
         next(err);
     }
@@ -1897,28 +2096,6 @@ router.delete('/:id/memory/:memoryId', async (req, res) => {
         res.json({ ok: true });
     } catch (err) {
         console.error('[rooms] memory delete error:', err);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-router.get('/:id/decisions', async (req, res) => {
-    try {
-        const room = await loadRoomOr404(req.params.id, res);
-        if (!room) return;
-        if (!isRoomMember(room, req.userId)) {
-            return res.status(403).json({ error: 'Not a member of this room' });
-        }
-
-        const decisions = await RoomMessage.find({
-            roomId: req.params.id,
-            type: 'decision',
-        })
-            .sort({ createdAt: -1 })
-            .limit(20)
-            .lean();
-        res.json({ decisions });
-    } catch (err) {
-        console.error('[rooms] decisions list error:', err);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
