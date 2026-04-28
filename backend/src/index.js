@@ -45,6 +45,49 @@ app.use((req, res, next) => {
   next();
 });
 app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (payload) => {
+    const statusCode = Number(res.statusCode || 200);
+    const isErrorStatus = statusCode >= 400;
+    const isObjectPayload = payload && typeof payload === 'object' && !Array.isArray(payload);
+
+    if (isErrorStatus && isObjectPayload) {
+      const hasStandardEnvelope = Object.prototype.hasOwnProperty.call(payload, 'code')
+        && Object.prototype.hasOwnProperty.call(payload, 'message')
+        && Object.prototype.hasOwnProperty.call(payload, 'requestId');
+
+      if (!hasStandardEnvelope && Object.prototype.hasOwnProperty.call(payload, 'error')) {
+        const message = String(payload.error || '').trim() || (statusCode >= 500 ? 'Internal server error' : 'Request failed');
+        const normalized = {
+          ok: false,
+          code: statusCode >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST',
+          message,
+          details: Object.prototype.hasOwnProperty.call(payload, 'details')
+            ? payload.details
+            : (Object.prototype.hasOwnProperty.call(payload, 'detail') ? payload.detail : null),
+          requestId: req.requestId || null,
+          // Backward compatibility for legacy clients/tests still reading `error`.
+          error: message,
+        };
+        return originalJson(normalized);
+      }
+
+      if (hasStandardEnvelope) {
+        const normalized = {
+          ...payload,
+          ok: payload.ok === undefined ? false : payload.ok,
+          requestId: payload.requestId || req.requestId || null,
+          error: payload.error || payload.message,
+        };
+        return originalJson(normalized);
+      }
+    }
+
+    return originalJson(payload);
+  };
+  next();
+});
+app.use((req, res, next) => {
   const startedAt = Date.now();
   res.on('finish', () => {
     const resolvedPath = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : req.path;
@@ -2070,6 +2113,7 @@ app.use((err, _req, res, next) => {
     message: status >= 500 ? 'Internal server error' : (err?.message || 'Request failed'),
     details: err?.details || null,
     requestId: _req.requestId || null,
+    error: status >= 500 ? 'Internal server error' : (err?.message || 'Request failed'),
   });
 });
 
