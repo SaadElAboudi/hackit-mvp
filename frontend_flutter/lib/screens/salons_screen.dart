@@ -617,10 +617,11 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
             break;
           }
         }
-        final selectedWeights = selectedTemplate?.versionWeights.entries
-                .where((e) => e.value > 0)
-                .toList() ??
-            const [];
+        final selectedWeights =
+            (selectedTemplate?.versionWeights.entries
+              .where((e) => e.value > 0)
+              .toList() ??
+          <MapEntry<String, int>>[]);
         selectedWeights.sort((a, b) => a.key.compareTo(b.key));
         final rolloutText =
             selectedWeights.map((e) => '${e.key} ${e.value}%').join(' / ');
