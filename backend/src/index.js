@@ -40,7 +40,9 @@ app.use(cors({
 }));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
 app.use((req, res, next) => {
-  req.requestId = randomBytes(8).toString('hex');
+  const incomingRequestId = String(req.headers['x-request-id'] || '').trim();
+  const isValidIncoming = /^[A-Za-z0-9._-]{6,128}$/.test(incomingRequestId);
+  req.requestId = isValidIncoming ? incomingRequestId : randomBytes(8).toString('hex');
   res.setHeader('X-Request-Id', req.requestId);
   next();
 });
@@ -1400,7 +1402,7 @@ app.post("/api/search", async (req, res) => {
   }
   const summaryConfig = getSummaryConfig(featureFlags.multiLengthSummary ? summaryLength : 'standard');
   const deliveryMode = detectDeliveryModeFromQuery(query);
-  const requestId = randomBytes(8).toString('hex');
+  const requestId = req.requestId;
 
   // Dev mock mode: quick responses without keys. Default mock false if YT_API_KEY exists.
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";

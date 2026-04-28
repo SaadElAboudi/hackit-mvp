@@ -422,7 +422,7 @@ async function executeDecisionExtraction(req, res, next, { missionIdOverride = '
                 authorId: req.userId,
                 authorName: req.displayName,
                 createdAt: decision.createdAt,
-            });
+            }, req.requestId || null);
         }
 
         room.lastActivityAt = new Date();
@@ -1625,7 +1625,7 @@ router.post('/:id/decisions', validateBody(validateCreateWorkspaceDecisionPayloa
             authorId: req.userId,
             authorName: req.displayName,
             createdAt: decision.createdAt,
-        });
+        }, req.requestId || null);
 
         res.status(201).json({ decision: workspaceDecisionSummary(decision) });
     } catch (err) {
@@ -1886,7 +1886,8 @@ router.post('/:id/messages/:msgId/challenge', validateBody(validateChallengePayl
         broadcastRoomChallenge(
             req.params.id,
             req.params.msgId,
-            savedChallenge.toObject()
+            savedChallenge.toObject(),
+            req.requestId || null
         );
 
         res.status(201).json({ challenge: savedChallenge });

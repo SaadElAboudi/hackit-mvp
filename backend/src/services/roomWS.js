@@ -143,8 +143,8 @@ export function broadcastRoomMessageChunk(roomId, tempId, delta) {
   _broadcast(roomId, { type: 'message_chunk', roomId, tempId, delta });
 }
 
-export function broadcastRoomChallenge(roomId, messageId, challenge) {
-  _broadcast(roomId, { type: 'challenge', roomId, messageId, challenge });
+export function broadcastRoomChallenge(roomId, messageId, challenge, requestId = null) {
+  _broadcast(roomId, { type: 'challenge', roomId, messageId, challenge, requestId });
 }
 
 export function broadcastRoomArtifactCreated(roomId, artifact, version) {
@@ -164,8 +164,8 @@ export function broadcastRoomMissionStatus(roomId, mission, requestId = null) {
   _broadcast(roomId, { type: 'mission_status', roomId, mission, requestId });
 }
 
-export function broadcastRoomDecisionCreated(roomId, message) {
-  _broadcast(roomId, { type: 'decision_created', roomId, message });
+export function broadcastRoomDecisionCreated(roomId, message, requestId = null) {
+  _broadcast(roomId, { type: 'decision_created', roomId, message, requestId });
 }
 
 export function broadcastRoomResearchAttached(roomId, message) {
