@@ -1287,15 +1287,18 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   spacing: 8,
                   runSpacing: 4,
                   children: [
-                    if (prov.actionContext != null && prov.actionContext!.isNotEmpty)
+                    if (prov.actionContext != null &&
+                        prov.actionContext!.isNotEmpty)
                       Text(
                         'Contexte: ${prov.actionContext}',
                         style: TextStyle(
-                          color: scheme.onErrorContainer.withValues(alpha: 0.85),
+                          color:
+                              scheme.onErrorContainer.withValues(alpha: 0.85),
                           fontSize: 12,
                         ),
                       ),
-                    if (prov.actionRequestId != null && prov.actionRequestId!.isNotEmpty)
+                    if (prov.actionRequestId != null &&
+                        prov.actionRequestId!.isNotEmpty)
                       GestureDetector(
                         onTap: () async {
                           await Clipboard.setData(
@@ -1309,7 +1312,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         child: Text(
                           'requestId: ${prov.actionRequestId}',
                           style: TextStyle(
-                            color: scheme.onErrorContainer.withValues(alpha: 0.85),
+                            color:
+                                scheme.onErrorContainer.withValues(alpha: 0.85),
                             fontSize: 12,
                             decoration: TextDecoration.underline,
                           ),
@@ -1330,7 +1334,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      prov.actionError ?? 'Nouvelle tentative en echec',
+                                      prov.actionError ??
+                                          'Nouvelle tentative en echec',
                                     ),
                                   ),
                                 );

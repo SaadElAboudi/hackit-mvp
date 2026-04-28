@@ -586,7 +586,8 @@ class RoomProvider extends ChangeNotifier {
       _setActionError(
         e,
         context: 'upload_document',
-        retry: () => uploadDocument(content, title: title, displayName: displayName),
+        retry: () =>
+            uploadDocument(content, title: title, displayName: displayName),
       );
       return false;
     }
