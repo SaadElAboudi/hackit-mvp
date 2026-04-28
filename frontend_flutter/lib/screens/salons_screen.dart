@@ -155,58 +155,29 @@ class _SalonsScreenState extends State<SalonsScreen> {
     final prov = context.read<RoomProvider>();
     final nameCtrl = TextEditingController();
 
+    // Kick off template loading (no-op if already cached)
+    prov.loadTemplates();
+
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Créer un channel'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Nom du channel',
-                hintText: 'Ex: IA produit',
-                border: OutlineInputBorder(),
-              ),
-              textCapitalization: TextCapitalization.sentences,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Le channel partagera une IA commune. Utilisez @ia, /doc, /search, /decide ou /mission une fois dedans.',
-              style: TextStyle(
-                fontSize: 12,
-                color:
-                    Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
-              Navigator.of(ctx).pop();
-              final displayName = _displayName();
-              final room = await prov.createRoom(
-                name: name,
-                displayName: displayName,
-              );
-              if (room != null && context.mounted) {
-                _openRoom(context, room);
-              }
-            },
-            child: const Text('Créer'),
-          ),
-        ],
+      builder: (ctx) => _CreateRoomDialog(
+        nameCtrl: nameCtrl,
+        prov: prov,
+        onSubmit: (name, templateId) async {
+          Navigator.of(ctx).pop();
+          final displayName = _displayName();
+          final room = await prov.createRoom(
+            name: name,
+            displayName: displayName,
+            templateId: templateId,
+          );
+          if (room != null && context.mounted) {
+            _openRoom(context, room);
+          }
+        },
       ),
     );
+    nameCtrl.dispose();
   }
 
   void _openRoom(BuildContext context, Room room) {
@@ -386,6 +357,166 @@ class _ErrorState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Create room dialog with template picker ───────────────────────────────────
+
+class _CreateRoomDialog extends StatefulWidget {
+  final TextEditingController nameCtrl;
+  final RoomProvider prov;
+  final Future<void> Function(String name, String? templateId) onSubmit;
+
+  const _CreateRoomDialog({
+    required this.nameCtrl,
+    required this.prov,
+    required this.onSubmit,
+  });
+
+  @override
+  State<_CreateRoomDialog> createState() => _CreateRoomDialogState();
+}
+
+class _CreateRoomDialogState extends State<_CreateRoomDialog> {
+  String? _selectedTemplateId;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.prov,
+      builder: (ctx, _) {
+        final scheme = Theme.of(ctx).colorScheme;
+        final templates = widget.prov.templates;
+        final loading = widget.prov.loadingTemplates;
+
+        return AlertDialog(
+          title: const Text('Créer un channel'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Template picker ───────────────────────────────────────
+                if (loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(),
+                  )
+                else if (templates.isNotEmpty) ...[
+                  Text(
+                    'Choisir un modèle (optionnel)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 80,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: templates.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (ctx, i) {
+                        final t = templates[i];
+                        final selected = _selectedTemplateId == t.id;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedTemplateId =
+                                  selected ? null : t.id;
+                              // Auto-fill name if still empty
+                              if (!selected &&
+                                  widget.nameCtrl.text.isEmpty) {
+                                widget.nameCtrl.text = t.name;
+                              }
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 100,
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: selected
+                                    ? scheme.primary
+                                    : scheme.outlineVariant,
+                                width: selected ? 2 : 1,
+                              ),
+                              color: selected
+                                  ? scheme.primaryContainer
+                                  : scheme.surfaceContainerLow,
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(t.emoji,
+                                    style: const TextStyle(fontSize: 24)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  t.name,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: selected
+                                        ? scheme.onPrimaryContainer
+                                        : scheme.onSurface,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                // ── Name field ────────────────────────────────────────────
+                TextField(
+                  controller: widget.nameCtrl,
+                  autofocus: templates.isEmpty && !loading,
+                  decoration: const InputDecoration(
+                    labelText: 'Nom du channel',
+                    hintText: 'Ex: IA produit',
+                    border: OutlineInputBorder(),
+                  ),
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Utilisez @ia, /doc, /search, /decide ou /mission une fois dedans.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final name = widget.nameCtrl.text.trim();
+                if (name.isEmpty) return;
+                await widget.onSubmit(name, _selectedTemplateId);
+              },
+              child: const Text('Créer'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

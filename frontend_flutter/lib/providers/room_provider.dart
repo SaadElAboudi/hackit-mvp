@@ -18,6 +18,25 @@ class RoomProvider extends ChangeNotifier {
   bool loadingRooms = false;
   String? roomsError;
 
+  // ── Domain templates ──────────────────────────────────────────────────────────
+
+  List<DomainTemplate> templates = [];
+  bool loadingTemplates = false;
+
+  Future<void> loadTemplates() async {
+    if (templates.isNotEmpty) return; // already cached
+    loadingTemplates = true;
+    notifyListeners();
+    try {
+      templates = await _svc.fetchTemplates();
+    } catch (_) {
+      // non-fatal — templates optional
+    } finally {
+      loadingTemplates = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> loadRooms() async {
     loadingRooms = true;
     roomsError = null;
@@ -36,12 +55,14 @@ class RoomProvider extends ChangeNotifier {
     required String name,
     String type = 'group',
     String? displayName,
+    String? templateId,
   }) async {
     try {
       final room = await _svc.createRoom(
         name: name,
         type: type,
         displayName: displayName,
+        templateId: templateId,
       );
       rooms.insert(0, room);
       notifyListeners();

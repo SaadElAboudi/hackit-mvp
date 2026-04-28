@@ -107,6 +107,7 @@ export function validateCreateRoomPayload(body) {
   const type = String(body?.type || 'group').trim();
   const purpose = String(body?.purpose || '').trim().slice(0, 240);
   const visibility = String(body?.visibility || 'invite_only').trim();
+  const templateId = String(body?.templateId || '').trim().slice(0, 40) || null;
 
   if (!['dm', 'group'].includes(type)) {
     throw badRequest('type must be "dm" or "group"', { field: 'type' });
@@ -120,7 +121,7 @@ export function validateCreateRoomPayload(body) {
     .map((member) => normalizeMember(member))
     .filter((member) => member.userId);
 
-  return { name, type, purpose, visibility, members };
+  return { name, type, purpose, visibility, members, templateId };
 }
 
 export function validateSendMessagePayload(body) {

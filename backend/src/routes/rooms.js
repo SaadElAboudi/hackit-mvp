@@ -78,6 +78,7 @@ import {
     validateUpdateWorkspacePagePayload,
     validateUpdateWorkspaceTaskPayload,
 } from '../middleware/validation.js';
+import DOMAIN_TEMPLATES, { getTemplateById } from '../config/domainTemplates.js';
 
 const router = express.Router();
 const APP_BASE_URL =
@@ -473,9 +474,22 @@ router.get('/', async (req, res) => {
     }
 });
 
+/**
+ * GET /api/rooms/templates
+ * Returns the list of domain template packs (no auth required for the list).
+ */
+router.get('/templates', (_req, res) => {
+    res.json({ templates: DOMAIN_TEMPLATES.map(({ id, name, emoji, description, purpose }) => ({ id, name, emoji, description, purpose })) });
+});
+
 router.post('/', validateBody(validateCreateRoomPayload), async (req, res, next) => {
     try {
-        const { name, type, members, purpose, visibility } = req.validatedBody;
+        const { name, type, members, purpose, visibility, templateId } = req.validatedBody;
+
+        // Apply domain template directives if a valid templateId was supplied
+        const template = templateId ? getTemplateById(templateId) : null;
+        const resolvedPurpose = (purpose || template?.purpose || '').slice(0, 240);
+        const resolvedDirectives = template ? template.aiDirectives : '';
 
         const allMembers = [
             {
@@ -499,11 +513,12 @@ router.post('/', validateBody(validateCreateRoomPayload), async (req, res, next)
         const room = await Room.create({
             name: String(name || '').trim() || 'Nouveau channel',
             type,
-            purpose: String(purpose || '').trim().slice(0, 240),
+            purpose: resolvedPurpose,
             visibility,
             ownerId: req.userId,
             members: allMembers,
             lastActivityAt: new Date(),
+            aiDirectives: resolvedDirectives,
         });
 
         res.status(201).json({ room: roomResponse(room) });

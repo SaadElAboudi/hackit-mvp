@@ -147,17 +147,29 @@ class RoomService {
         .toList();
   }
 
+  Future<List<DomainTemplate>> fetchTemplates() async {
+    final r = await _get('/api/rooms/templates');
+    return (r['templates'] as List)
+        .map((j) => DomainTemplate.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<Room> createRoom({
     required String name,
     String type = 'group',
     List<Map<String, String>> members = const [],
     String? displayName,
+    String? templateId,
+    String? purpose,
   }) async {
-    final r = await _post(
-      '/api/rooms',
-      {'name': name, 'type': type, 'members': members},
-      displayName: displayName,
-    );
+    final body = <String, dynamic>{
+      'name': name,
+      'type': type,
+      'members': members,
+      if (templateId != null) 'templateId': templateId,
+      if (purpose != null) 'purpose': purpose,
+    };
+    final r = await _post('/api/rooms', body, displayName: displayName);
     return Room.fromJson(r['room'] as Map<String, dynamic>);
   }
 

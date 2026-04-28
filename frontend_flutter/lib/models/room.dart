@@ -719,3 +719,29 @@ class WsRoomEvent {
     return RoomMission.fromJson(m as Map<String, dynamic>);
   }
 }
+
+// ── Domain template (starter pack) ───────────────────────────────────────────
+
+class DomainTemplate {
+  final String id;
+  final String name;
+  final String emoji;
+  final String description;
+  final String purpose;
+
+  const DomainTemplate({
+    required this.id,
+    required this.name,
+    required this.emoji,
+    required this.description,
+    required this.purpose,
+  });
+
+  factory DomainTemplate.fromJson(Map<String, dynamic> j) => DomainTemplate(
+        id: j['id']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        emoji: j['emoji']?.toString() ?? '',
+        description: j['description']?.toString() ?? '',
+        purpose: j['purpose']?.toString() ?? '',
+      );
+}
