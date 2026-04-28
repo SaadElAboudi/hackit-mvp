@@ -522,6 +522,24 @@ class RoomIntegrationStatus {
       );
 }
 
+class NotionPageOption {
+  final String id;
+  final String title;
+  final String url;
+
+  const NotionPageOption({
+    required this.id,
+    required this.title,
+    required this.url,
+  });
+
+  factory NotionPageOption.fromJson(Map<String, dynamic> j) => NotionPageOption(
+        id: j['id']?.toString() ?? '',
+        title: j['title']?.toString() ?? 'Untitled page',
+        url: j['url']?.toString() ?? '',
+      );
+}
+
 class RoomShareHistoryItem {
   final String id;
   final String target;

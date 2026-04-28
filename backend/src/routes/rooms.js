@@ -30,7 +30,7 @@ import {
     suggestRoomSynthesisIfNeeded,
 } from '../services/roomOrchestrator.js';
 import { generateWithGemini as generateWithGeminiShared } from '../services/gemini.js';
-import { validateNotionToken } from '../services/notion.js';
+import { discoverNotionPages, validateNotionToken } from '../services/notion.js';
 import { executeWithRetry, getExportConnector } from '../services/exportConnectors.js';
 import {
     broadcastRoomChallenge,
@@ -2546,6 +2546,40 @@ router.get('/:id/share/history', async (req, res, next) => {
 });
 
 // ── Integrations: Notion ──────────────────────────────────────────────────────
+
+/**
+ * POST /api/rooms/:id/integrations/notion/pages
+ * Discover accessible Notion pages for a token (does not persist integration).
+ */
+router.post('/:id/integrations/notion/pages', async (req, res) => {
+    try {
+        const apiToken = String(req.body?.apiToken || '').trim();
+        const query = String(req.body?.query || '').trim();
+        const limitRaw = Number(req.body?.limit);
+        const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, limitRaw)) : 20;
+
+        if (!apiToken) {
+            return res.status(400).json({ error: 'apiToken is required' });
+        }
+        if (!/^(secret_|ntn_)/.test(apiToken)) {
+            return res.status(400).json({
+                error: 'apiToken must be a Notion integration token (starts with secret_ or ntn_)',
+            });
+        }
+
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomOwner(room, req.userId)) {
+            return res.status(403).json({ error: 'Owner role required to connect integrations' });
+        }
+
+        const pages = await discoverNotionPages({ apiToken, query, limit });
+        res.json({ pages });
+    } catch (err) {
+        console.error('[rooms/notion] discover pages error:', err);
+        res.status(400).json({ error: err?.message || 'Could not discover Notion pages' });
+    }
+});
 
 /**
  * GET /api/rooms/:id/integrations/notion

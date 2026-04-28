@@ -114,6 +114,79 @@ export async function validateNotionToken(apiToken) {
     }
 }
 
+function extractNotionTitle(item) {
+    if (!item || typeof item !== 'object') return '';
+
+    if (Array.isArray(item.title) && item.title.length > 0) {
+        const plain = item.title
+            .map((part) => part?.plain_text || part?.text?.content || '')
+            .join('')
+            .trim();
+        if (plain) return plain;
+    }
+
+    const properties = item.properties || {};
+    for (const value of Object.values(properties)) {
+        if (value?.type === 'title' && Array.isArray(value.title)) {
+            const plain = value.title
+                .map((part) => part?.plain_text || part?.text?.content || '')
+                .join('')
+                .trim();
+            if (plain) return plain;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Discover accessible Notion pages for a given token.
+ * Returns a compact list suitable for a UI selector: [{ id, title, url }].
+ */
+export async function discoverNotionPages({ apiToken, query = '', limit = 20 }) {
+    const token = String(apiToken || '').trim();
+    if (!token) throw new Error('Missing Notion API token');
+
+    const pageSize = Math.max(1, Math.min(50, Number(limit) || 20));
+    const searchQuery = String(query || '').trim();
+
+    let resp;
+    try {
+        resp = await axios.post(
+            NOTION_SEARCH_URL,
+            {
+                query: searchQuery,
+                page_size: pageSize,
+                filter: { property: 'object', value: 'page' },
+                sort: {
+                    direction: 'descending',
+                    timestamp: 'last_edited_time',
+                },
+            },
+            {
+                headers: notionHeaders(token),
+                timeout: 10_000,
+            }
+        );
+    } catch (err) {
+        const status = err?.response?.status;
+        const notionMsg = err?.response?.data?.message || err.message;
+        const notionCode = err?.response?.data?.code || 'notion_error';
+        const e = new Error(`Notion pages discovery failed (${status ?? 'network'}): ${notionMsg}`);
+        e.code = notionCode;
+        throw e;
+    }
+
+    const results = Array.isArray(resp?.data?.results) ? resp.data.results : [];
+    return results
+        .map((item) => ({
+            id: String(item?.id || '').trim(),
+            title: extractNotionTitle(item) || 'Untitled page',
+            url: String(item?.url || '').trim(),
+        }))
+        .filter((item) => item.id);
+}
+
 // ── Page creation ─────────────────────────────────────────────────────────────
 
 function notionHeaders(token) {

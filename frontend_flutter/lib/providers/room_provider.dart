@@ -63,6 +63,7 @@ class RoomProvider extends ChangeNotifier {
   List<RoomShareHistoryItem> shareHistory = [];
   RoomIntegrationStatus? slackIntegration;
   RoomIntegrationStatus? notionIntegration;
+  bool loadingNotionPages = false;
   bool loadingShareHistory = false;
   bool loadingIntegrations = false;
   bool loadingMessages = false;
@@ -869,6 +870,32 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<List<NotionPageOption>> discoverNotionPages({
+    required String apiToken,
+    String query = '',
+    int limit = 20,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return const [];
+    actionError = null;
+    loadingNotionPages = true;
+    notifyListeners();
+    try {
+      return await _svc.discoverNotionPages(
+        room.id,
+        apiToken: apiToken,
+        query: query,
+        limit: limit,
+      );
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return const [];
+    } finally {
+      loadingNotionPages = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> disconnectNotionIntegration() async {
     final room = currentRoom;
     if (room == null) return false;
@@ -941,6 +968,7 @@ class RoomProvider extends ChangeNotifier {
     shareHistory = [];
     slackIntegration = null;
     notionIntegration = null;
+    loadingNotionPages = false;
     loadingShareHistory = false;
     loadingIntegrations = false;
     aiThinking = false;

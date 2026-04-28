@@ -780,9 +780,11 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     final prov = context.read<RoomProvider>();
     final status = prov.notionIntegration;
     final tokenCtrl = TextEditingController();
-    final parentPageCtrl =
-        TextEditingController(text: status?.parentPageId ?? '');
+    final queryCtrl = TextEditingController();
     final messenger = ScaffoldMessenger.of(context);
+    List<NotionPageOption> pages = const [];
+    String selectedPageId = status?.parentPageId ?? '';
+    bool loadingPages = false;
     bool saving = false;
 
     await showDialog<void>(
@@ -810,15 +812,125 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
-                  controller: parentPageCtrl,
-                  enabled: !saving,
+                  controller: queryCtrl,
+                  enabled: !saving && !loadingPages,
                   decoration: const InputDecoration(
-                    labelText: 'Parent page ID *',
-                    hintText: 'Notion page id',
-                    helperText: 'ID de la page parente cible',
+                    labelText: 'Recherche de pages (optionnel)',
+                    hintText: 'Ex: Marketing, Product roadmap...',
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: saving || loadingPages
+                        ? null
+                        : () async {
+                            final apiToken = tokenCtrl.text.trim();
+                            if (apiToken.isEmpty) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Renseigne d\'abord le token Notion',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            if (!(apiToken.startsWith('secret_') ||
+                                apiToken.startsWith('ntn_'))) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Le token Notion doit commencer par secret_ ou ntn_',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            setState(() => loadingPages = true);
+                            final fetched = await prov.discoverNotionPages(
+                              apiToken: apiToken,
+                              query: queryCtrl.text.trim(),
+                              limit: 30,
+                            );
+                            if (!mounted || !ctx.mounted) return;
+                            setState(() {
+                              pages = fetched;
+                              final hasSelected = pages
+                                  .any((page) => page.id == selectedPageId);
+                              if (!hasSelected) {
+                                selectedPageId =
+                                    pages.isNotEmpty ? pages.first.id : '';
+                              }
+                              loadingPages = false;
+                            });
+
+                            if (fetched.isEmpty) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    prov.actionError ??
+                                        'Aucune page accessible trouvee',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                    icon: loadingPages
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.travel_explore_rounded, size: 16),
+                    label: Text(
+                      loadingPages ? 'Chargement...' : 'Charger mes pages',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: pages.any((p) => p.id == selectedPageId)
+                      ? selectedPageId
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Page parent Notion *',
+                    helperText: 'Choisis la page cible pour les exports',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: pages
+                      .map(
+                        (page) => DropdownMenuItem<String>(
+                          value: page.id,
+                          child: Text(
+                            page.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: saving || loadingPages
+                      ? null
+                      : (value) => setState(() => selectedPageId = value ?? ''),
+                ),
+                if (pages.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Charge d\'abord les pages accessibles avec ton token, puis selectionne-en une.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(ctx)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.62),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -832,11 +944,13 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   ? null
                   : () async {
                       final apiToken = tokenCtrl.text.trim();
-                      final parentPageId = parentPageCtrl.text.trim();
+                      final parentPageId = selectedPageId.trim();
                       if (apiToken.isEmpty || parentPageId.isEmpty) {
                         messenger.showSnackBar(
                           const SnackBar(
-                            content: Text('Token et page parente sont requis'),
+                            content: Text(
+                              'Token requis et page parent a selectionner',
+                            ),
                           ),
                         );
                         return;
@@ -882,7 +996,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
 
     tokenCtrl.dispose();
-    parentPageCtrl.dispose();
+    queryCtrl.dispose();
   }
 
   Future<void> _disconnectSlackIntegration() async {

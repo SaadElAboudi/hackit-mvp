@@ -523,6 +523,22 @@ class RoomService {
     return RoomIntegrationStatus.fromJson('notion', r);
   }
 
+  Future<List<NotionPageOption>> discoverNotionPages(
+    String roomId, {
+    required String apiToken,
+    String query = '',
+    int limit = 20,
+  }) async {
+    final r = await _post('/api/rooms/$roomId/integrations/notion/pages', {
+      'apiToken': apiToken,
+      'query': query,
+      'limit': limit.clamp(1, 50),
+    });
+    return (r['pages'] as List? ?? [])
+        .map((j) => NotionPageOption.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<void> connectNotionIntegration(
     String roomId, {
     required String apiToken,
