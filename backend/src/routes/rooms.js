@@ -503,6 +503,8 @@ function toPercent(part, total) {
     return Math.round((part / total) * 1000) / 10;
 }
 
+const LOW_SAMPLE_ROOMS_THRESHOLD = 10;
+
 function parseSinceDays(raw) {
     if (raw === undefined || raw === null || raw === '') return null;
     const value = Number.parseInt(String(raw), 10);
@@ -520,19 +522,27 @@ function parseGroupBy(raw) {
 function buildTemplateInsights(stats) {
     const active = stats.filter((s) => s.roomsCreated > 0);
 
-    const byFeedback = [...active].sort((a, b) => {
-        if (b.feedbackAverage !== a.feedbackAverage) {
-            return b.feedbackAverage - a.feedbackAverage;
+    const byConfidenceThen = (left, right, metricCmp) => {
+        // Prefer non-low-sample rows when ranking winners.
+        if (left.isLowSample !== right.isLowSample) {
+            return left.isLowSample ? 1 : -1;
         }
-        return b.roomsCreated - a.roomsCreated;
-    });
+        return metricCmp(left, right);
+    };
 
-    const byD7 = [...active].sort((a, b) => {
-        if (b.d7RetentionRate !== a.d7RetentionRate) {
-            return b.d7RetentionRate - a.d7RetentionRate;
+    const byFeedback = [...active].sort((a, b) => byConfidenceThen(a, b, (x, y) => {
+        if (y.feedbackAverage !== x.feedbackAverage) {
+            return y.feedbackAverage - x.feedbackAverage;
         }
-        return b.roomsCreated - a.roomsCreated;
-    });
+        return y.roomsCreated - x.roomsCreated;
+    }));
+
+    const byD7 = [...active].sort((a, b) => byConfidenceThen(a, b, (x, y) => {
+        if (y.d7RetentionRate !== x.d7RetentionRate) {
+            return y.d7RetentionRate - x.d7RetentionRate;
+        }
+        return y.roomsCreated - x.roomsCreated;
+    }));
 
     const underperformingTemplates = [...active]
         .filter(
@@ -717,6 +727,7 @@ router.get('/templates/stats', async (req, res) => {
             return {
                 ...s,
                 feedbackAverage,
+                isLowSample: s.roomsCreated < LOW_SAMPLE_ROOMS_THRESHOLD,
                 d1RetentionRate: toPercent(s.d1RetainedRooms, s.roomsCreated),
                 d7RetentionRate: toPercent(s.d7RetainedRooms, s.roomsCreated),
             };
@@ -728,6 +739,7 @@ router.get('/templates/stats', async (req, res) => {
             insights,
             sinceDays: sinceDays || null,
             groupBy,
+            lowSampleThreshold: LOW_SAMPLE_ROOMS_THRESHOLD,
             generatedAt: new Date().toISOString(),
         });
     } catch (err) {

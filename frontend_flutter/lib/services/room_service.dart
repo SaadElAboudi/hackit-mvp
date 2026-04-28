@@ -170,6 +170,7 @@ class RoomService {
     List<Map<String, String>> members = const [],
     String? displayName,
     String? templateId,
+    String? templateVersion,
     String? purpose,
   }) async {
     final body = <String, dynamic>{
@@ -177,6 +178,7 @@ class RoomService {
       'type': type,
       'members': members,
       if (templateId != null) 'templateId': templateId,
+      if (templateVersion != null) 'templateVersion': templateVersion,
       if (purpose != null) 'purpose': purpose,
     };
     final r = await _post('/api/rooms', body, displayName: displayName);

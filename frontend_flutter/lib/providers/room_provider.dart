@@ -88,6 +88,7 @@ class RoomProvider extends ChangeNotifier {
     String type = 'group',
     String? displayName,
     String? templateId,
+    String? templateVersion,
   }) async {
     try {
       final room = await _svc.createRoom(
@@ -95,6 +96,7 @@ class RoomProvider extends ChangeNotifier {
         type: type,
         displayName: displayName,
         templateId: templateId,
+        templateVersion: templateVersion,
       );
       rooms.insert(0, room);
       notifyListeners();

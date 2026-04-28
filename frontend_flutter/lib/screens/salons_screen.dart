@@ -185,13 +185,14 @@ class _SalonsScreenState extends State<SalonsScreen> {
       builder: (ctx) => _CreateRoomDialog(
         nameCtrl: nameCtrl,
         prov: prov,
-        onSubmit: (name, templateId) async {
+        onSubmit: (name, templateId, templateVersion) async {
           Navigator.of(ctx).pop();
           final displayName = _displayName();
           final room = await prov.createRoom(
             name: name,
             displayName: displayName,
             templateId: templateId,
+            templateVersion: templateVersion,
           );
           if (room != null && context.mounted) {
             _openRoom(context, room);
@@ -328,8 +329,12 @@ class _TemplateStatsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final ranked = [...stats]
-      ..sort((a, b) => b.feedbackAverage.compareTo(a.feedbackAverage));
+    final ranked = [...stats]..sort((a, b) {
+        if (a.isLowSample != b.isLowSample) {
+          return a.isLowSample ? 1 : -1;
+        }
+        return b.feedbackAverage.compareTo(a.feedbackAverage);
+      });
 
     return Card(
       margin: EdgeInsets.zero,
@@ -457,6 +462,15 @@ class _TemplateStatsCard extends StatelessWidget {
                               color: scheme.onSurface.withValues(alpha: 0.65),
                             ),
                           ),
+                          if (s.isLowSample)
+                            Text(
+                              'Faible echantillon',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: scheme.error,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                         ],
                       ),
                     );
@@ -568,7 +582,11 @@ class _ErrorState extends StatelessWidget {
 class _CreateRoomDialog extends StatefulWidget {
   final TextEditingController nameCtrl;
   final RoomProvider prov;
-  final Future<void> Function(String name, String? templateId) onSubmit;
+  final Future<void> Function(
+    String name,
+    String? templateId,
+    String? templateVersion,
+  ) onSubmit;
 
   const _CreateRoomDialog({
     required this.nameCtrl,
@@ -582,6 +600,7 @@ class _CreateRoomDialog extends StatefulWidget {
 
 class _CreateRoomDialogState extends State<_CreateRoomDialog> {
   String? _selectedTemplateId;
+  String? _selectedTemplateVersion;
 
   @override
   Widget build(BuildContext context) {
@@ -605,6 +624,20 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
         selectedWeights.sort((a, b) => a.key.compareTo(b.key));
         final rolloutText =
             selectedWeights.map((e) => '${e.key} ${e.value}%').join(' / ');
+        final availableVersions = selectedWeights
+            .map((e) => e.key)
+            .where((v) => v.isNotEmpty)
+            .toList();
+        if (availableVersions.isEmpty &&
+            selectedTemplate != null &&
+            selectedTemplate.version.isNotEmpty) {
+          availableVersions.add(selectedTemplate.version);
+        }
+        final hasMultiVersion = availableVersions.length > 1;
+        if (_selectedTemplateVersion != null &&
+            !availableVersions.contains(_selectedTemplateVersion)) {
+          _selectedTemplateVersion = null;
+        }
 
         return AlertDialog(
           title: const Text('Créer un channel'),
@@ -643,6 +676,7 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                             onTap: () {
                               setState(() {
                                 _selectedTemplateId = null;
+                                _selectedTemplateVersion = null;
                               });
                             },
                             child: AnimatedContainer(
@@ -697,6 +731,9 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                           onTap: () {
                             setState(() {
                               _selectedTemplateId = selected ? null : t.id;
+                              if (selected) {
+                                _selectedTemplateVersion = null;
+                              }
                               // Auto-fill name if still empty
                               if (!selected && widget.nameCtrl.text.isEmpty) {
                                 widget.nameCtrl.text = t.name;
@@ -792,6 +829,45 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                                       scheme.onSurface.withValues(alpha: 0.7),
                                 ),
                               ),
+                              if (hasMultiVersion) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Version (optionnel)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color:
+                                        scheme.onSurface.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    ChoiceChip(
+                                      label: const Text('Auto (rollout)'),
+                                      selected:
+                                          _selectedTemplateVersion == null,
+                                      onSelected: (_) {
+                                        setState(() {
+                                          _selectedTemplateVersion = null;
+                                        });
+                                      },
+                                    ),
+                                    for (final version in availableVersions)
+                                      ChoiceChip(
+                                        label: Text(version),
+                                        selected:
+                                            _selectedTemplateVersion == version,
+                                        onSelected: (_) {
+                                          setState(() {
+                                            _selectedTemplateVersion = version;
+                                          });
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ],
                               if (rolloutText.isNotEmpty) ...[
                                 const SizedBox(height: 4),
                                 Text(
@@ -839,7 +915,11 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
               onPressed: () async {
                 final name = widget.nameCtrl.text.trim();
                 if (name.isEmpty) return;
-                await widget.onSubmit(name, _selectedTemplateId);
+                await widget.onSubmit(
+                  name,
+                  _selectedTemplateId,
+                  _selectedTemplateVersion,
+                );
               },
               child: const Text('Créer'),
             ),

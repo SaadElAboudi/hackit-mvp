@@ -84,6 +84,33 @@ async function requestJson({
     });
 }
 
+await test('GET /api/rooms/templates exposes versionWeights for rollout visibility', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/templates',
+        method: 'GET',
+        headers: {
+            'x-user-id': 'user_templates_list',
+            'x-display-name': 'Analyst',
+        },
+    });
+
+    assert.equal(res.status, 200);
+    const json = JSON.parse(res.data);
+    assert.ok(Array.isArray(json.templates));
+    const marketing = json.templates.find((t) => t.id === 'marketing');
+    assert.ok(marketing);
+    assert.equal(marketing.version, 'v1');
+    assert.deepEqual(marketing.versionWeights, { v1: 80, v2: 20 });
+});
+
 await test('POST /api/rooms persists templateId and applies directives', async (t) => {
     forceMongoReady();
     t.after(() => restoreMongoReady());
@@ -303,6 +330,7 @@ await test('GET /api/rooms/templates/stats aggregates usage and retention metric
     assert.ok(typeof json.generatedAt === 'string' && json.generatedAt.length > 0);
     assert.equal(json.sinceDays, null);
     assert.equal(json.groupBy, 'template');
+    assert.equal(json.lowSampleThreshold, 10);
 
     const marketing = json.stats.find((s) => s.templateId === 'marketing');
     assert.ok(marketing);
@@ -315,6 +343,7 @@ await test('GET /api/rooms/templates/stats aggregates usage and retention metric
     assert.equal(marketing.d7RetainedRooms, 1);
     assert.equal(marketing.d1RetentionRate, 50);
     assert.equal(marketing.d7RetentionRate, 50);
+    assert.equal(marketing.isLowSample, true);
 
     const product = json.stats.find((s) => s.templateId === 'product');
     assert.ok(product);
@@ -325,6 +354,7 @@ await test('GET /api/rooms/templates/stats aggregates usage and retention metric
     assert.equal(product.feedbackAverage, 1);
     assert.equal(product.d1RetentionRate, 100);
     assert.equal(product.d7RetentionRate, 100);
+    assert.equal(product.isLowSample, true);
 
     assert.ok(json.insights);
     assert.equal(json.insights.topByFeedback?.templateId, 'product');

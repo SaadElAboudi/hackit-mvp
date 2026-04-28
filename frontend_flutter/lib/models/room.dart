@@ -775,6 +775,7 @@ class DomainTemplateStats {
   final int feedbackUp;
   final int feedbackDown;
   final double feedbackAverage;
+  final bool isLowSample;
   final int d1RetainedRooms;
   final int d7RetainedRooms;
   final double d1RetentionRate;
@@ -791,6 +792,7 @@ class DomainTemplateStats {
     required this.feedbackUp,
     required this.feedbackDown,
     required this.feedbackAverage,
+    required this.isLowSample,
     required this.d1RetainedRooms,
     required this.d7RetainedRooms,
     required this.d1RetentionRate,
@@ -809,6 +811,7 @@ class DomainTemplateStats {
         feedbackUp: (j['feedbackUp'] as num?)?.toInt() ?? 0,
         feedbackDown: (j['feedbackDown'] as num?)?.toInt() ?? 0,
         feedbackAverage: (j['feedbackAverage'] as num?)?.toDouble() ?? 0,
+        isLowSample: j['isLowSample'] == true,
         d1RetainedRooms: (j['d1RetainedRooms'] as num?)?.toInt() ?? 0,
         d7RetainedRooms: (j['d7RetainedRooms'] as num?)?.toInt() ?? 0,
         d1RetentionRate: (j['d1RetentionRate'] as num?)?.toDouble() ?? 0,
@@ -849,12 +852,14 @@ class DomainTemplateStatsResponse {
   final DomainTemplateInsights? insights;
   final int? sinceDays;
   final String groupBy;
+  final int lowSampleThreshold;
 
   const DomainTemplateStatsResponse({
     required this.stats,
     required this.insights,
     required this.sinceDays,
     required this.groupBy,
+    required this.lowSampleThreshold,
   });
 
   factory DomainTemplateStatsResponse.fromJson(Map<String, dynamic> j) =>
@@ -869,5 +874,6 @@ class DomainTemplateStatsResponse {
             : null,
         sinceDays: (j['sinceDays'] as num?)?.toInt(),
         groupBy: j['groupBy']?.toString() ?? 'template',
+        lowSampleThreshold: (j['lowSampleThreshold'] as num?)?.toInt() ?? 10,
       );
 }
