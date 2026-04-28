@@ -730,6 +730,7 @@ class WsRoomEvent {
 
 class DomainTemplate {
   final String id;
+  final String version;
   final String name;
   final String emoji;
   final String description;
@@ -737,6 +738,7 @@ class DomainTemplate {
 
   const DomainTemplate({
     required this.id,
+    required this.version,
     required this.name,
     required this.emoji,
     required this.description,
@@ -745,6 +747,7 @@ class DomainTemplate {
 
   factory DomainTemplate.fromJson(Map<String, dynamic> j) => DomainTemplate(
         id: j['id']?.toString() ?? '',
+      version: j['version']?.toString() ?? '',
         name: j['name']?.toString() ?? '',
         emoji: j['emoji']?.toString() ?? '',
         description: j['description']?.toString() ?? '',

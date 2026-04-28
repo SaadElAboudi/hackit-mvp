@@ -591,6 +591,13 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
         final scheme = Theme.of(ctx).colorScheme;
         final templates = widget.prov.templates;
         final loading = widget.prov.loadingTemplates;
+        DomainTemplate? selectedTemplate;
+        for (final t in templates) {
+          if (t.id == _selectedTemplateId) {
+            selectedTemplate = t;
+            break;
+          }
+        }
 
         return AlertDialog(
           title: const Text('Créer un channel'),
@@ -620,10 +627,64 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                     height: 80,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: templates.length,
+                      itemCount: templates.length + 1,
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (ctx, i) {
-                        final t = templates[i];
+                        if (i == 0) {
+                          final selected = _selectedTemplateId == null;
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedTemplateId = null;
+                              });
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: 100,
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: selected
+                                      ? scheme.primary
+                                      : scheme.outlineVariant,
+                                  width: selected ? 2 : 1,
+                                ),
+                                color: selected
+                                    ? scheme.primaryContainer
+                                    : scheme.surfaceContainerLow,
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.block_rounded,
+                                    size: 24,
+                                    color: selected
+                                        ? scheme.onPrimaryContainer
+                                        : scheme.onSurface,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Aucun modèle',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: selected
+                                          ? scheme.onPrimaryContainer
+                                          : scheme.onSurface,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        final t = templates[i - 1];
                         final selected = _selectedTemplateId == t.id;
                         return GestureDetector(
                           onTap: () {
@@ -658,7 +719,9 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                                     style: const TextStyle(fontSize: 24)),
                                 const SizedBox(height: 4),
                                 Text(
-                                  t.name,
+                                  t.version.isEmpty
+                                      ? t.name
+                                      : '${t.name} ${t.version}',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -676,6 +739,54 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                         );
                       },
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: scheme.surfaceContainerHigh,
+                      border: Border.all(color: scheme.outlineVariant),
+                    ),
+                    child: selectedTemplate == null
+                        ? Text(
+                            'Sans modèle: le channel sera créé sans directives IA prédéfinies.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: scheme.onSurface.withValues(alpha: 0.7),
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${selectedTemplate.emoji} ${selectedTemplate.name}${selectedTemplate.version.isEmpty ? '' : ' ${selectedTemplate.version}'}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                selectedTemplate.description,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      scheme.onSurface.withValues(alpha: 0.7),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'But: ${selectedTemplate.purpose}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      scheme.onSurface.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ],
+                          ),
                   ),
                   const SizedBox(height: 12),
                 ],
