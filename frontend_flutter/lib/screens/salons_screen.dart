@@ -598,6 +598,13 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
             break;
           }
         }
+        final selectedWeights = selectedTemplate?.versionWeights.entries
+                .where((e) => e.value > 0)
+                .toList() ??
+            const [];
+        selectedWeights.sort((a, b) => a.key.compareTo(b.key));
+        final rolloutText =
+            selectedWeights.map((e) => '${e.key} ${e.value}%').join(' / ');
 
         return AlertDialog(
           title: const Text('Créer un channel'),
@@ -785,6 +792,17 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                                       scheme.onSurface.withValues(alpha: 0.7),
                                 ),
                               ),
+                              if (rolloutText.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rollout: $rolloutText',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        scheme.onSurface.withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                   ),

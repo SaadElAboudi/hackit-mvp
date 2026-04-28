@@ -483,7 +483,19 @@ router.get('/', async (req, res) => {
  * Returns the list of domain template packs (no auth required for the list).
  */
 router.get('/templates', (_req, res) => {
-    res.json({ templates: DOMAIN_TEMPLATES.map(({ id, version, name, emoji, description, purpose }) => ({ id, version, name, emoji, description, purpose })) });
+    res.json({
+        templates: DOMAIN_TEMPLATES.map(
+            ({ id, version, versionWeights, name, emoji, description, purpose }) => ({
+                id,
+                version,
+                versionWeights,
+                name,
+                emoji,
+                description,
+                purpose,
+            })
+        ),
+    });
 });
 
 function toPercent(part, total) {

@@ -731,6 +731,7 @@ class WsRoomEvent {
 class DomainTemplate {
   final String id;
   final String version;
+  final Map<String, int> versionWeights;
   final String name;
   final String emoji;
   final String description;
@@ -739,6 +740,7 @@ class DomainTemplate {
   const DomainTemplate({
     required this.id,
     required this.version,
+    required this.versionWeights,
     required this.name,
     required this.emoji,
     required this.description,
@@ -747,7 +749,14 @@ class DomainTemplate {
 
   factory DomainTemplate.fromJson(Map<String, dynamic> j) => DomainTemplate(
         id: j['id']?.toString() ?? '',
-      version: j['version']?.toString() ?? '',
+        version: j['version']?.toString() ?? '',
+        versionWeights: (j['versionWeights'] as Map?)?.map(
+              (k, v) => MapEntry(
+                k.toString(),
+                (v as num?)?.toInt() ?? int.tryParse(v.toString()) ?? 0,
+              ),
+            ) ??
+            const {},
         name: j['name']?.toString() ?? '',
         emoji: j['emoji']?.toString() ?? '',
         description: j['description']?.toString() ?? '',
