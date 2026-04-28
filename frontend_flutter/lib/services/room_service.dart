@@ -15,15 +15,25 @@ class RoomServiceException implements Exception {
   final String message;
   final String? code;
   final String? requestId;
+  final int? retryAfterSec;
 
   const RoomServiceException({
     required this.statusCode,
     required this.message,
     this.code,
     this.requestId,
+    this.retryAfterSec,
   });
 
   bool get isRateLimited => statusCode == 429 || code == 'RATE_LIMITED';
+
+  bool get isRetryable {
+    if (isRateLimited) return true;
+    if (statusCode == 408 || statusCode == 425) return true;
+    if (statusCode >= 500) return true;
+    if (code == 'INTERNAL_ERROR') return true;
+    return false;
+  }
 
   @override
   String toString() {
@@ -33,6 +43,9 @@ class RoomServiceException implements Exception {
     }
     if (requestId != null && requestId!.isNotEmpty) {
       parts.add('requestId: $requestId');
+    }
+    if (retryAfterSec != null && retryAfterSec! > 0) {
+      parts.add('retryAfterSec: $retryAfterSec');
     }
     return parts.join(' | ');
   }
@@ -127,12 +140,21 @@ class RoomService {
           (body['message'] ?? body['error'] ?? 'HTTP ${r.statusCode}')
               .toString();
       final code = body['code']?.toString();
-      final requestId = body['requestId']?.toString();
+      final requestId =
+          body['requestId']?.toString() ?? r.headers['x-request-id'];
+      final retryAfterHeader = int.tryParse(r.headers['retry-after'] ?? '');
+      final retryAfterBody = body['details'] is Map<String, dynamic>
+          ? int.tryParse(
+              ((body['details'] as Map<String, dynamic>)['retryAfterSec'] ?? '')
+                  .toString(),
+            )
+          : null;
       throw RoomServiceException(
         statusCode: r.statusCode,
         message: message,
         code: code,
         requestId: requestId,
+        retryAfterSec: retryAfterHeader ?? retryAfterBody,
       );
     }
     return body;

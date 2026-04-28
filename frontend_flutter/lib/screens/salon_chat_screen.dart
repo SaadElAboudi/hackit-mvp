@@ -1260,6 +1260,95 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           onInsertCommand: _insertCommand,
           useNeumorphControls: _useNeumorphControls,
         ),
+        if (prov.actionError != null)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: scheme.errorContainer.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: scheme.error.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  prov.actionError!,
+                  style: TextStyle(
+                    color: scheme.onErrorContainer,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    if (prov.actionContext != null && prov.actionContext!.isNotEmpty)
+                      Text(
+                        'Contexte: ${prov.actionContext}',
+                        style: TextStyle(
+                          color: scheme.onErrorContainer.withValues(alpha: 0.85),
+                          fontSize: 12,
+                        ),
+                      ),
+                    if (prov.actionRequestId != null && prov.actionRequestId!.isNotEmpty)
+                      GestureDetector(
+                        onTap: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: prov.actionRequestId!),
+                          );
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Request ID copie')),
+                          );
+                        },
+                        child: Text(
+                          'requestId: ${prov.actionRequestId}',
+                          style: TextStyle(
+                            color: scheme.onErrorContainer.withValues(alpha: 0.85),
+                            fontSize: 12,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (prov.canRetryLastAction)
+                      FilledButton.tonal(
+                        onPressed: prov.retryingLastAction
+                            ? null
+                            : () async {
+                                final ok = await prov.retryLastAction();
+                                if (!context.mounted || ok) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      prov.actionError ?? 'Nouvelle tentative en echec',
+                                    ),
+                                  ),
+                                );
+                              },
+                        child: Text(
+                          prov.retryingLastAction ? 'Reessai...' : 'Reessayer',
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: prov.clearActionError,
+                      child: const Text('Masquer'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         Expanded(child: _buildConversationList(prov, room, scheme)),
         _InputBar(
           controller: _inputCtrl,

@@ -142,18 +142,80 @@ class RoomProvider extends ChangeNotifier {
   bool loadingMessages = false;
   String? messagesError;
   String? actionError;
+  String? actionErrorCode;
+  String? actionRequestId;
+  int? actionRetryAfterSec;
+  String? actionContext;
+
+  Future<bool> Function()? _lastActionRetry;
+  bool retryingLastAction = false;
 
   String _errorMessage(Object e) {
     if (e is RoomServiceException) {
       if (e.isRateLimited) {
-        return 'Trop de requetes. Reessayez dans quelques secondes.';
+        final retryPart = e.retryAfterSec != null && e.retryAfterSec! > 0
+            ? ' Reessayez dans ${e.retryAfterSec}s.'
+            : ' Reessayez dans quelques secondes.';
+        return 'Trop de requetes.$retryPart';
       }
-      if (e.requestId != null && e.requestId!.isNotEmpty) {
-        return '${e.message} (id: ${e.requestId})';
+      if (e.code == 'BAD_REQUEST') {
+        return e.message;
+      }
+      if (e.isRetryable) {
+        return 'Service temporairement indisponible. Reessayez.';
       }
       return e.message;
     }
     return e.toString().replaceFirst('Exception: ', '');
+  }
+
+  void _setActionError(
+    Object e, {
+    String? context,
+    Future<bool> Function()? retry,
+  }) {
+    actionError = _errorMessage(e);
+    actionContext = context;
+    if (e is RoomServiceException) {
+      actionErrorCode = e.code;
+      actionRequestId = e.requestId;
+      actionRetryAfterSec = e.retryAfterSec;
+    } else {
+      actionErrorCode = null;
+      actionRequestId = null;
+      actionRetryAfterSec = null;
+    }
+    _lastActionRetry = retry;
+    notifyListeners();
+  }
+
+  void clearActionError() {
+    actionError = null;
+    actionErrorCode = null;
+    actionRequestId = null;
+    actionRetryAfterSec = null;
+    actionContext = null;
+    _lastActionRetry = null;
+    notifyListeners();
+  }
+
+  bool get canRetryLastAction => _lastActionRetry != null;
+
+  Future<bool> retryLastAction() async {
+    final retry = _lastActionRetry;
+    if (retry == null || retryingLastAction) return false;
+    retryingLastAction = true;
+    notifyListeners();
+    try {
+      final ok = await retry();
+      if (ok) {
+        clearActionError();
+      }
+      return ok;
+    } finally {
+      retryingLastAction = false;
+      notifyListeners();
+    }
   }
 
   /// WS state
@@ -433,7 +495,7 @@ class RoomProvider extends ChangeNotifier {
   Future<bool> updateDirectives(String directives) async {
     final room = currentRoom;
     if (room == null) return false;
-    actionError = null;
+    clearActionError();
     try {
       await _svc.updateDirectives(room.id, directives);
       currentRoom = Room(
@@ -454,7 +516,11 @@ class RoomProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      actionError = _errorMessage(e);
+      _setActionError(
+        e,
+        context: 'directives',
+        retry: () => updateDirectives(directives),
+      );
       return false;
     }
   }
@@ -468,7 +534,7 @@ class RoomProvider extends ChangeNotifier {
   }) async {
     final room = currentRoom;
     if (room == null) return false;
-    actionError = null;
+    clearActionError();
     try {
       final challenge = await _svc.addChallenge(
         room.id,
@@ -483,7 +549,11 @@ class RoomProvider extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      actionError = _errorMessage(e);
+      _setActionError(
+        e,
+        context: 'challenge',
+        retry: () => addChallenge(messageId, content, displayName: displayName),
+      );
       return false;
     }
   }
@@ -497,7 +567,7 @@ class RoomProvider extends ChangeNotifier {
   }) async {
     final room = currentRoom;
     if (room == null) return false;
-    actionError = null;
+    clearActionError();
     try {
       final msg = await _svc.uploadDocument(
         room.id,
@@ -513,7 +583,11 @@ class RoomProvider extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      actionError = _errorMessage(e);
+      _setActionError(
+        e,
+        context: 'upload_document',
+        retry: () => uploadDocument(content, title: title, displayName: displayName),
+      );
       return false;
     }
   }
@@ -525,7 +599,7 @@ class RoomProvider extends ChangeNotifier {
   }) async {
     final room = currentRoom;
     if (room == null) return false;
-    actionError = null;
+    clearActionError();
     try {
       final artifact = await _svc.createArtifact(
         room.id,
@@ -542,7 +616,11 @@ class RoomProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      actionError = _errorMessage(e);
+      _setActionError(
+        e,
+        context: 'create_artifact',
+        retry: () => createArtifact(title, content, kind: kind),
+      );
       return false;
     }
   }
@@ -700,14 +778,18 @@ class RoomProvider extends ChangeNotifier {
   Future<bool> addMemory(String content, {String type = 'fact'}) async {
     final room = currentRoom;
     if (room == null) return false;
-    actionError = null;
+    clearActionError();
     try {
       await _svc.addMemory(room.id, content: content, type: type);
       memoryItems = await _svc.listMemory(room.id);
       notifyListeners();
       return true;
     } catch (e) {
-      actionError = _errorMessage(e);
+      _setActionError(
+        e,
+        context: 'add_memory',
+        retry: () => addMemory(content, type: type),
+      );
       return false;
     }
   }
@@ -715,14 +797,18 @@ class RoomProvider extends ChangeNotifier {
   Future<bool> createMission(String prompt, {String agentType = 'auto'}) async {
     final room = currentRoom;
     if (room == null) return false;
-    actionError = null;
+    clearActionError();
     try {
       await _svc.postMission(room.id, prompt, agentType: agentType);
       aiThinking = true;
       notifyListeners();
       return true;
     } catch (e) {
-      actionError = _errorMessage(e);
+      _setActionError(
+        e,
+        context: 'create_mission',
+        retry: () => createMission(prompt, agentType: agentType),
+      );
       return false;
     }
   }
