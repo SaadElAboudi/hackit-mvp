@@ -688,6 +688,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Bot token *',
                     hintText: 'xoxb-...',
+                    helperText: 'Token bot Slack requis (prefixe xoxb-)',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -698,6 +699,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Channel ID *',
                     hintText: 'C012AB3CD',
+                    helperText: 'ID channel Slack (prefixe C... ou G...)',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -719,6 +721,24 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         messenger.showSnackBar(
                           const SnackBar(
                             content: Text('Token et channel sont requis'),
+                          ),
+                        );
+                        return;
+                      }
+                      if (!botToken.startsWith('xoxb-')) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content:
+                                Text('Le token Slack doit commencer par xoxb-'),
+                          ),
+                        );
+                        return;
+                      }
+                      if (!RegExp(r'^[CG][A-Z0-9]{6,}$').hasMatch(channelId)) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content:
+                                Text('Channel ID invalide (ex: C012AB3CD)'),
                           ),
                         );
                         return;
@@ -783,6 +803,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   decoration: const InputDecoration(
                     labelText: 'API token *',
                     hintText: 'secret_... ou ntn_...',
+                    helperText:
+                        'Token integration Notion (secret_... ou ntn_...)',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -793,6 +815,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Parent page ID *',
                     hintText: 'Notion page id',
+                    helperText: 'ID de la page parente cible',
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -814,6 +837,17 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         messenger.showSnackBar(
                           const SnackBar(
                             content: Text('Token et page parente sont requis'),
+                          ),
+                        );
+                        return;
+                      }
+                      if (!(apiToken.startsWith('secret_') ||
+                          apiToken.startsWith('ntn_'))) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Le token Notion doit commencer par secret_ ou ntn_',
+                            ),
                           ),
                         );
                         return;
@@ -854,6 +888,28 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   Future<void> _disconnectSlackIntegration() async {
     final prov = context.read<RoomProvider>();
     final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Deconnecter Slack ?'),
+            content: const Text(
+              'Les prochains partages Slack seront bloques tant que la connexion n\'est pas reconfiguree.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Deconnecter'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
     final ok = await prov.disconnectSlackIntegration();
     if (!mounted) return;
     messenger.showSnackBar(
@@ -868,6 +924,28 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   Future<void> _disconnectNotionIntegration() async {
     final prov = context.read<RoomProvider>();
     final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Deconnecter Notion ?'),
+            content: const Text(
+              'Les prochains exports Notion seront bloques tant que la connexion n\'est pas reconfiguree.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Deconnecter'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+
     final ok = await prov.disconnectNotionIntegration();
     if (!mounted) return;
     messenger.showSnackBar(
