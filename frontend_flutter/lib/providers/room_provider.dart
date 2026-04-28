@@ -58,6 +58,8 @@ class RoomProvider extends ChangeNotifier {
   List<RoomArtifact> artifacts = [];
   List<RoomMemory> memoryItems = [];
   List<RoomMission> missions = [];
+  List<WorkspaceDecision> decisions = [];
+  List<WorkspaceTask> tasks = [];
   List<RoomShareHistoryItem> shareHistory = [];
   RoomIntegrationStatus? slackIntegration;
   RoomIntegrationStatus? notionIntegration;
@@ -112,10 +114,14 @@ class RoomProvider extends ChangeNotifier {
         _svc.listArtifacts(room.id),
         _svc.listMemory(room.id),
         _svc.listMissions(room.id),
+        _svc.listDecisions(room.id),
+        _svc.listTasks(room.id),
       ]);
       artifacts = contextResults[0] as List<RoomArtifact>;
       memoryItems = contextResults[1] as List<RoomMemory>;
       missions = contextResults[2] as List<RoomMission>;
+      decisions = contextResults[3] as List<WorkspaceDecision>;
+      tasks = contextResults[4] as List<WorkspaceTask>;
 
       // Keep integration/status loading best-effort so chat load never fails
       // due to optional side panels.
@@ -645,6 +651,48 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<DecisionExtractionResult?> previewMissionExtraction(
+    String missionId,
+  ) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      return await _svc.extractMissionDecisions(
+        room.id,
+        missionId,
+        persist: false,
+      );
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<DecisionExtractionResult?> persistMissionExtraction(
+    String missionId,
+  ) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      final result = await _svc.extractMissionDecisions(
+        room.id,
+        missionId,
+        persist: true,
+      );
+      decisions = await _svc.listDecisions(room.id);
+      tasks = await _svc.listTasks(room.id);
+      notifyListeners();
+      return result;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<void> refreshIntegrationStatus() async {
     final room = currentRoom;
     if (room == null) return;
@@ -716,6 +764,8 @@ class RoomProvider extends ChangeNotifier {
     artifacts = [];
     memoryItems = [];
     missions = [];
+    decisions = [];
+    tasks = [];
     shareHistory = [];
     slackIntegration = null;
     notionIntegration = null;

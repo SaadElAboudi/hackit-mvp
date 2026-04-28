@@ -316,6 +316,150 @@ class RoomMission {
       );
 }
 
+class WorkspaceDecision {
+  final String id;
+  final String title;
+  final String summary;
+  final String sourceType;
+  final String sourceId;
+  final String createdByName;
+  final DateTime createdAt;
+
+  const WorkspaceDecision({
+    required this.id,
+    required this.title,
+    required this.summary,
+    required this.sourceType,
+    required this.sourceId,
+    required this.createdByName,
+    required this.createdAt,
+  });
+
+  factory WorkspaceDecision.fromJson(Map<String, dynamic> j) =>
+      WorkspaceDecision(
+        id: j['_id']?.toString() ?? j['id']?.toString() ?? '',
+        title: j['title']?.toString() ?? '',
+        summary: j['summary']?.toString() ?? '',
+        sourceType: j['sourceType']?.toString() ?? 'manual',
+        sourceId: j['sourceId']?.toString() ?? '',
+        createdByName: j['createdByName']?.toString() ?? 'Anonyme',
+        createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
+            DateTime.now(),
+      );
+}
+
+class WorkspaceTask {
+  final String id;
+  final String decisionId;
+  final String title;
+  final String description;
+  final String status;
+  final String ownerId;
+  final String ownerName;
+  final DateTime? dueDate;
+  final DateTime updatedAt;
+
+  const WorkspaceTask({
+    required this.id,
+    required this.decisionId,
+    required this.title,
+    required this.description,
+    required this.status,
+    required this.ownerId,
+    required this.ownerName,
+    required this.dueDate,
+    required this.updatedAt,
+  });
+
+  factory WorkspaceTask.fromJson(Map<String, dynamic> j) => WorkspaceTask(
+        id: j['_id']?.toString() ?? j['id']?.toString() ?? '',
+        decisionId: j['decisionId']?.toString() ?? '',
+        title: j['title']?.toString() ?? '',
+        description: j['description']?.toString() ?? '',
+        status: j['status']?.toString() ?? 'todo',
+        ownerId: j['ownerId']?.toString() ?? '',
+        ownerName: j['ownerName']?.toString() ?? '',
+        dueDate: DateTime.tryParse(j['dueDate']?.toString() ?? ''),
+        updatedAt: DateTime.tryParse(j['updatedAt']?.toString() ?? '') ??
+            DateTime.now(),
+      );
+}
+
+class ExtractedTaskDraft {
+  final String title;
+  final String description;
+
+  const ExtractedTaskDraft({
+    required this.title,
+    required this.description,
+  });
+
+  factory ExtractedTaskDraft.fromJson(Map<String, dynamic> j) =>
+      ExtractedTaskDraft(
+        title: j['title']?.toString() ?? '',
+        description: j['description']?.toString() ?? '',
+      );
+}
+
+class ExtractedDecisionDraft {
+  final String title;
+  final String summary;
+  final List<ExtractedTaskDraft> tasks;
+
+  const ExtractedDecisionDraft({
+    required this.title,
+    required this.summary,
+    required this.tasks,
+  });
+
+  factory ExtractedDecisionDraft.fromJson(Map<String, dynamic> j) =>
+      ExtractedDecisionDraft(
+        title: j['title']?.toString() ?? '',
+        summary: j['summary']?.toString() ?? '',
+        tasks: (j['tasks'] as List? ?? [])
+            .whereType<Map>()
+            .map((task) =>
+                ExtractedTaskDraft.fromJson(task.cast<String, dynamic>()))
+            .toList(),
+      );
+}
+
+class DecisionExtractionResult {
+  final bool persisted;
+  final List<ExtractedDecisionDraft> extracted;
+  final List<WorkspaceDecision> decisions;
+  final List<WorkspaceTask> tasks;
+  final String? missionId;
+
+  const DecisionExtractionResult({
+    required this.persisted,
+    required this.extracted,
+    required this.decisions,
+    required this.tasks,
+    required this.missionId,
+  });
+
+  factory DecisionExtractionResult.fromJson(Map<String, dynamic> j) =>
+      DecisionExtractionResult(
+        persisted: j['persisted'] == true,
+        extracted: (j['extracted'] as List? ?? [])
+            .whereType<Map>()
+            .map((item) =>
+                ExtractedDecisionDraft.fromJson(item.cast<String, dynamic>()))
+            .toList(),
+        decisions: (j['decisions'] as List? ?? [])
+            .whereType<Map>()
+            .map((item) =>
+                WorkspaceDecision.fromJson(item.cast<String, dynamic>()))
+            .toList(),
+        tasks: (j['tasks'] as List? ?? [])
+            .whereType<Map>()
+            .map((item) => WorkspaceTask.fromJson(item.cast<String, dynamic>()))
+            .toList(),
+        missionId: (j['missionContext'] as Map?)?['missionId']?.toString(),
+      );
+}
+
 class RoomMemory {
   final String id;
   final String type;

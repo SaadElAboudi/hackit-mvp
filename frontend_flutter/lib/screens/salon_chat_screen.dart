@@ -370,6 +370,134 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     }
   }
 
+  Future<void> _showMissionExtractionDialog(RoomMission mission) async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    final preview = await prov.previewMissionExtraction(mission.id);
+    if (!mounted) return;
+    if (preview == null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(prov.actionError ?? 'Extraction impossible')),
+      );
+      return;
+    }
+
+    bool saving = false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Extraire decisions et taches'),
+          content: SizedBox(
+            width: 520,
+            child: preview.extracted.isEmpty
+                ? const Text(
+                    'Aucune decision exploitable detectee pour cette mission.')
+                : SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          mission.promptPreview ?? mission.prompt,
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        ...preview.extracted.map(
+                          (decision) => Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  decision.title,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700),
+                                ),
+                                if (decision.summary.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(decision.summary),
+                                ],
+                                if (decision.tasks.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  ...decision.tasks.map(
+                                    (task) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('• '),
+                                          Expanded(
+                                            child: Text(
+                                              task.description.isEmpty
+                                                  ? task.title
+                                                  : '${task.title} — ${task.description}',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Fermer'),
+            ),
+            FilledButton.icon(
+              onPressed: saving || preview.extracted.isEmpty
+                  ? null
+                  : () async {
+                      setState(() => saving = true);
+                      final persisted =
+                          await prov.persistMissionExtraction(mission.id);
+                      if (!mounted || !ctx.mounted) return;
+                      if (persisted == null) {
+                        setState(() => saving = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              prov.actionError ??
+                                  'Impossible de persister l\'extraction',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.of(ctx).pop();
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '${persisted.decisions.length} decision(s) et ${persisted.tasks.length} tache(s) creees',
+                          ),
+                        ),
+                      );
+                    },
+              icon: saving
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.auto_awesome_rounded),
+              label: Text(saving ? 'Creation...' : 'Creer les taches'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showReviseArtifactDialog(RoomArtifact artifact) async {
     final ctrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -616,6 +744,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         artifacts: prov.artifacts,
                         memoryItems: prov.memoryItems,
                         missions: prov.missions,
+                        decisions: prov.decisions,
+                        tasks: prov.tasks,
                         slackIntegration: prov.slackIntegration,
                         notionIntegration: prov.notionIntegration,
                         shareHistory: prov.shareHistory,
@@ -626,6 +756,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         onInsertCommand: _insertCommand,
                         onReviseArtifact: _showReviseArtifactDialog,
                         onLaunchMission: _showLaunchMissionDialog,
+                        onExtractMission: _showMissionExtractionDialog,
                         onRefreshIntegrations: prov.refreshIntegrationStatus,
                         onRefreshShareHistory: () => prov.refreshShareHistory(),
                         onOpenCanvas: (artifact) => Navigator.push(
@@ -2194,6 +2325,8 @@ class _ContextPanel extends StatelessWidget {
   final List<RoomArtifact> artifacts;
   final List<RoomMemory> memoryItems;
   final List<RoomMission> missions;
+  final List<WorkspaceDecision> decisions;
+  final List<WorkspaceTask> tasks;
   final RoomIntegrationStatus? slackIntegration;
   final RoomIntegrationStatus? notionIntegration;
   final List<RoomShareHistoryItem> shareHistory;
@@ -2204,6 +2337,7 @@ class _ContextPanel extends StatelessWidget {
   final void Function(String command) onInsertCommand;
   final Future<void> Function(RoomArtifact artifact) onReviseArtifact;
   final VoidCallback onLaunchMission;
+  final Future<void> Function(RoomMission mission) onExtractMission;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
   final void Function(RoomArtifact artifact) onOpenCanvas;
@@ -2213,6 +2347,8 @@ class _ContextPanel extends StatelessWidget {
     required this.artifacts,
     required this.memoryItems,
     required this.missions,
+    required this.decisions,
+    required this.tasks,
     required this.slackIntegration,
     required this.notionIntegration,
     required this.shareHistory,
@@ -2223,6 +2359,7 @@ class _ContextPanel extends StatelessWidget {
     required this.onInsertCommand,
     required this.onReviseArtifact,
     required this.onLaunchMission,
+    required this.onExtractMission,
     required this.onRefreshIntegrations,
     required this.onRefreshShareHistory,
     required this.onOpenCanvas,
@@ -2443,6 +2580,77 @@ class _ContextPanel extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text('${mission.agentLabel} · ${mission.status}'),
+                trailing: mission.status == 'done'
+                    ? IconButton(
+                        tooltip: 'Extraire decisions et taches',
+                        icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                        onPressed: () => onExtractMission(mission),
+                      )
+                    : null,
+              ),
+            ),
+        sectionTitle(
+          'Decisions',
+          subtitle: decisions.isEmpty
+              ? 'Aucune decision structuree pour le moment.'
+              : null,
+        ),
+        ...decisions.take(4).map(
+              (decision) => ListTile(
+                dense: true,
+                leading: Icon(
+                  Icons.rule_folder_rounded,
+                  color: scheme.primary,
+                  size: 18,
+                ),
+                title: Text(
+                  decision.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  decision.summary.isNotEmpty
+                      ? decision.summary
+                      : '${decision.sourceType} • ${decision.createdByName}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+        sectionTitle(
+          'Taches',
+          subtitle: tasks.isEmpty ? 'Aucune tache suivie actuellement.' : null,
+        ),
+        ...tasks.take(6).map(
+              (task) => ListTile(
+                dense: true,
+                leading: Icon(
+                  task.status == 'done'
+                      ? Icons.check_circle_outline_rounded
+                      : task.status == 'blocked'
+                          ? Icons.block_outlined
+                          : task.status == 'in_progress'
+                              ? Icons.timelapse_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                  size: 18,
+                  color: task.status == 'done'
+                      ? Colors.green
+                      : task.status == 'blocked'
+                          ? scheme.error
+                          : scheme.secondary,
+                ),
+                title: Text(
+                  task.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  task.ownerName.isNotEmpty
+                      ? '${task.status} • ${task.ownerName}'
+                      : task.status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
         sectionTitle(

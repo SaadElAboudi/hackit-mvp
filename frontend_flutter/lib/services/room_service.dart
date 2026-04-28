@@ -272,6 +272,36 @@ class RoomService {
         .toList();
   }
 
+  Future<List<WorkspaceDecision>> listDecisions(String roomId) async {
+    final r = await _get('/api/rooms/$roomId/decisions');
+    return (r['decisions'] as List? ?? [])
+        .map((j) => WorkspaceDecision.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<WorkspaceTask>> listTasks(String roomId) async {
+    final r = await _get('/api/rooms/$roomId/tasks');
+    return (r['tasks'] as List? ?? [])
+        .map((j) => WorkspaceTask.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<DecisionExtractionResult> extractMissionDecisions(
+    String roomId,
+    String missionId, {
+    bool persist = false,
+    int recentLimit = 20,
+  }) async {
+    final r = await _post(
+      '/api/rooms/$roomId/missions/$missionId/extract',
+      {
+        'persist': persist,
+        'recentLimit': recentLimit,
+      },
+    );
+    return DecisionExtractionResult.fromJson(r);
+  }
+
   Future<void> postMission(String roomId, String prompt,
       {String agentType = 'auto'}) async {
     await _post('/api/rooms/$roomId/missions', {
