@@ -936,6 +936,29 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> shareToIntegration({
+    required String target,
+    String note = '',
+  }) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    notifyListeners();
+    try {
+      await _svc.shareToIntegration(
+        room.id,
+        target: target,
+        note: note,
+      );
+      await refreshShareHistory(limit: 12);
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
   // ── Invite link ────────────────────────────────────────────────────────────────
 
   Future<String?> getInviteLink() async {

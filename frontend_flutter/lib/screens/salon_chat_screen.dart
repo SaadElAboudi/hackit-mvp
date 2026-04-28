@@ -1071,6 +1071,25 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
+  Future<void> _shareToIntegration({
+    required String target,
+    required String label,
+  }) async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await prov.shareToIntegration(target: target);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Partage envoye vers $label'
+              : (prov.actionError ?? 'Partage impossible vers $label'),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showReviseArtifactDialog(RoomArtifact artifact) async {
     final ctrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -1285,6 +1304,10 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       onDisconnectSlackIntegration: _disconnectSlackIntegration,
       onConnectNotionIntegration: _showNotionIntegrationDialog,
       onDisconnectNotionIntegration: _disconnectNotionIntegration,
+      onShareToSlack: () =>
+          _shareToIntegration(target: 'slack', label: 'Slack'),
+      onShareToNotion: () =>
+          _shareToIntegration(target: 'notion', label: 'Notion'),
       onRefreshIntegrations: prov.refreshIntegrationStatus,
       onRefreshShareHistory: () => prov.refreshShareHistory(),
       onOpenCanvas: (artifact) => Navigator.push(
@@ -3023,6 +3046,8 @@ class _ContextPanel extends StatelessWidget {
   final Future<void> Function() onDisconnectSlackIntegration;
   final Future<void> Function() onConnectNotionIntegration;
   final Future<void> Function() onDisconnectNotionIntegration;
+  final Future<void> Function() onShareToSlack;
+  final Future<void> Function() onShareToNotion;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
   final void Function(RoomArtifact artifact) onOpenCanvas;
@@ -3052,6 +3077,8 @@ class _ContextPanel extends StatelessWidget {
     required this.onDisconnectSlackIntegration,
     required this.onConnectNotionIntegration,
     required this.onDisconnectNotionIntegration,
+    required this.onShareToSlack,
+    required this.onShareToNotion,
     required this.onRefreshIntegrations,
     required this.onRefreshShareHistory,
     required this.onOpenCanvas,
@@ -3473,6 +3500,28 @@ class _ContextPanel extends StatelessWidget {
               ],
             ),
           ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed:
+                    slackIntegration?.connected == true ? onShareToSlack : null,
+                icon: const Icon(Icons.send_rounded, size: 16),
+                label: const Text('Partager vers Slack'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: notionIntegration?.connected == true
+                    ? onShareToNotion
+                    : null,
+                icon: const Icon(Icons.send_rounded, size: 16),
+                label: const Text('Partager vers Notion'),
+              ),
+            ],
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
           child: Align(

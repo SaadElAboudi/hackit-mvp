@@ -554,6 +554,17 @@ class RoomService {
     await _delete('/api/rooms/$roomId/integrations/notion');
   }
 
+  Future<void> shareToIntegration(
+    String roomId, {
+    required String target,
+    String note = '',
+  }) async {
+    await _post('/api/rooms/$roomId/share', {
+      'target': target,
+      if (note.trim().isNotEmpty) 'note': note.trim(),
+    });
+  }
+
   Future<List<RoomShareHistoryItem>> listShareHistory(
     String roomId, {
     String? target,
