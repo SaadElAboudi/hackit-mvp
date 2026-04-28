@@ -842,6 +842,105 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
+  Widget _buildWorkspaceContextPanel(
+    BuildContext context,
+    Room room,
+    RoomProvider prov,
+  ) {
+    return _ContextPanel(
+      room: room,
+      artifacts: prov.artifacts,
+      memoryItems: prov.memoryItems,
+      missions: prov.missions,
+      decisions: prov.decisions,
+      tasks: prov.tasks,
+      slackIntegration: prov.slackIntegration,
+      notionIntegration: prov.notionIntegration,
+      shareHistory: prov.shareHistory,
+      loadingIntegrations: prov.loadingIntegrations,
+      loadingShareHistory: prov.loadingShareHistory,
+      onlineUserIds: prov.onlineUserIds,
+      useNeumorphControls: _useNeumorphControls,
+      onInsertCommand: _insertCommand,
+      onReviseArtifact: _showReviseArtifactDialog,
+      onLaunchMission: _showLaunchMissionDialog,
+      onExtractMission: _showMissionExtractionDialog,
+      onEditTask: _showTaskEditDialog,
+      onRefreshIntegrations: prov.refreshIntegrationStatus,
+      onRefreshShareHistory: () => prov.refreshShareHistory(),
+      onOpenCanvas: (artifact) => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CanvasScreen(
+            roomId: artifact.roomId,
+            artifactId: artifact.id,
+            initialTitle: artifact.title,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showWorkspacePanel() async {
+    final prov = context.read<RoomProvider>();
+    final room = prov.currentRoom ?? widget.room;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.86,
+        maxChildSize: 0.96,
+        minChildSize: 0.55,
+        builder: (_, __) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.dashboard_customize_outlined,
+                    color: Theme.of(ctx).colorScheme.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Workspace',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Consumer<RoomProvider>(
+                builder: (ctx, sheetProv, _) =>
+                    _buildWorkspaceContextPanel(ctx, room, sheetProv),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -902,38 +1001,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                     padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
                     child: GlassPanel(
                       borderRadius: BorderRadius.circular(18),
-                      child: _ContextPanel(
-                        room: room,
-                        artifacts: prov.artifacts,
-                        memoryItems: prov.memoryItems,
-                        missions: prov.missions,
-                        decisions: prov.decisions,
-                        tasks: prov.tasks,
-                        slackIntegration: prov.slackIntegration,
-                        notionIntegration: prov.notionIntegration,
-                        shareHistory: prov.shareHistory,
-                        loadingIntegrations: prov.loadingIntegrations,
-                        loadingShareHistory: prov.loadingShareHistory,
-                        onlineUserIds: prov.onlineUserIds,
-                        useNeumorphControls: _useNeumorphControls,
-                        onInsertCommand: _insertCommand,
-                        onReviseArtifact: _showReviseArtifactDialog,
-                        onLaunchMission: _showLaunchMissionDialog,
-                        onExtractMission: _showMissionExtractionDialog,
-                        onEditTask: _showTaskEditDialog,
-                        onRefreshIntegrations: prov.refreshIntegrationStatus,
-                        onRefreshShareHistory: () => prov.refreshShareHistory(),
-                        onOpenCanvas: (artifact) => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CanvasScreen(
-                              roomId: artifact.roomId,
-                              artifactId: artifact.id,
-                              initialTitle: artifact.title,
-                            ),
-                          ),
-                        ),
-                      ),
+                      child: _buildWorkspaceContextPanel(context, room, prov),
                     ),
                   ),
                 ),
@@ -948,6 +1016,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   AppBar _buildAppBar(BuildContext context, Room room, ColorScheme scheme) {
     final prov = context.watch<RoomProvider>();
     final onlineCount = prov.onlineUserIds.length;
+    final showWorkspaceButton = MediaQuery.sizeOf(context).width < 1080;
 
     return AppBar(
       backgroundColor: scheme.surface,
@@ -1036,6 +1105,12 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
             MaterialPageRoute(builder: (_) => const ProfileScreen()),
           ),
         ),
+        if (showWorkspaceButton)
+          IconButton(
+            icon: const Icon(Icons.dashboard_customize_outlined),
+            tooltip: 'Workspace',
+            onPressed: _showWorkspacePanel,
+          ),
         // Members panel
         IconButton(
           icon: const Icon(Icons.group_rounded),
