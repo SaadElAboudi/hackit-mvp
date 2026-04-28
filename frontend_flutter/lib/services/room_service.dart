@@ -707,6 +707,25 @@ class RoomService {
     _wsUserIds.remove(roomId);
   }
 
+  /// Submit thumbs up (+1) or down (-1) on an AI message.
+  Future<Map<String, dynamic>> submitMessageFeedback({
+    required String roomId,
+    required String messageId,
+    required int rating,
+  }) async {
+    final res = await _http.post(
+      Uri.parse('$_base/api/rooms/$roomId/messages/$messageId/feedback'),
+      headers: await _headers(),
+      body: jsonEncode({'rating': rating}),
+    );
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 200) {
+      throw Exception(
+          data['message'] ?? data['error'] ?? 'Failed to submit feedback');
+    }
+    return data;
+  }
+
   void dispose() {
     for (final id in List.of(_controllers.keys)) {
       unsubscribeFromRoom(id);

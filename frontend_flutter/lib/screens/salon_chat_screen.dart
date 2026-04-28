@@ -1742,6 +1742,16 @@ class _MessageBubble extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (isAI)
+                  _AiFeedbackRow(
+                    message: message,
+                    onRate: (rating) {
+                      context.read<RoomProvider>().submitMessageFeedback(
+                            messageId: message.id,
+                            rating: rating,
+                          );
+                    },
+                  ),
               ],
             ),
           ),
@@ -2751,6 +2761,79 @@ class _DecisionCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── AI feedback row (thumbs up / down) ───────────────────────────────────────
+
+class _AiFeedbackRow extends StatelessWidget {
+  final RoomMessage message;
+  final void Function(int rating) onRate;
+
+  const _AiFeedbackRow({required this.message, required this.onRate});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final userRating = message.userRating;
+
+    Widget thumbButton(int value, IconData icon) {
+      final active = userRating == value;
+      return InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => onRate(active ? 0 : value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: active
+                    ? (value == 1 ? Colors.green.shade600 : Colors.red.shade400)
+                    : scheme.onSurface.withValues(alpha: 0.35),
+              ),
+              if (value == 1 && message.thumbsUp > 0) ...[
+                const SizedBox(width: 3),
+                Text(
+                  '${message.thumbsUp}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: active
+                        ? Colors.green.shade600
+                        : scheme.onSurface.withValues(alpha: 0.35),
+                  ),
+                ),
+              ],
+              if (value == -1 && message.thumbsDown > 0) ...[
+                const SizedBox(width: 3),
+                Text(
+                  '${message.thumbsDown}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: active
+                        ? Colors.red.shade400
+                        : scheme.onSurface.withValues(alpha: 0.35),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, left: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          thumbButton(1, Icons.thumb_up_outlined),
+          thumbButton(-1, Icons.thumb_down_outlined),
+        ],
       ),
     );
   }

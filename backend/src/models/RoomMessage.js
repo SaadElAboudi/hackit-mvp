@@ -1,5 +1,13 @@
 import mongoose from 'mongoose';
 
+const FeedbackSchema = new mongoose.Schema(
+  {
+    userId: { type: String, required: true },
+    rating: { type: Number, enum: [-1, 1], required: true },
+  },
+  { timestamps: true }
+);
+
 const ChallengeSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true },
@@ -39,6 +47,8 @@ const RoomMessageSchema = new mongoose.Schema(
     // Comments / challenges on a document, added by any member
     challenges: { type: [ChallengeSchema], default: [] },
     data: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // Thumbs up/down feedback on AI messages (one per userId)
+    feedback: { type: [FeedbackSchema], default: [] },
   },
   { timestamps: true }
 );

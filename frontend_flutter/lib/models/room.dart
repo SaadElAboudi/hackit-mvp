@@ -108,6 +108,10 @@ class RoomMessage {
   final List<RoomChallenge> challenges;
   final Map<String, dynamic> data;
   final DateTime createdAt;
+  // Feedback: thumbs up/down counts + this user's vote (1, -1, or 0 = none)
+  final int thumbsUp;
+  final int thumbsDown;
+  final int userRating; // 1, -1, or 0
 
   const RoomMessage({
     required this.id,
@@ -121,6 +125,9 @@ class RoomMessage {
     required this.challenges,
     required this.data,
     required this.createdAt,
+    this.thumbsUp = 0,
+    this.thumbsDown = 0,
+    this.userRating = 0,
   });
 
   factory RoomMessage.fromJson(Map<String, dynamic> j) => RoomMessage(
@@ -138,6 +145,9 @@ class RoomMessage {
         data: (j['data'] as Map?)?.cast<String, dynamic>() ?? const {},
         createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
             DateTime.now(),
+        thumbsUp: (j['thumbsUp'] as num?)?.toInt() ?? 0,
+        thumbsDown: (j['thumbsDown'] as num?)?.toInt() ?? 0,
+        userRating: (j['userRating'] as num?)?.toInt() ?? 0,
       );
 
   bool get isDocument => type == 'document' || type == 'artifact';
@@ -159,6 +169,31 @@ class RoomMessage {
         challenges: [...challenges, c],
         data: data,
         createdAt: createdAt,
+        thumbsUp: thumbsUp,
+        thumbsDown: thumbsDown,
+        userRating: userRating,
+      );
+
+  /// Copy with updated feedback counts (after submitting a vote)
+  RoomMessage withFeedback(
+          {required int thumbsUp,
+          required int thumbsDown,
+          required int userRating}) =>
+      RoomMessage(
+        id: id,
+        roomId: roomId,
+        senderId: senderId,
+        senderName: senderName,
+        isAI: isAI,
+        content: content,
+        type: type,
+        documentTitle: documentTitle,
+        challenges: challenges,
+        data: data,
+        createdAt: createdAt,
+        thumbsUp: thumbsUp,
+        thumbsDown: thumbsDown,
+        userRating: userRating,
       );
 }
 

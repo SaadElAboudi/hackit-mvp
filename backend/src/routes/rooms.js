@@ -43,10 +43,18 @@ import {
 } from '../services/roomWS.js';
 import {
     validateAddMemberPayload,
+    validateAiFeedbackPayload,
+    validateArtifactCommentPayload,
+    validateArtifactRejectPayload,
     validateArtifactStatusPayload,
     validateBody,
+    validateChallengePayload,
+    validateConnectNotionPayload,
+    validateConnectSlackPayload,
     validateCreateArtifactPayload,
+    validateCreateDocumentPayload,
     validateCreateMemoryPayload,
+    validateCreateMilestonePayload,
     validateCreateMissionPayload,
     validateCreateRoomPayload,
     validateCreateWorkspaceBlockPayload,
@@ -56,11 +64,13 @@ import {
     validateCreateWorkspaceTaskPayload,
     validateConvertDecisionToTasksPayload,
     validateDirectivesPayload,
+    validateDiscoverNotionPagesPayload,
     validateResolveCommentPayload,
     validateResolveWorkspaceCommentPayload,
     validateExtractWorkspaceDecisionsPayload,
     validateReorderWorkspaceBlocksPayload,
     validateReviseArtifactPayload,
+    validateRoomSearchPayload,
     validateShareHistoryQuery,
     validateSharePayload,
     validateSendMessagePayload,
@@ -1440,41 +1450,19 @@ router.get('/:id/milestones', async (req, res, next) => {
     }
 });
 
-router.post('/:id/milestones', async (req, res, next) => {
+router.post('/:id/milestones', validateBody(validateCreateMilestonePayload), async (req, res, next) => {
     try {
+        const { title, description, targetDate } = req.validatedBody;
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
         if (!isRoomMember(room, req.userId)) {
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
-        const title = String(req.body?.title || '').trim();
-        if (!title) {
-            return res.status(400).json({
-                ok: false,
-                code: 'BAD_REQUEST',
-                message: 'title is required',
-                details: { field: 'title' },
-                requestId: req.requestId || null,
-            });
-        }
-
-        const targetDateRaw = String(req.body?.targetDate || '').trim();
-        const targetDate = targetDateRaw ? new Date(targetDateRaw) : null;
-        if (targetDateRaw && Number.isNaN(targetDate?.getTime())) {
-            return res.status(400).json({
-                ok: false,
-                code: 'BAD_REQUEST',
-                message: 'targetDate must be a valid date',
-                details: { field: 'targetDate' },
-                requestId: req.requestId || null,
-            });
-        }
-
         const milestone = await WorkspaceMilestone.create({
             roomId: req.params.id,
-            title: title.slice(0, 180),
-            description: String(req.body?.description || '').trim().slice(0, 2000),
+            title,
+            description,
             targetDate,
             createdBy: req.userId,
             createdByName: req.displayName,
@@ -1507,12 +1495,9 @@ router.patch('/:id/directives', validateBody(validateDirectivesPayload), async (
     }
 });
 
-router.post('/:id/messages/:msgId/challenge', async (req, res) => {
+router.post('/:id/messages/:msgId/challenge', validateBody(validateChallengePayload), async (req, res, next) => {
     try {
-        const content = String(req.body?.content || '').trim();
-        if (!content) {
-            return res.status(400).json({ error: 'content is required' });
-        }
+        const { content } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -1560,8 +1545,7 @@ router.post('/:id/messages/:msgId/challenge', async (req, res) => {
 
         res.status(201).json({ challenge: savedChallenge });
     } catch (err) {
-        console.error('[rooms] challenge error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -1882,16 +1866,9 @@ router.post('/:id/artifacts/:artifactId/versions/:versionId/approve', async (req
     }
 });
 
-router.post('/:id/artifacts/:artifactId/versions/:versionId/comment', async (req, res, next) => {
+router.post('/:id/artifacts/:artifactId/versions/:versionId/comment', validateBody(validateArtifactCommentPayload), async (req, res, next) => {
     try {
-        const content = String(req.body?.content || '').trim();
-        if (!content) {
-            const err = new Error('content is required');
-            err.status = 400;
-            err.code = 'BAD_REQUEST';
-            err.details = { field: 'content' };
-            return next(err);
-        }
+        const { content } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -1982,8 +1959,11 @@ router.patch(
 
 router.post(
     '/:id/artifacts/:artifactId/versions/:versionId/reject',
+    validateBody(validateArtifactRejectPayload),
     async (req, res, next) => {
         try {
+            const { reason } = req.validatedBody;
+
             const room = await loadRoomOr404(req.params.id, res);
             if (!room) return;
             if (!isRoomOwner(room, req.userId)) {
@@ -2007,7 +1987,6 @@ router.post(
                 return res.status(404).json({ error: 'Version not found' });
             }
 
-            const reason = String(req.body?.reason || '').trim().slice(0, 400);
             version.status = 'rejected';
             if (reason) {
                 version.comments.push({
@@ -2019,7 +1998,6 @@ router.post(
             }
             await version.save();
 
-            // Move artifact back to draft if current version was rejected
             if (String(artifact.currentVersionId) === String(version._id)) {
                 artifact.status = 'draft';
                 artifact.updatedAt = new Date();
@@ -2220,12 +2198,9 @@ router.delete('/:id/memory/:memoryId', async (req, res) => {
     }
 });
 
-router.post('/:id/search', async (req, res) => {
+router.post('/:id/search', validateBody(validateRoomSearchPayload), async (req, res, next) => {
     try {
-        const query = String(req.body?.query || '').trim();
-        if (!query) {
-            return res.status(400).json({ error: 'query is required' });
-        }
+        const { query } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2248,18 +2223,13 @@ router.post('/:id/search', async (req, res) => {
 
         res.status(201).json(result);
     } catch (err) {
-        console.error('[rooms] collaborative search error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
-router.post('/:id/documents', async (req, res) => {
+router.post('/:id/documents', validateBody(validateCreateDocumentPayload), async (req, res, next) => {
     try {
-        const title = String(req.body?.title || '').trim();
-        const content = String(req.body?.content || '').trim();
-        if (!content) {
-            return res.status(400).json({ error: 'content is required' });
-        }
+        const { title, content } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2288,8 +2258,7 @@ router.post('/:id/documents', async (req, res) => {
 
         res.status(201).json({ message: result.message, artifact: result.artifact });
     } catch (err) {
-        console.error('[rooms] document error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -2325,23 +2294,9 @@ router.get('/:id/integrations/slack', async (req, res) => {
  * Connect Slack: store botToken + channelId and enable integration.
  * Validates the token with a cheap Slack API call (auth.test).
  */
-router.post('/:id/integrations/slack', async (req, res) => {
+router.post('/:id/integrations/slack', validateBody(validateConnectSlackPayload), async (req, res, next) => {
     try {
-        const botToken = String(req.body?.botToken || '').trim();
-        const channelId = String(req.body?.channelId || '').trim();
-
-        if (!botToken) {
-            return res.status(400).json({ error: 'botToken is required' });
-        }
-        if (!channelId) {
-            return res.status(400).json({ error: 'channelId is required' });
-        }
-        if (!/^xoxb-/.test(botToken)) {
-            return res.status(400).json({ error: 'botToken must be a Slack Bot token (starts with xoxb-)' });
-        }
-        if (!/^[CG][A-Z0-9]{6,}$/.test(channelId)) {
-            return res.status(400).json({ error: 'channelId must be a Slack channel ID (e.g. C012AB3CD)' });
-        }
+        const { botToken, channelId } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2353,7 +2308,6 @@ router.post('/:id/integrations/slack', async (req, res) => {
         // Validate the token against Slack by calling auth.test
         let { default: axios } = await import('axios').catch(() => ({ default: null }));
         if (!axios) {
-            // axios is always available as a CJS dep — import only on this path
             const m = await import('axios');
             axios = m.default ?? m;
         }
@@ -2389,8 +2343,7 @@ router.post('/:id/integrations/slack', async (req, res) => {
 
         res.status(201).json({ ok: true, channelId, connectedBy: req.userId });
     } catch (err) {
-        console.error('[rooms/slack] connect error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -2578,21 +2531,9 @@ router.get('/:id/share/history', async (req, res, next) => {
  * POST /api/rooms/:id/integrations/notion/pages
  * Discover accessible Notion pages for a token (does not persist integration).
  */
-router.post('/:id/integrations/notion/pages', async (req, res) => {
+router.post('/:id/integrations/notion/pages', validateBody(validateDiscoverNotionPagesPayload), async (req, res, next) => {
     try {
-        const apiToken = String(req.body?.apiToken || '').trim();
-        const query = String(req.body?.query || '').trim();
-        const limitRaw = Number(req.body?.limit);
-        const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, limitRaw)) : 20;
-
-        if (!apiToken) {
-            return res.status(400).json({ error: 'apiToken is required' });
-        }
-        if (!/^(secret_|ntn_)/.test(apiToken)) {
-            return res.status(400).json({
-                error: 'apiToken must be a Notion integration token (starts with secret_ or ntn_)',
-            });
-        }
+        const { apiToken, query, limit } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2603,8 +2544,7 @@ router.post('/:id/integrations/notion/pages', async (req, res) => {
         const pages = await discoverNotionPages({ apiToken, query, limit });
         res.json({ pages });
     } catch (err) {
-        console.error('[rooms/notion] discover pages error:', err);
-        res.status(400).json({ error: err?.message || 'Could not discover Notion pages' });
+        next(err);
     }
 });
 
@@ -2638,22 +2578,9 @@ router.get('/:id/integrations/notion', async (req, res) => {
  * Connect Notion: store apiToken + parentPageId.
  * Validates the token with a Notion search call.
  */
-router.post('/:id/integrations/notion', async (req, res) => {
+router.post('/:id/integrations/notion', validateBody(validateConnectNotionPayload), async (req, res, next) => {
     try {
-        const apiToken = String(req.body?.apiToken || '').trim();
-        const parentPageId = String(req.body?.parentPageId || '').trim();
-
-        if (!apiToken) {
-            return res.status(400).json({ error: 'apiToken is required' });
-        }
-        if (!parentPageId) {
-            return res.status(400).json({ error: 'parentPageId is required' });
-        }
-        if (!/^(secret_|ntn_)/.test(apiToken)) {
-            return res.status(400).json({
-                error: 'apiToken must be a Notion integration token (starts with secret_ or ntn_)',
-            });
-        }
+        const { apiToken, parentPageId } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2679,8 +2606,7 @@ router.post('/:id/integrations/notion', async (req, res) => {
 
         res.status(201).json({ ok: true, parentPageId, connectedBy: req.userId });
     } catch (err) {
-        console.error('[rooms/notion] connect error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        next(err);
     }
 });
 
@@ -2710,6 +2636,56 @@ router.delete('/:id/integrations/notion', async (req, res) => {
     } catch (err) {
         console.error('[rooms/notion] disconnect error:', err);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /api/rooms/:id/messages/:msgId/feedback
+ * Record thumbs up (+1) or down (-1) on an AI message.
+ * One vote per user; re-posting replaces the previous vote.
+ */
+router.post('/:id/messages/:msgId/feedback', validateBody(validateAiFeedbackPayload), async (req, res, next) => {
+    try {
+        const { rating } = req.validatedBody;
+
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const message = await RoomMessage.findOne({
+            _id: req.params.msgId,
+            roomId: req.params.id,
+        });
+        if (!message) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        if (!message.isAI) {
+            return res.status(400).json({
+                ok: false,
+                code: 'BAD_REQUEST',
+                message: 'Feedback can only be given on AI messages',
+                details: null,
+                requestId: req.requestId || null,
+            });
+        }
+
+        // Replace existing vote from this user, or push new one
+        const existing = message.feedback.find((f) => f.userId === req.userId);
+        if (existing) {
+            existing.rating = rating;
+        } else {
+            message.feedback.push({ userId: req.userId, rating });
+        }
+        await message.save();
+
+        const thumbsUp = message.feedback.filter((f) => f.rating === 1).length;
+        const thumbsDown = message.feedback.filter((f) => f.rating === -1).length;
+
+        res.json({ ok: true, messageId: String(message._id), thumbsUp, thumbsDown, userRating: rating });
+    } catch (err) {
+        next(err);
     }
 });
 

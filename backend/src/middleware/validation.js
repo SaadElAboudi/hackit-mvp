@@ -625,3 +625,130 @@ export function validateExtractWorkspaceDecisionsPayload(body) {
     missionId,
   };
 }
+
+export function validateCreateMilestonePayload(body) {
+  const title = String(body?.title || '').trim();
+  if (!title) {
+    throw badRequest('title is required', { field: 'title' });
+  }
+  const targetDateRaw = String(body?.targetDate || '').trim();
+  let targetDate = null;
+  if (targetDateRaw) {
+    const parsed = new Date(targetDateRaw);
+    if (Number.isNaN(parsed.getTime())) {
+      throw badRequest('targetDate must be a valid date', { field: 'targetDate' });
+    }
+    targetDate = parsed;
+  }
+  return {
+    title: title.slice(0, 180),
+    description: String(body?.description || '').trim().slice(0, 2000),
+    targetDate,
+  };
+}
+
+export function validateChallengePayload(body) {
+  const content = String(body?.content || '').trim();
+  if (!content) {
+    throw badRequest('content is required', { field: 'content' });
+  }
+  if (content.length > 2000) {
+    throw badRequest('content must be 2000 characters or fewer', { field: 'content', maxLength: 2000 });
+  }
+  return { content };
+}
+
+export function validateArtifactCommentPayload(body) {
+  const content = String(body?.content || '').trim();
+  if (!content) {
+    throw badRequest('content is required', { field: 'content' });
+  }
+  if (content.length > 2000) {
+    throw badRequest('content must be 2000 characters or fewer', { field: 'content', maxLength: 2000 });
+  }
+  return { content };
+}
+
+export function validateArtifactRejectPayload(body) {
+  const reason = String(body?.reason || '').trim().slice(0, 400);
+  return { reason };
+}
+
+export function validateRoomSearchPayload(body) {
+  const query = String(body?.query || '').trim();
+  if (!query) {
+    throw badRequest('query is required', { field: 'query' });
+  }
+  if (query.length > 1000) {
+    throw badRequest('query is too long', { field: 'query', max: 1000 });
+  }
+  return { query };
+}
+
+export function validateCreateDocumentPayload(body) {
+  const content = String(body?.content || '').trim();
+  if (!content) {
+    throw badRequest('content is required', { field: 'content' });
+  }
+  return {
+    title: String(body?.title || '').trim().slice(0, 180),
+    content,
+  };
+}
+
+export function validateConnectSlackPayload(body) {
+  const botToken = String(body?.botToken || '').trim();
+  const channelId = String(body?.channelId || '').trim();
+
+  if (!botToken) {
+    throw badRequest('botToken is required', { field: 'botToken' });
+  }
+  if (!channelId) {
+    throw badRequest('channelId is required', { field: 'channelId' });
+  }
+  if (!/^xoxb-/.test(botToken)) {
+    throw badRequest('botToken must be a Slack Bot token (starts with xoxb-)', { field: 'botToken' });
+  }
+  if (!/^[CG][A-Z0-9]{6,}$/.test(channelId)) {
+    throw badRequest('channelId must be a Slack channel ID (e.g. C012AB3CD)', { field: 'channelId' });
+  }
+  return { botToken, channelId };
+}
+
+export function validateConnectNotionPayload(body) {
+  const apiToken = String(body?.apiToken || '').trim();
+  const parentPageId = String(body?.parentPageId || '').trim();
+
+  if (!apiToken) {
+    throw badRequest('apiToken is required', { field: 'apiToken' });
+  }
+  if (!parentPageId) {
+    throw badRequest('parentPageId is required', { field: 'parentPageId' });
+  }
+  if (!/^(secret_|ntn_)/.test(apiToken)) {
+    throw badRequest('apiToken must be a Notion integration token (starts with secret_ or ntn_)', { field: 'apiToken' });
+  }
+  return { apiToken, parentPageId };
+}
+
+export function validateDiscoverNotionPagesPayload(body) {
+  const apiToken = String(body?.apiToken || '').trim();
+  if (!apiToken) {
+    throw badRequest('apiToken is required', { field: 'apiToken' });
+  }
+  if (!/^(secret_|ntn_)/.test(apiToken)) {
+    throw badRequest('apiToken must be a Notion integration token (starts with secret_ or ntn_)', { field: 'apiToken' });
+  }
+  const query = String(body?.query || '').trim().slice(0, 200);
+  const limitRaw = Number(body?.limit);
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(50, limitRaw)) : 20;
+  return { apiToken, query, limit };
+}
+
+export function validateAiFeedbackPayload(body) {
+  const rating = Number(body?.rating);
+  if (![-1, 1].includes(rating)) {
+    throw badRequest('rating must be 1 (thumbs up) or -1 (thumbs down)', { field: 'rating' });
+  }
+  return { rating };
+}

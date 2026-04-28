@@ -1023,4 +1023,63 @@ class RoomProvider extends ChangeNotifier {
     _wsSub?.cancel();
     super.dispose();
   }
+
+  /// Submit thumbs up (+1) or down (-1) on an AI message.
+  /// Optimistically updates the message in the local list.
+  Future<void> submitMessageFeedback({
+    required String messageId,
+    required int rating,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return;
+
+    // Optimistic update
+    final idx = messages.indexWhere((m) => m.id == messageId);
+    if (idx >= 0) {
+      final msg = messages[idx];
+      final prevRating = msg.userRating;
+      final newThumbsUp =
+          msg.thumbsUp + (rating == 1 ? 1 : 0) - (prevRating == 1 ? 1 : 0);
+      final newThumbsDown =
+          msg.thumbsDown + (rating == -1 ? 1 : 0) - (prevRating == -1 ? 1 : 0);
+      messages[idx] = msg.withFeedback(
+        thumbsUp: newThumbsUp.clamp(0, 99999),
+        thumbsDown: newThumbsDown.clamp(0, 99999),
+        userRating: rating,
+      );
+      notifyListeners();
+    }
+
+    try {
+      final result = await _svc.submitMessageFeedback(
+        roomId: room.id,
+        messageId: messageId,
+        rating: rating,
+      );
+      // Reconcile with server truth
+      if (idx >= 0) {
+        messages[idx] = messages[idx].withFeedback(
+          thumbsUp:
+              (result['thumbsUp'] as num?)?.toInt() ?? messages[idx].thumbsUp,
+          thumbsDown: (result['thumbsDown'] as num?)?.toInt() ??
+              messages[idx].thumbsDown,
+          userRating: rating,
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      // Revert optimistic on failure
+      if (idx >= 0) {
+        final msg = messages[idx];
+        messages[idx] = msg.withFeedback(
+          thumbsUp: msg.thumbsUp,
+          thumbsDown: msg.thumbsDown,
+          userRating: 0,
+        );
+        notifyListeners();
+      }
+      actionError = _errorMessage(e);
+      notifyListeners();
+    }
+  }
 }
