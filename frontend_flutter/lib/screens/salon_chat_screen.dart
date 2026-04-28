@@ -3336,6 +3336,29 @@ class _ContextPanel extends StatelessWidget {
               ],
             ),
           ),
+        if (!canManageIntegrations)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.admin_panel_settings_outlined,
+                  size: 16,
+                  color: scheme.onSurface.withValues(alpha: 0.55),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Gestion des integrations reservee au proprietaire du channel.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurface.withValues(alpha: 0.62),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
           child: Align(
