@@ -502,10 +502,40 @@ class RoomService {
     return RoomIntegrationStatus.fromJson('slack', r);
   }
 
+  Future<void> connectSlackIntegration(
+    String roomId, {
+    required String botToken,
+    required String channelId,
+  }) async {
+    await _post('/api/rooms/$roomId/integrations/slack', {
+      'botToken': botToken,
+      'channelId': channelId,
+    });
+  }
+
+  Future<void> disconnectSlackIntegration(String roomId) async {
+    await _delete('/api/rooms/$roomId/integrations/slack');
+  }
+
   Future<RoomIntegrationStatus> getNotionIntegrationStatus(
       String roomId) async {
     final r = await _get('/api/rooms/$roomId/integrations/notion');
     return RoomIntegrationStatus.fromJson('notion', r);
+  }
+
+  Future<void> connectNotionIntegration(
+    String roomId, {
+    required String apiToken,
+    required String parentPageId,
+  }) async {
+    await _post('/api/rooms/$roomId/integrations/notion', {
+      'apiToken': apiToken,
+      'parentPageId': parentPageId,
+    });
+  }
+
+  Future<void> disconnectNotionIntegration(String roomId) async {
+    await _delete('/api/rooms/$roomId/integrations/notion');
   }
 
   Future<List<RoomShareHistoryItem>> listShareHistory(

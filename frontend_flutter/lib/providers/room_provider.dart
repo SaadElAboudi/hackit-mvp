@@ -807,6 +807,84 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> connectSlackIntegration({
+    required String botToken,
+    required String channelId,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    notifyListeners();
+    try {
+      await _svc.connectSlackIntegration(
+        room.id,
+        botToken: botToken,
+        channelId: channelId,
+      );
+      await refreshIntegrationStatus();
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> disconnectSlackIntegration() async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    notifyListeners();
+    try {
+      await _svc.disconnectSlackIntegration(room.id);
+      await refreshIntegrationStatus();
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> connectNotionIntegration({
+    required String apiToken,
+    required String parentPageId,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    notifyListeners();
+    try {
+      await _svc.connectNotionIntegration(
+        room.id,
+        apiToken: apiToken,
+        parentPageId: parentPageId,
+      );
+      await refreshIntegrationStatus();
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> disconnectNotionIntegration() async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    notifyListeners();
+    try {
+      await _svc.disconnectNotionIntegration(room.id);
+      await refreshIntegrationStatus();
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> refreshShareHistory({
     String? target,
     String? status,

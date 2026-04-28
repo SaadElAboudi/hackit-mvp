@@ -662,6 +662,223 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
+  Future<void> _showSlackIntegrationDialog() async {
+    final prov = context.read<RoomProvider>();
+    final status = prov.slackIntegration;
+    final tokenCtrl = TextEditingController();
+    final channelCtrl = TextEditingController(text: status?.channelId ?? '');
+    final messenger = ScaffoldMessenger.of(context);
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Connecter Slack'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: tokenCtrl,
+                  enabled: !saving,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Bot token *',
+                    hintText: 'xoxb-...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: channelCtrl,
+                  enabled: !saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Channel ID *',
+                    hintText: 'C012AB3CD',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final botToken = tokenCtrl.text.trim();
+                      final channelId = channelCtrl.text.trim();
+                      if (botToken.isEmpty || channelId.isEmpty) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Token et channel sont requis'),
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() => saving = true);
+                      final ok = await prov.connectSlackIntegration(
+                        botToken: botToken,
+                        channelId: channelId,
+                      );
+                      if (!mounted || !ctx.mounted) return;
+                      if (!ok) {
+                        setState(() => saving = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              prov.actionError ?? 'Connexion Slack impossible',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.of(ctx).pop();
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Slack connecte')),
+                      );
+                    },
+              child: Text(saving ? 'Connexion...' : 'Connecter'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    tokenCtrl.dispose();
+    channelCtrl.dispose();
+  }
+
+  Future<void> _showNotionIntegrationDialog() async {
+    final prov = context.read<RoomProvider>();
+    final status = prov.notionIntegration;
+    final tokenCtrl = TextEditingController();
+    final parentPageCtrl =
+        TextEditingController(text: status?.parentPageId ?? '');
+    final messenger = ScaffoldMessenger.of(context);
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Connecter Notion'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: tokenCtrl,
+                  enabled: !saving,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'API token *',
+                    hintText: 'secret_... ou ntn_...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: parentPageCtrl,
+                  enabled: !saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Parent page ID *',
+                    hintText: 'Notion page id',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final apiToken = tokenCtrl.text.trim();
+                      final parentPageId = parentPageCtrl.text.trim();
+                      if (apiToken.isEmpty || parentPageId.isEmpty) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Token et page parente sont requis'),
+                          ),
+                        );
+                        return;
+                      }
+                      setState(() => saving = true);
+                      final ok = await prov.connectNotionIntegration(
+                        apiToken: apiToken,
+                        parentPageId: parentPageId,
+                      );
+                      if (!mounted || !ctx.mounted) return;
+                      if (!ok) {
+                        setState(() => saving = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              prov.actionError ?? 'Connexion Notion impossible',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.of(ctx).pop();
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Notion connecte')),
+                      );
+                    },
+              child: Text(saving ? 'Connexion...' : 'Connecter'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    tokenCtrl.dispose();
+    parentPageCtrl.dispose();
+  }
+
+  Future<void> _disconnectSlackIntegration() async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await prov.disconnectSlackIntegration();
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'Slack deconnecte' : (prov.actionError ?? 'Action impossible'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _disconnectNotionIntegration() async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await prov.disconnectNotionIntegration();
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? 'Notion deconnecte' : (prov.actionError ?? 'Action impossible'),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showReviseArtifactDialog(RoomArtifact artifact) async {
     final ctrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -848,6 +1065,9 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     Room room,
     RoomProvider prov,
   ) {
+    final canManageIntegrations =
+        _myUserId.isNotEmpty && room.ownerId == _myUserId;
+
     return _ContextPanel(
       room: room,
       artifacts: prov.artifacts,
@@ -862,12 +1082,17 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       loadingShareHistory: prov.loadingShareHistory,
       onlineUserIds: prov.onlineUserIds,
       useNeumorphControls: _useNeumorphControls,
+      canManageIntegrations: canManageIntegrations,
       onInsertCommand: _insertCommand,
       onReviseArtifact: _showReviseArtifactDialog,
       onLaunchMission: _showLaunchMissionDialog,
       onExtractMission: _showMissionExtractionDialog,
       onEditTask: _showTaskEditDialog,
       onOpenTaskBoard: _openTaskBoard,
+      onConnectSlackIntegration: _showSlackIntegrationDialog,
+      onDisconnectSlackIntegration: _disconnectSlackIntegration,
+      onConnectNotionIntegration: _showNotionIntegrationDialog,
+      onDisconnectNotionIntegration: _disconnectNotionIntegration,
       onRefreshIntegrations: prov.refreshIntegrationStatus,
       onRefreshShareHistory: () => prov.refreshShareHistory(),
       onOpenCanvas: (artifact) => Navigator.push(
@@ -2595,12 +2820,17 @@ class _ContextPanel extends StatelessWidget {
   final bool loadingShareHistory;
   final List<String> onlineUserIds;
   final bool useNeumorphControls;
+  final bool canManageIntegrations;
   final void Function(String command) onInsertCommand;
   final Future<void> Function(RoomArtifact artifact) onReviseArtifact;
   final VoidCallback onLaunchMission;
   final Future<void> Function(RoomMission mission) onExtractMission;
   final Future<void> Function(WorkspaceTask task) onEditTask;
   final Future<void> Function() onOpenTaskBoard;
+  final Future<void> Function() onConnectSlackIntegration;
+  final Future<void> Function() onDisconnectSlackIntegration;
+  final Future<void> Function() onConnectNotionIntegration;
+  final Future<void> Function() onDisconnectNotionIntegration;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
   final void Function(RoomArtifact artifact) onOpenCanvas;
@@ -2619,12 +2849,17 @@ class _ContextPanel extends StatelessWidget {
     required this.loadingShareHistory,
     required this.onlineUserIds,
     required this.useNeumorphControls,
+    required this.canManageIntegrations,
     required this.onInsertCommand,
     required this.onReviseArtifact,
     required this.onLaunchMission,
     required this.onExtractMission,
     required this.onEditTask,
     required this.onOpenTaskBoard,
+    required this.onConnectSlackIntegration,
+    required this.onDisconnectSlackIntegration,
+    required this.onConnectNotionIntegration,
+    required this.onDisconnectNotionIntegration,
     required this.onRefreshIntegrations,
     required this.onRefreshShareHistory,
     required this.onOpenCanvas,
@@ -2989,6 +3224,40 @@ class _ContextPanel extends StatelessWidget {
             );
           },
         ),
+        if (canManageIntegrations)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (slackIntegration?.connected == true)
+                  OutlinedButton.icon(
+                    onPressed: onDisconnectSlackIntegration,
+                    icon: const Icon(Icons.link_off_rounded, size: 16),
+                    label: const Text('Deconnecter Slack'),
+                  )
+                else
+                  FilledButton.tonalIcon(
+                    onPressed: onConnectSlackIntegration,
+                    icon: const Icon(Icons.link_rounded, size: 16),
+                    label: const Text('Connecter Slack'),
+                  ),
+                if (notionIntegration?.connected == true)
+                  OutlinedButton.icon(
+                    onPressed: onDisconnectNotionIntegration,
+                    icon: const Icon(Icons.link_off_rounded, size: 16),
+                    label: const Text('Deconnecter Notion'),
+                  )
+                else
+                  FilledButton.tonalIcon(
+                    onPressed: onConnectNotionIntegration,
+                    icon: const Icon(Icons.link_rounded, size: 16),
+                    label: const Text('Connecter Notion'),
+                  ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
           child: Align(
