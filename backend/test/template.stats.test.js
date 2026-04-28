@@ -541,3 +541,182 @@ await test('GET /api/rooms/templates/stats supports groupBy=version', async (t) 
     assert.equal(v1.feedbackAverage, 1);
     assert.equal(v2.feedbackAverage, -1);
 });
+
+await test('GET /api/rooms/templates/stats declares winner only with high confidence', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const originalRoomFind = Room.find;
+    const originalMessageFind = RoomMessage.find;
+
+    // Setup: 20 rooms for v1 (high sample), 8 for v2 (low sample, below threshold of 10)
+    // v1: feedbackAverage = 0.5, v2: feedbackAverage = -0.25
+    // Delta: 0.75 (> 0.2 threshold), so v1 should be winner IF not low-sample
+    Room.find = () => ({
+        lean: async () => [
+            ...Array(20).fill(0).map((_, i) => ({
+                _id: `507f191e810c19729de86${String(1000 + i).slice(-4)}`,
+                templateId: 'marketing',
+                templateVersion: 'v1',
+                createdAt: '2026-01-01T00:00:00.000Z',
+            })),
+            ...Array(8).fill(0).map((_, i) => ({
+                _id: `507f191e810c19729de87${String(1000 + i).slice(-4)}`,
+                templateId: 'marketing',
+                templateVersion: 'v2',
+                createdAt: '2026-01-01T00:00:00.000Z',
+            })),
+        ],
+    });
+
+    RoomMessage.find = () => ({
+        lean: async () => {
+            const messages = [];
+            // v1: 15 up, 5 down => (15-5)/20 = 0.5
+            for (let i = 0; i < 20; i++) {
+                const count = i < 15 ? 1 : -1;
+                messages.push({
+                    roomId: `507f191e810c19729de86${String(1000 + i).slice(-4)}`,
+                    createdAt: '2026-01-09T00:00:00.000Z',
+                    feedback: [{ rating: count }],
+                });
+            }
+            // v2: 3 up, 5 down => (3-5)/8 = -0.25
+            for (let i = 0; i < 8; i++) {
+                const count = i < 3 ? 1 : -1;
+                messages.push({
+                    roomId: `507f191e810c19729de87${String(1000 + i).slice(-4)}`,
+                    createdAt: '2026-01-09T00:00:00.000Z',
+                    feedback: [{ rating: count }],
+                });
+            }
+            return messages;
+        },
+    });
+
+    t.after(() => {
+        Room.find = originalRoomFind;
+        RoomMessage.find = originalMessageFind;
+    });
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/templates/stats?groupBy=version',
+        method: 'GET',
+        headers: {
+            'x-user-id': 'user_template_stats_winner',
+            'x-display-name': 'Analyst',
+        },
+    });
+
+    assert.equal(res.status, 200);
+    const json = JSON.parse(res.data);
+    assert.ok(Array.isArray(json.stats));
+
+    const stats = json.stats.filter((s) => s.templateId === 'marketing');
+    const v1 = stats.find((s) => s.templateVersion === 'v1');
+    const v2 = stats.find((s) => s.templateVersion === 'v2');
+
+    assert.ok(v1);
+    assert.ok(v2);
+    assert.equal(v1.roomsCreated, 20);
+    assert.equal(v2.roomsCreated, 8);
+    assert.equal(v1.isLowSample, false, 'v1 has enough samples');
+    assert.equal(v2.isLowSample, true, 'v2 is low sample (< 10 threshold)');
+
+    // v1 has much higher feedback (0.5 vs -0.25), so should be winner
+    assert.equal(v1.winner, true, 'v1 should be declared winner');
+    assert.equal(v2.winner, false, 'v2 should not be winner (low sample)');
+
+    // Insights should also reflect this
+    assert.ok(json.insights?.feedbackWinner);
+    assert.equal(json.insights.feedbackWinner.templateId, 'marketing');
+    assert.equal(json.insights.feedbackWinner.templateVersion, 'v1');
+});
+
+await test('GET /api/rooms/templates/stats does not declare winner with insufficient delta', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const originalRoomFind = Room.find;
+    const originalMessageFind = RoomMessage.find;
+
+    // Setup: v1 and v2 both with 20 rooms, scores too close (delta < 0.2)
+    // v1: feedback +0.1, v2: feedback -0.09 => delta = 0.19 < 0.2
+    Room.find = () => ({
+        lean: async () => [
+            ...Array(20).fill(0).map((_, i) => ({
+                _id: `507f191e810c19729de88${String(1000 + i).slice(-4)}`,
+                templateId: 'marketing',
+                templateVersion: 'v1',
+                createdAt: '2026-01-01T00:00:00.000Z',
+            })),
+            ...Array(20).fill(0).map((_, i) => ({
+                _id: `507f191e810c19729de89${String(1000 + i).slice(-4)}`,
+                templateId: 'marketing',
+                templateVersion: 'v2',
+                createdAt: '2026-01-01T00:00:00.000Z',
+            })),
+        ],
+    });
+
+    RoomMessage.find = () => ({
+        lean: async () => {
+            const messages = [];
+            // v1: 11 up, 9 down => (11-9)/20 = 0.1
+            for (let i = 0; i < 20; i++) {
+                const count = i < 11 ? 1 : -1;
+                messages.push({
+                    roomId: `507f191e810c19729de88${String(1000 + i).slice(-4)}`,
+                    createdAt: '2026-01-09T00:00:00.000Z',
+                    feedback: [{ rating: count }],
+                });
+            }
+            // v2: 9 up, 11 down => (9-11)/20 = -0.1
+            for (let i = 0; i < 20; i++) {
+                const count = i < 9 ? 1 : -1;
+                messages.push({
+                    roomId: `507f191e810c19729de89${String(1000 + i).slice(-4)}`,
+                    createdAt: '2026-01-09T00:00:00.000Z',
+                    feedback: [{ rating: count }],
+                });
+            }
+            return messages;
+        },
+    });
+
+    t.after(() => {
+        Room.find = originalRoomFind;
+        RoomMessage.find = originalMessageFind;
+    });
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/templates/stats?groupBy=version',
+        method: 'GET',
+        headers: {
+            'x-user-id': 'user_template_stats_no_winner',
+            'x-display-name': 'Analyst',
+        },
+    });
+
+    assert.equal(res.status, 200);
+    const json = JSON.parse(res.data);
+    const stats = json.stats.filter((s) => s.templateId === 'marketing');
+    const v1 = stats.find((s) => s.templateVersion === 'v1');
+    const v2 = stats.find((s) => s.templateVersion === 'v2');
+
+    assert.ok(v1);
+    assert.ok(v2);
+    assert.equal(v1.winner, false, 'v1 should not be winner (delta too small)');
+    assert.equal(v2.winner, false, 'v2 should not be winner (delta too small)');
+    assert.equal(json.insights?.feedbackWinner, null, 'No winner should be declared');
+});

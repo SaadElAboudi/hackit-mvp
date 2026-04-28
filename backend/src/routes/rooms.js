@@ -520,6 +520,9 @@ function parseGroupBy(raw) {
 }
 
 function buildTemplateInsights(stats) {
+    const FEEDBACK_DELTA_THRESHOLD = 0.2; // Only declare winner if |delta| > 0.2
+    const D7_DELTA_THRESHOLD = 5; // Only declare winner if delta > 5%
+
     const active = stats.filter((s) => s.roomsCreated > 0);
 
     const byConfidenceThen = (left, right, metricCmp) => {
@@ -544,6 +547,32 @@ function buildTemplateInsights(stats) {
         return y.roomsCreated - x.roomsCreated;
     }));
 
+    // Determine winner by feedback score (conservative: high sample + strong delta)
+    let feedbackWinner = null;
+    if (byFeedback.length >= 2) {
+        const top = byFeedback[0];
+        const second = byFeedback[1];
+        const delta = Math.abs(top.feedbackAverage - second.feedbackAverage);
+        if (!top.isLowSample && delta > FEEDBACK_DELTA_THRESHOLD) {
+            feedbackWinner = top;
+        }
+    } else if (byFeedback.length === 1 && !byFeedback[0].isLowSample) {
+        feedbackWinner = byFeedback[0];
+    }
+
+    // Determine winner by D7 retention (conservative: high sample + strong delta)
+    let d7Winner = null;
+    if (byD7.length >= 2) {
+        const top = byD7[0];
+        const second = byD7[1];
+        const delta = top.d7RetentionRate - second.d7RetentionRate;
+        if (!top.isLowSample && delta > D7_DELTA_THRESHOLD) {
+            d7Winner = top;
+        }
+    } else if (byD7.length === 1 && !byD7[0].isLowSample) {
+        d7Winner = byD7[0];
+    }
+
     const underperformingTemplates = [...active]
         .filter(
             (s) =>
@@ -561,6 +590,8 @@ function buildTemplateInsights(stats) {
     return {
         topByFeedback: byFeedback[0] || null,
         topByD7Retention: byD7[0] || null,
+        feedbackWinner,
+        d7Winner,
         underperformingTemplates,
     };
 }
@@ -734,8 +765,23 @@ router.get('/templates/stats', async (req, res) => {
         });
 
         const insights = buildTemplateInsights(stats);
+
+        // Enrich stats with winner info
+        const statsWithWinners = stats.map((s) => ({
+            ...s,
+            winner:
+                (insights?.feedbackWinner &&
+                    insights.feedbackWinner.templateId === s.templateId &&
+                    insights.feedbackWinner.templateVersion === s.templateVersion) ||
+                    (insights?.d7Winner &&
+                        insights.d7Winner.templateId === s.templateId &&
+                        insights.d7Winner.templateVersion === s.templateVersion)
+                    ? true
+                    : false,
+        }));
+
         res.json({
-            stats,
+            stats: statsWithWinners,
             insights,
             sinceDays: sinceDays || null,
             groupBy,

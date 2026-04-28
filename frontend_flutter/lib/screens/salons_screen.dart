@@ -470,6 +470,15 @@ class _TemplateStatsCard extends StatelessWidget {
                                 color: scheme.error,
                                 fontWeight: FontWeight.w600,
                               ),
+                            )
+                          else if (s.winner)
+                            Text(
+                              '🏆 Gagnant',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                         ],
                       ),
@@ -617,11 +626,10 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
             break;
           }
         }
-        final selectedWeights =
-            (selectedTemplate?.versionWeights.entries
-              .where((e) => e.value > 0)
-              .toList() ??
-          <MapEntry<String, int>>[]);
+        final selectedWeights = (selectedTemplate?.versionWeights.entries
+                .where((e) => e.value > 0)
+                .toList() ??
+            <MapEntry<String, int>>[]);
         selectedWeights.sort((a, b) => a.key.compareTo(b.key));
         final rolloutText =
             selectedWeights.map((e) => '${e.key} ${e.value}%').join(' / ');
@@ -877,6 +885,25 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                                     fontSize: 12,
                                     color:
                                         scheme.onSurface.withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ],
+                              if (hasMultiVersion &&
+                                  _selectedTemplateVersion == null) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(6),
+                                    color:
+                                        scheme.primary.withValues(alpha: 0.1),
+                                  ),
+                                  child: Text(
+                                    'ℹ️ La version sera assignée automatiquement selon le rollout configuré (ex: $rolloutText)',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: scheme.primary,
+                                    ),
                                   ),
                                 ),
                               ],

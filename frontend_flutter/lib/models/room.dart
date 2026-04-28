@@ -776,6 +776,7 @@ class DomainTemplateStats {
   final int feedbackDown;
   final double feedbackAverage;
   final bool isLowSample;
+  final bool winner;
   final int d1RetainedRooms;
   final int d7RetainedRooms;
   final double d1RetentionRate;
@@ -793,6 +794,7 @@ class DomainTemplateStats {
     required this.feedbackDown,
     required this.feedbackAverage,
     required this.isLowSample,
+    required this.winner,
     required this.d1RetainedRooms,
     required this.d7RetainedRooms,
     required this.d1RetentionRate,
@@ -812,6 +814,7 @@ class DomainTemplateStats {
         feedbackDown: (j['feedbackDown'] as num?)?.toInt() ?? 0,
         feedbackAverage: (j['feedbackAverage'] as num?)?.toDouble() ?? 0,
         isLowSample: j['isLowSample'] == true,
+        winner: j['winner'] == true,
         d1RetainedRooms: (j['d1RetainedRooms'] as num?)?.toInt() ?? 0,
         d7RetainedRooms: (j['d7RetainedRooms'] as num?)?.toInt() ?? 0,
         d1RetentionRate: (j['d1RetentionRate'] as num?)?.toDouble() ?? 0,
