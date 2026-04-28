@@ -65,6 +65,158 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
     }
   }
 
+  Future<void> _showCreateTaskDialog() async {
+    final titleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    final ownerCtrl = TextEditingController();
+    DateTime? dueDate;
+    bool saving = false;
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Creer une tache'),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  enabled: !saving,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Titre *',
+                    hintText: 'Ex: Preparer le brief client',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descCtrl,
+                  enabled: !saving,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    hintText: 'Contexte ou instructions optionnelles',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ownerCtrl,
+                  enabled: !saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Responsable',
+                    hintText: 'Nom de la personne assignee',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: saving
+                      ? null
+                      : () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 730),
+                            ),
+                          );
+                          if (picked == null || !ctx.mounted) return;
+                          setState(() => dueDate = picked);
+                        },
+                  borderRadius: BorderRadius.circular(8),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Echeance',
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            dueDate == null
+                                ? 'Aucune date'
+                                : '${dueDate!.day.toString().padLeft(2, '0')}/${dueDate!.month.toString().padLeft(2, '0')}/${dueDate!.year}',
+                          ),
+                        ),
+                        if (dueDate != null)
+                          IconButton(
+                            onPressed: saving
+                                ? null
+                                : () => setState(() => dueDate = null),
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            tooltip: 'Retirer la date',
+                          )
+                        else
+                          const Icon(Icons.event_rounded, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final title = titleCtrl.text.trim();
+                      if (title.isEmpty) {
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('Le titre est requis')),
+                        );
+                        return;
+                      }
+
+                      setState(() => saving = true);
+                      final created = await prov.createTask(
+                        title: title,
+                        description: descCtrl.text.trim(),
+                        ownerName: ownerCtrl.text.trim(),
+                        dueDate: dueDate,
+                      );
+                      if (!mounted || !ctx.mounted) return;
+                      if (created == null) {
+                        setState(() => saving = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              prov.actionError ??
+                                  'Impossible de creer la tache',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.of(ctx).pop();
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Tache creee')),
+                      );
+                    },
+              child: Text(saving ? 'Creation...' : 'Creer la tache'),
+            ),
+          ],
+        ),
+      ),
+    );
+    titleCtrl.dispose();
+    descCtrl.dispose();
+    ownerCtrl.dispose();
+  }
+
   int _countByStatus(List<WorkspaceTask> tasks, String status) {
     return tasks.where((task) => task.status == status).length;
   }
@@ -127,6 +279,13 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Board taches · ${widget.roomName}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Creer une tache',
+            onPressed: _showCreateTaskDialog,
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

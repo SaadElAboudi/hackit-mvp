@@ -733,6 +733,35 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<WorkspaceTask?> createTask({
+    required String title,
+    String description = '',
+    String ownerId = '',
+    String ownerName = '',
+    DateTime? dueDate,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      final created = await _svc.createTask(
+        room.id,
+        title: title,
+        description: description,
+        ownerId: ownerId,
+        ownerName: ownerName,
+        dueDate: dueDate,
+      );
+      tasks.insert(0, created);
+      notifyListeners();
+      return created;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<void> refreshIntegrationStatus() async {
     final room = currentRoom;
     if (room == null) return;

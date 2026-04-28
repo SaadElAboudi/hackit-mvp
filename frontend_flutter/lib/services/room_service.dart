@@ -286,6 +286,25 @@ class RoomService {
         .toList();
   }
 
+  Future<WorkspaceTask> createTask(
+    String roomId, {
+    required String title,
+    String description = '',
+    String ownerId = '',
+    String ownerName = '',
+    DateTime? dueDate,
+  }) async {
+    final body = <String, dynamic>{
+      'title': title,
+      'description': description,
+      'ownerId': ownerId,
+      'ownerName': ownerName,
+      if (dueDate != null) 'dueDate': dueDate.toIso8601String(),
+    };
+    final r = await _post('/api/rooms/$roomId/tasks', body);
+    return WorkspaceTask.fromJson(r['task'] as Map<String, dynamic>);
+  }
+
   Future<WorkspaceTask> updateTask(
     String roomId,
     String taskId, {

@@ -53,6 +53,7 @@ import {
     validateCreateWorkspaceCommentPayload,
     validateCreateWorkspaceDecisionPayload,
     validateCreateWorkspacePagePayload,
+    validateCreateWorkspaceTaskPayload,
     validateConvertDecisionToTasksPayload,
     validateDirectivesPayload,
     validateResolveCommentPayload,
@@ -1327,6 +1328,42 @@ router.post('/:id/decisions/:decisionId/convert', validateBody(validateConvertDe
         next(err);
     }
 });
+
+router.post(
+    '/:id/tasks',
+    validateBody(validateCreateWorkspaceTaskPayload),
+    async (req, res, next) => {
+        try {
+            const room = await loadRoomOr404(req.params.id, res);
+            if (!room) return;
+            if (!isRoomMember(room, req.userId)) {
+                return res.status(403).json({ error: 'Not a member of this room' });
+            }
+
+            const task = await WorkspaceTask.create({
+                roomId: req.params.id,
+                decisionId: null,
+                title: req.validatedBody.title,
+                description: req.validatedBody.description,
+                status: 'todo',
+                ownerId: req.validatedBody.ownerId,
+                ownerName: req.validatedBody.ownerName,
+                dueDate: req.validatedBody.dueDate,
+                createdBy: req.userId,
+                createdByName: req.displayName,
+                lastUpdatedBy: req.userId,
+                lastUpdatedByName: req.displayName,
+            });
+
+            room.lastActivityAt = new Date();
+            await room.save();
+
+            res.status(201).json({ task: workspaceTaskSummary(task) });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
 
 router.get('/:id/tasks', async (req, res, next) => {
     try {

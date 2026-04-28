@@ -473,6 +473,31 @@ export function validateCreateWorkspaceDecisionPayload(body) {
   };
 }
 
+export function validateCreateWorkspaceTaskPayload(body) {
+  const title = String(body?.title || '').trim();
+  if (!title) {
+    throw badRequest('title is required', { field: 'title' });
+  }
+
+  const dueDateRaw = String(body?.dueDate || '').trim();
+  let dueDate = null;
+  if (dueDateRaw) {
+    const parsed = new Date(dueDateRaw);
+    if (Number.isNaN(parsed.getTime())) {
+      throw badRequest('dueDate must be a valid date', { field: 'dueDate' });
+    }
+    dueDate = parsed;
+  }
+
+  return {
+    title: title.slice(0, 180),
+    description: String(body?.description || '').trim().slice(0, 2000),
+    ownerId: String(body?.ownerId || '').trim().slice(0, 120),
+    ownerName: String(body?.ownerName || '').trim().slice(0, 120),
+    dueDate,
+  };
+}
+
 export function validateConvertDecisionToTasksPayload(body) {
   const tasks = Array.isArray(body?.tasks) ? body.tasks : [];
   if (!tasks.length) {
