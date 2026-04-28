@@ -693,6 +693,31 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<WorkspaceDecision?> createDecision({
+    required String title,
+    String summary = '',
+    String sourceType = 'manual',
+  }) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      final created = await _svc.createDecision(
+        room.id,
+        title: title,
+        summary: summary,
+        sourceType: sourceType,
+      );
+      decisions.insert(0, created);
+      notifyListeners();
+      return created;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<WorkspaceTask?> updateTask(
     WorkspaceTask task, {
     String? title,

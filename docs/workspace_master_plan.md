@@ -1,4 +1,4 @@
-# Workspace Master Plan (Notion-Grade + AI Ops)
+Ops)
 
 Last updated: 2026-04-27
 Owner: Product + Engineering

@@ -279,6 +279,21 @@ class RoomService {
         .toList();
   }
 
+  Future<WorkspaceDecision> createDecision(
+    String roomId, {
+    required String title,
+    String summary = '',
+    String sourceType = 'manual',
+  }) async {
+    final body = <String, dynamic>{
+      'title': title,
+      'summary': summary,
+      'sourceType': sourceType,
+    };
+    final r = await _post('/api/rooms/$roomId/decisions', body);
+    return WorkspaceDecision.fromJson(r['decision'] as Map<String, dynamic>);
+  }
+
   Future<List<WorkspaceTask>> listTasks(String roomId) async {
     final r = await _get('/api/rooms/$roomId/tasks');
     return (r['tasks'] as List? ?? [])

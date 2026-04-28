@@ -65,6 +65,101 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
     }
   }
 
+  Future<void> _showCreateDecisionDialog() async {
+    final titleCtrl = TextEditingController();
+    final summaryCtrl = TextEditingController();
+    bool saving = false;
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Creer une decision'),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  enabled: !saving,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Titre *',
+                    hintText: 'Ex: Approuver le budget Q2',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: summaryCtrl,
+                  enabled: !saving,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Resume',
+                    hintText: 'Resumer la decision et le contexte',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final title = titleCtrl.text.trim();
+                      if (title.isEmpty) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Le titre est requis'),
+                          ),
+                        );
+                        return;
+                      }
+
+                      setState(() => saving = true);
+                      final created = await prov.createDecision(
+                        title: title,
+                        summary: summaryCtrl.text.trim(),
+                        sourceType: 'manual',
+                      );
+                      if (!mounted || !ctx.mounted) return;
+                      if (created == null) {
+                        setState(() => saving = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              prov.actionError ??
+                                  'Impossible de creer la decision',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.of(ctx).pop();
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Decision creee')),
+                      );
+                    },
+              child: Text(saving ? 'Creation...' : 'Creer la decision'),
+            ),
+          ],
+        ),
+      ),
+    );
+    titleCtrl.dispose();
+    summaryCtrl.dispose();
+  }
+
   Future<void> _showCreateTaskDialog() async {
     final titleCtrl = TextEditingController();
     final descCtrl = TextEditingController();
@@ -280,6 +375,11 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
       appBar: AppBar(
         title: Text('Board taches · ${widget.roomName}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_outlined),
+            tooltip: 'Creer une decision',
+            onPressed: _showCreateDecisionDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.add_rounded),
             tooltip: 'Creer une tache',
