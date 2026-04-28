@@ -2301,17 +2301,23 @@ router.patch(
     validateBody(validateArtifactStatusPayload),
     async (req, res, next) => {
         try {
-            const { status } = req.validatedBody;
+            const { status: targetStatus } = req.validatedBody;
 
             const room = await loadRoomOr404(req.params.id, res);
             if (!room) return;
 
-            // Only owners can validate or archive; members can move to review
-            if (['validated', 'archived'].includes(status) && !isRoomOwner(room, req.userId)) {
+            // Only members and owners can update artifact status (guests excluded)
+            if (!canReviewArtifacts(room, req.userId)) {
                 return res.status(403).json({ error: 'Owner role required for this transition' });
             }
-            if (!isRoomMember(room, req.userId)) {
-                return res.status(403).json({ error: 'Not a member of this room' });
+
+            // Check owner-only transitions before artifact lookup
+            const isOwner = isRoomOwner(room, req.userId);
+            if ((targetStatus === 'validated' || targetStatus === 'archived') && !isOwner) {
+                return res.status(403).json({ 
+                    error: 'Owner role required for this transition',
+                    code: 'FORBIDDEN'
+                });
             }
 
             const artifact = await RoomArtifact.findOne({
@@ -2322,7 +2328,30 @@ router.patch(
                 return res.status(404).json({ error: 'Artifact not found' });
             }
 
-            artifact.status = status;
+            // Validate state machine transitions
+            const currentStatus = artifact.status || 'draft';
+            const validTransitions = {
+                draft: ['review', 'archived'],
+                review: ['validated', 'archived'],
+                validated: ['archived'],
+                archived: [],
+            };
+
+            if (targetStatus === currentStatus) {
+                return res.status(400).json({
+                    error: `Status is already "${currentStatus}"`,
+                    code: 'INVALID_TRANSITION'
+                });
+            }
+
+            if (!(validTransitions[currentStatus]?.includes(targetStatus))) {
+                return res.status(400).json({
+                    error: `Cannot transition from "${currentStatus}" to "${targetStatus}"`,
+                    code: 'INVALID_TRANSITION'
+                });
+            }
+
+            artifact.status = targetStatus;
             artifact.updatedAt = new Date();
             await artifact.save();
 

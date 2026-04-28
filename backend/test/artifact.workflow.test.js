@@ -5,6 +5,7 @@ import http from 'node:http';
 import mongoose from 'mongoose';
 import Room from '../src/models/Room.js';
 
+import RoomArtifact from '../src/models/RoomArtifact.js';
 process.env.NODE_ENV = 'test';
 const { createApp } = await import('../src/index.js');
 
@@ -251,6 +252,101 @@ await test('POST version comment — guest role is forbidden', async (t) => {
     assert.match(String(json.message || ''), /owner or member role required/i);
 });
 
+// Phase 6: Artifact status transitions — role-based permission tests
+await test('PATCH artifact status — guest role cannot change status', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeArtifactId = '507f191e810c19729de860eb';
+    const userId = 'user_phase6_guest';
+
+    mockRoomFindById(t, {
+        _id: fakeRoomId,
+        members: [{ userId, role: 'guest' }],
+    });
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/artifacts/${fakeArtifactId}/status`,
+        method: 'PATCH',
+        body: { status: 'review' },
+        headers: { 'x-user-id': userId },
+    });
+
+    assert.equal(res.status, 403);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'FORBIDDEN');
+});
+
+await test('PATCH artifact status — member role cannot validate', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeArtifactId = '507f191e810c19729de860eb';
+    const userId = 'user_phase6_member';
+
+    mockRoomFindById(t, {
+        _id: fakeRoomId,
+        members: [{ userId, role: 'member' }],
+    });
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/artifacts/${fakeArtifactId}/status`,
+        method: 'PATCH',
+        body: { status: 'validated' },
+        headers: { 'x-user-id': userId },
+    });
+
+    assert.equal(res.status, 403);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'FORBIDDEN');
+    assert.match(String(json.message || ''), /owner.*required/i);
+});
+
+await test('PATCH artifact status — member role cannot archive', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeArtifactId = '507f191e810c19729de860eb';
+    const userId = 'user_phase6_member_archive';
+
+    mockRoomFindById(t, {
+        _id: fakeRoomId,
+        members: [{ userId, role: 'member' }],
+    });
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/artifacts/${fakeArtifactId}/status`,
+        method: 'PATCH',
+        body: { status: 'archived' },
+        headers: { 'x-user-id': userId },
+    });
+
+    assert.equal(res.status, 403);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'FORBIDDEN');
+    assert.match(String(json.message || ''), /owner.*required/i);
+});
 await test('PATCH comment resolve — guest role is forbidden', async (t) => {
     forceMongoReady();
     t.after(() => restoreMongoReady());
