@@ -140,3 +140,91 @@ await test('POST /api/rooms/:id/messages invalid body returns BAD_REQUEST envelo
     assert.match(String(json.message || ''), /content/i);
     assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
 });
+
+await test('POST /api/rooms/:id/artifacts invalid body returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/507f191e810c19729de860ea/artifacts',
+        body: { title: 'Missing content' },
+        headers: { 'x-user-id': 'user_test_4' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /content/i);
+});
+
+await test('POST /api/rooms/:id/missions invalid body returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/507f191e810c19729de860ea/missions',
+        body: { prompt: '   ' },
+        headers: { 'x-user-id': 'user_test_5' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /prompt/i);
+});
+
+await test('POST /api/rooms/:id/memory invalid body returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/507f191e810c19729de860ea/memory',
+        body: { content: '' },
+        headers: { 'x-user-id': 'user_test_6' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /content/i);
+});
+
+await test('POST /api/rooms/:id/join rejects non-empty body', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/507f191e810c19729de860ea/join',
+        body: { unexpected: true },
+        headers: { 'x-user-id': 'user_test_7' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /empty/i);
+});

@@ -65,6 +65,7 @@ import {
     validateConvertDecisionToTasksPayload,
     validateDirectivesPayload,
     validateDiscoverNotionPagesPayload,
+    validateEmptyBody,
     validateResolveCommentPayload,
     validateResolveWorkspaceCommentPayload,
     validateExtractWorkspaceDecisionsPayload,
@@ -1972,7 +1973,7 @@ router.delete('/:id/members/:uid', async (req, res) => {
  * POST /api/rooms/:id/join
  * Join a room from an invite link.
  */
-router.post('/:id/join', async (req, res) => {
+router.post('/:id/join', validateBody(validateEmptyBody), async (req, res) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2166,7 +2167,7 @@ router.post(
     }
 );
 
-router.post('/:id/artifacts/:artifactId/versions/:versionId/approve', async (req, res, next) => {
+router.post('/:id/artifacts/:artifactId/versions/:versionId/approve', validateBody(validateEmptyBody), async (req, res, next) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;

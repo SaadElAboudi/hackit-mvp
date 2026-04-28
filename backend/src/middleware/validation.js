@@ -17,6 +17,17 @@ export function validateBody(validator) {
   };
 }
 
+export function validateEmptyBody(body) {
+  const keys = Object.keys(body || {});
+  if (keys.length > 0) {
+    throw badRequest('request body must be empty', {
+      field: 'body',
+      disallowedKeys: keys.slice(0, 20),
+    });
+  }
+  return {};
+}
+
 export function validateSearchPayload(body) {
   const query = typeof body.query === 'string' ? body.query.trim() : '';
   if (!query) {
