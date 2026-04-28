@@ -28,6 +28,8 @@ class Room {
   final String name;
   final String type; // 'dm' | 'group'
   final String purpose;
+  final String templateId;
+  final String templateVersion;
   final String visibility;
   final String ownerId;
   final List<RoomMember> members;
@@ -41,6 +43,8 @@ class Room {
     required this.name,
     required this.type,
     required this.purpose,
+    required this.templateId,
+    required this.templateVersion,
     required this.visibility,
     required this.ownerId,
     required this.members,
@@ -55,6 +59,8 @@ class Room {
         name: j['name']?.toString() ?? 'Channel',
         type: j['type']?.toString() ?? 'group',
         purpose: j['purpose']?.toString() ?? '',
+        templateId: j['templateId']?.toString() ?? '',
+        templateVersion: j['templateVersion']?.toString() ?? '',
         visibility: j['visibility']?.toString() ?? 'invite_only',
         ownerId: j['ownerId']?.toString() ?? '',
         members: (j['members'] as List? ?? [])
@@ -748,6 +754,7 @@ class DomainTemplate {
 
 class DomainTemplateStats {
   final String templateId;
+  final String templateVersion;
   final String name;
   final String emoji;
   final String description;
@@ -763,6 +770,7 @@ class DomainTemplateStats {
 
   const DomainTemplateStats({
     required this.templateId,
+    required this.templateVersion,
     required this.name,
     required this.emoji,
     required this.description,
@@ -780,6 +788,7 @@ class DomainTemplateStats {
   factory DomainTemplateStats.fromJson(Map<String, dynamic> j) =>
       DomainTemplateStats(
         templateId: j['templateId']?.toString() ?? '',
+        templateVersion: j['templateVersion']?.toString() ?? '',
         name: j['name']?.toString() ?? '',
         emoji: j['emoji']?.toString() ?? '',
         description: j['description']?.toString() ?? '',
@@ -816,12 +825,10 @@ class DomainTemplateInsights {
             ? DomainTemplateStats.fromJson(
                 j['topByD7Retention'] as Map<String, dynamic>)
             : null,
-        underperformingTemplates:
-            (j['underperformingTemplates'] as List? ?? [])
-                .whereType<Map>()
-                .map((e) =>
-                  DomainTemplateStats.fromJson(e.cast<String, dynamic>()))
-                .toList(),
+        underperformingTemplates: (j['underperformingTemplates'] as List? ?? [])
+            .whereType<Map>()
+            .map((e) => DomainTemplateStats.fromJson(e.cast<String, dynamic>()))
+            .toList(),
       );
 }
 
@@ -829,23 +836,26 @@ class DomainTemplateStatsResponse {
   final List<DomainTemplateStats> stats;
   final DomainTemplateInsights? insights;
   final int? sinceDays;
+  final String groupBy;
 
   const DomainTemplateStatsResponse({
     required this.stats,
     required this.insights,
     required this.sinceDays,
+    required this.groupBy,
   });
 
   factory DomainTemplateStatsResponse.fromJson(Map<String, dynamic> j) =>
       DomainTemplateStatsResponse(
         stats: (j['stats'] as List? ?? [])
             .whereType<Map>()
-          .map((e) => DomainTemplateStats.fromJson(e.cast<String, dynamic>()))
+            .map((e) => DomainTemplateStats.fromJson(e.cast<String, dynamic>()))
             .toList(),
         insights: j['insights'] is Map<String, dynamic>
             ? DomainTemplateInsights.fromJson(
                 j['insights'] as Map<String, dynamic>)
             : null,
         sinceDays: (j['sinceDays'] as num?)?.toInt(),
+        groupBy: j['groupBy']?.toString() ?? 'template',
       );
 }

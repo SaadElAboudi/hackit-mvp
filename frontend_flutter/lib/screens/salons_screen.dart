@@ -127,10 +127,15 @@ class _SalonsScreenState extends State<SalonsScreen> {
                 stats: prov.templateStats,
                 insights: prov.templateInsights,
                 sinceDays: prov.templateStatsSinceDays,
+                groupBy: prov.templateStatsGroupBy,
                 onRefresh: () => prov.loadTemplateStats(force: true),
                 onSinceDaysChanged: (days) => prov.loadTemplateStats(
                   force: true,
                   sinceDays: days,
+                ),
+                onGroupByChanged: (groupBy) => prov.loadTemplateStats(
+                  force: true,
+                  groupBy: groupBy,
                 ),
               ),
             ),
@@ -304,16 +309,20 @@ class _TemplateStatsCard extends StatelessWidget {
   final List<DomainTemplateStats> stats;
   final DomainTemplateInsights? insights;
   final int sinceDays;
+  final String groupBy;
   final VoidCallback onRefresh;
   final ValueChanged<int> onSinceDaysChanged;
+  final ValueChanged<String> onGroupByChanged;
 
   const _TemplateStatsCard({
     required this.loading,
     required this.stats,
     required this.insights,
     required this.sinceDays,
+    required this.groupBy,
     required this.onRefresh,
     required this.onSinceDaysChanged,
+    required this.onGroupByChanged,
   });
 
   @override
@@ -361,6 +370,22 @@ class _TemplateStatsCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              children: [
+                ChoiceChip(
+                  label: const Text('Template'),
+                  selected: groupBy == 'template',
+                  onSelected: (_) => onGroupByChanged('template'),
+                ),
+                ChoiceChip(
+                  label: const Text('Version'),
+                  selected: groupBy == 'version',
+                  onSelected: (_) => onGroupByChanged('version'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
             if (loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 6),
@@ -403,6 +428,19 @@ class _TemplateStatsCard extends StatelessWidget {
                               fontSize: 12,
                             ),
                           ),
+                          if (groupBy == 'version' &&
+                              s.templateVersion.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                s.templateVersion,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color:
+                                      scheme.onSurface.withValues(alpha: 0.55),
+                                ),
+                              ),
+                            ),
                           const SizedBox(height: 6),
                           Text(
                             '${s.roomsCreated} rooms • ${s.messagesSent} msgs',

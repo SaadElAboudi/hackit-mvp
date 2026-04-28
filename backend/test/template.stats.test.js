@@ -128,6 +128,7 @@ await test('POST /api/rooms persists templateId and applies directives', async (
 
     assert.equal(res.status, 201);
     assert.equal(captured.payload.templateId, 'marketing');
+    assert.equal(captured.payload.templateVersion, 'v1');
     assert.ok(String(captured.payload.aiDirectives || '').length > 0);
 });
 
@@ -207,6 +208,7 @@ await test('GET /api/rooms/templates/stats aggregates usage and retention metric
     assert.ok(Array.isArray(json.stats));
     assert.ok(typeof json.generatedAt === 'string' && json.generatedAt.length > 0);
     assert.equal(json.sinceDays, null);
+    assert.equal(json.groupBy, 'template');
 
     const marketing = json.stats.find((s) => s.templateId === 'marketing');
     assert.ok(marketing);
@@ -234,6 +236,29 @@ await test('GET /api/rooms/templates/stats aggregates usage and retention metric
     assert.equal(json.insights.topByFeedback?.templateId, 'product');
     assert.equal(json.insights.topByD7Retention?.templateId, 'product');
     assert.ok(Array.isArray(json.insights.underperformingTemplates));
+});
+
+await test('GET /api/rooms/templates/stats rejects invalid groupBy', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/templates/stats?groupBy=foo',
+        method: 'GET',
+        headers: {
+            'x-user-id': 'user_template_stats_groupby_invalid',
+            'x-display-name': 'Analyst',
+        },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.error, 'groupBy must be either template or version');
 });
 
 await test('GET /api/rooms/templates/stats rejects invalid sinceDays', async (t) => {
@@ -321,4 +346,74 @@ await test('GET /api/rooms/templates/stats forwards sinceDays window to queries'
     assert.equal(json.sinceDays, 7);
     assert.ok(captured.roomQuery?.createdAt?.$gte instanceof Date);
     assert.ok(captured.messageQuery?.createdAt?.$gte instanceof Date);
+});
+
+await test('GET /api/rooms/templates/stats supports groupBy=version', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const originalRoomFind = Room.find;
+    const originalMessageFind = RoomMessage.find;
+
+    Room.find = () => ({
+        lean: async () => [
+            {
+                _id: '507f191e810c19729de860a1',
+                templateId: 'marketing',
+                templateVersion: 'v1',
+                createdAt: '2026-01-01T00:00:00.000Z',
+            },
+            {
+                _id: '507f191e810c19729de860a2',
+                templateId: 'marketing',
+                templateVersion: 'v2',
+                createdAt: '2026-01-01T00:00:00.000Z',
+            },
+        ],
+    });
+
+    RoomMessage.find = () => ({
+        lean: async () => [
+            {
+                roomId: '507f191e810c19729de860a1',
+                createdAt: '2026-01-09T00:00:00.000Z',
+                feedback: [{ rating: 1 }],
+            },
+            {
+                roomId: '507f191e810c19729de860a2',
+                createdAt: '2026-01-03T00:00:00.000Z',
+                feedback: [{ rating: -1 }],
+            },
+        ],
+    });
+
+    t.after(() => {
+        Room.find = originalRoomFind;
+        RoomMessage.find = originalMessageFind;
+    });
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/templates/stats?groupBy=version',
+        method: 'GET',
+        headers: {
+            'x-user-id': 'user_template_stats_groupby_version',
+            'x-display-name': 'Analyst',
+        },
+    });
+
+    assert.equal(res.status, 200);
+    const json = JSON.parse(res.data);
+    assert.equal(json.groupBy, 'version');
+    const stats = json.stats.filter((s) => s.templateId === 'marketing');
+    const v1 = stats.find((s) => s.templateVersion === 'v1');
+    const v2 = stats.find((s) => s.templateVersion === 'v2');
+    assert.ok(v1);
+    assert.ok(v2);
+    assert.equal(v1.feedbackAverage, 1);
+    assert.equal(v2.feedbackAverage, -1);
 });

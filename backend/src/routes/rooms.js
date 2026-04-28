@@ -479,7 +479,7 @@ router.get('/', async (req, res) => {
  * Returns the list of domain template packs (no auth required for the list).
  */
 router.get('/templates', (_req, res) => {
-    res.json({ templates: DOMAIN_TEMPLATES.map(({ id, name, emoji, description, purpose }) => ({ id, name, emoji, description, purpose })) });
+    res.json({ templates: DOMAIN_TEMPLATES.map(({ id, version, name, emoji, description, purpose }) => ({ id, version, name, emoji, description, purpose })) });
 });
 
 function toPercent(part, total) {
@@ -492,6 +492,12 @@ function parseSinceDays(raw) {
     const value = Number.parseInt(String(raw), 10);
     if (!Number.isFinite(value) || value <= 0) return null;
     if (![7, 30, 90].includes(value)) return null;
+    return value;
+}
+
+function parseGroupBy(raw) {
+    const value = String(raw || 'template').trim().toLowerCase();
+    if (!['template', 'version'].includes(value)) return null;
     return value;
 }
 
@@ -553,26 +559,46 @@ router.get('/templates/stats', async (req, res) => {
             ? new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000)
             : null;
 
+        const groupBy = parseGroupBy(req.query?.groupBy);
+        if (!groupBy) {
+            return res
+                .status(400)
+                .json({ error: 'groupBy must be either template or version' });
+        }
+
         const templateIds = DOMAIN_TEMPLATES.map((t) => t.id);
+        const templateById = new Map(DOMAIN_TEMPLATES.map((t) => [t.id, t]));
+        const keyFor = (templateId, templateVersion) =>
+            groupBy === 'version'
+                ? `${String(templateId || '')}:${String(templateVersion || '')}`
+                : String(templateId || '');
+
+        const orderedKeys = [];
         const statsByTemplate = new Map(
-            DOMAIN_TEMPLATES.map((t) => [
-                t.id,
-                {
-                    templateId: t.id,
-                    name: t.name,
-                    emoji: t.emoji,
-                    description: t.description,
-                    roomsCreated: 0,
-                    messagesSent: 0,
-                    feedbackUp: 0,
-                    feedbackDown: 0,
-                    feedbackAverage: 0,
-                    d1RetainedRooms: 0,
-                    d7RetainedRooms: 0,
-                    d1RetentionRate: 0,
-                    d7RetentionRate: 0,
-                },
-            ])
+            DOMAIN_TEMPLATES.map((t) => {
+                const templateVersion = String(t.version || 'v1');
+                const key = keyFor(t.id, templateVersion);
+                orderedKeys.push(key);
+                return [
+                    key,
+                    {
+                        templateId: t.id,
+                        templateVersion: groupBy === 'version' ? templateVersion : null,
+                        name: t.name,
+                        emoji: t.emoji,
+                        description: t.description,
+                        roomsCreated: 0,
+                        messagesSent: 0,
+                        feedbackUp: 0,
+                        feedbackDown: 0,
+                        feedbackAverage: 0,
+                        d1RetainedRooms: 0,
+                        d7RetainedRooms: 0,
+                        d1RetentionRate: 0,
+                        d7RetentionRate: 0,
+                    },
+                ];
+            })
         );
 
         const roomQuery = {
@@ -583,6 +609,7 @@ router.get('/templates/stats', async (req, res) => {
         const rooms = await Room.find(roomQuery, {
             _id: 1,
             templateId: 1,
+            templateVersion: 1,
             createdAt: 1,
         }).lean();
 
@@ -590,11 +617,33 @@ router.get('/templates/stats', async (req, res) => {
         for (const room of rooms) {
             const roomId = String(room._id);
             const templateId = String(room.templateId || '');
+            const defaultVersion = templateById.get(templateId)?.version || 'v1';
+            const templateVersion = String(room.templateVersion || defaultVersion);
             const createdAt = new Date(room.createdAt || Date.now());
-            roomById.set(roomId, { templateId, createdAt });
-            if (statsByTemplate.has(templateId)) {
-                statsByTemplate.get(templateId).roomsCreated += 1;
+            const key = keyFor(templateId, templateVersion);
+
+            if (!statsByTemplate.has(key)) {
+                const templateMeta = templateById.get(templateId);
+                statsByTemplate.set(key, {
+                    templateId,
+                    templateVersion: groupBy === 'version' ? templateVersion : null,
+                    name: templateMeta?.name || templateId || 'Template',
+                    emoji: templateMeta?.emoji || '🧩',
+                    description: templateMeta?.description || '',
+                    roomsCreated: 0,
+                    messagesSent: 0,
+                    feedbackUp: 0,
+                    feedbackDown: 0,
+                    feedbackAverage: 0,
+                    d1RetainedRooms: 0,
+                    d7RetainedRooms: 0,
+                    d1RetentionRate: 0,
+                    d7RetentionRate: 0,
+                });
+                orderedKeys.push(key);
             }
+            roomById.set(roomId, { key, createdAt });
+            statsByTemplate.get(key).roomsCreated += 1;
         }
 
         const roomIds = Array.from(roomById.keys());
@@ -617,7 +666,7 @@ router.get('/templates/stats', async (req, res) => {
                 const roomMeta = roomById.get(roomId);
                 if (!roomMeta) continue;
 
-                const templateStats = statsByTemplate.get(roomMeta.templateId);
+                const templateStats = statsByTemplate.get(roomMeta.key);
                 if (!templateStats) continue;
 
                 templateStats.messagesSent += 1;
@@ -634,15 +683,15 @@ router.get('/templates/stats', async (req, res) => {
             }
 
             for (const [roomId, roomMeta] of roomById.entries()) {
-                const templateStats = statsByTemplate.get(roomMeta.templateId);
+                const templateStats = statsByTemplate.get(roomMeta.key);
                 if (!templateStats) continue;
                 if (roomHasD1.has(roomId)) templateStats.d1RetainedRooms += 1;
                 if (roomHasD7.has(roomId)) templateStats.d7RetainedRooms += 1;
             }
         }
 
-        const stats = DOMAIN_TEMPLATES.map((t) => {
-            const s = statsByTemplate.get(t.id);
+        const stats = orderedKeys.map((key) => {
+            const s = statsByTemplate.get(key);
             const totalFeedback = s.feedbackUp + s.feedbackDown;
             const feedbackAverage = totalFeedback
                 ? Math.round(((s.feedbackUp - s.feedbackDown) / totalFeedback) * 100) / 100
@@ -660,6 +709,7 @@ router.get('/templates/stats', async (req, res) => {
             stats,
             insights,
             sinceDays: sinceDays || null,
+            groupBy,
             generatedAt: new Date().toISOString(),
         });
     } catch (err) {
@@ -701,6 +751,7 @@ router.post('/', validateBody(validateCreateRoomPayload), async (req, res, next)
             type,
             purpose: resolvedPurpose,
             templateId: template?.id || '',
+            templateVersion: template?.version || '',
             visibility,
             ownerId: req.userId,
             members: allMembers,

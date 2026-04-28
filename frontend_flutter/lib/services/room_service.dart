@@ -154,8 +154,12 @@ class RoomService {
         .toList();
   }
 
-  Future<DomainTemplateStatsResponse> fetchTemplateStats({int? sinceDays}) async {
-    final query = sinceDays == null ? '' : '?sinceDays=$sinceDays';
+  Future<DomainTemplateStatsResponse> fetchTemplateStats(
+      {int? sinceDays, String groupBy = 'template'}) async {
+    final queryParts = <String>[];
+    if (sinceDays != null) queryParts.add('sinceDays=$sinceDays');
+    if (groupBy.isNotEmpty) queryParts.add('groupBy=$groupBy');
+    final query = queryParts.isEmpty ? '' : '?${queryParts.join('&')}';
     final r = await _get('/api/rooms/templates/stats$query');
     return DomainTemplateStatsResponse.fromJson(r);
   }
