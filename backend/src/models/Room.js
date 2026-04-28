@@ -55,6 +55,7 @@ const RoomSchema = new mongoose.Schema(
         name: { type: String, trim: true, maxlength: 80 },
         type: { type: String, enum: ['dm', 'group'], required: true },
         purpose: { type: String, trim: true, maxlength: 240, default: '' },
+        templateId: { type: String, trim: true, maxlength: 40, default: '' },
         visibility: {
             type: String,
             enum: ['invite_only', 'public'],

@@ -745,3 +745,52 @@ class DomainTemplate {
         purpose: j['purpose']?.toString() ?? '',
       );
 }
+
+class DomainTemplateStats {
+  final String templateId;
+  final String name;
+  final String emoji;
+  final String description;
+  final int roomsCreated;
+  final int messagesSent;
+  final int feedbackUp;
+  final int feedbackDown;
+  final double feedbackAverage;
+  final int d1RetainedRooms;
+  final int d7RetainedRooms;
+  final double d1RetentionRate;
+  final double d7RetentionRate;
+
+  const DomainTemplateStats({
+    required this.templateId,
+    required this.name,
+    required this.emoji,
+    required this.description,
+    required this.roomsCreated,
+    required this.messagesSent,
+    required this.feedbackUp,
+    required this.feedbackDown,
+    required this.feedbackAverage,
+    required this.d1RetainedRooms,
+    required this.d7RetainedRooms,
+    required this.d1RetentionRate,
+    required this.d7RetentionRate,
+  });
+
+  factory DomainTemplateStats.fromJson(Map<String, dynamic> j) =>
+      DomainTemplateStats(
+        templateId: j['templateId']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        emoji: j['emoji']?.toString() ?? '',
+        description: j['description']?.toString() ?? '',
+        roomsCreated: (j['roomsCreated'] as num?)?.toInt() ?? 0,
+        messagesSent: (j['messagesSent'] as num?)?.toInt() ?? 0,
+        feedbackUp: (j['feedbackUp'] as num?)?.toInt() ?? 0,
+        feedbackDown: (j['feedbackDown'] as num?)?.toInt() ?? 0,
+        feedbackAverage: (j['feedbackAverage'] as num?)?.toDouble() ?? 0,
+        d1RetainedRooms: (j['d1RetainedRooms'] as num?)?.toInt() ?? 0,
+        d7RetainedRooms: (j['d7RetainedRooms'] as num?)?.toInt() ?? 0,
+        d1RetentionRate: (j['d1RetentionRate'] as num?)?.toDouble() ?? 0,
+        d7RetentionRate: (j['d7RetentionRate'] as num?)?.toDouble() ?? 0,
+      );
+}

@@ -482,6 +482,115 @@ router.get('/templates', (_req, res) => {
     res.json({ templates: DOMAIN_TEMPLATES.map(({ id, name, emoji, description, purpose }) => ({ id, name, emoji, description, purpose })) });
 });
 
+function toPercent(part, total) {
+    if (!total) return 0;
+    return Math.round((part / total) * 1000) / 10;
+}
+
+/**
+ * GET /api/rooms/templates/stats
+ * Returns usage and quality metrics by template.
+ */
+router.get('/templates/stats', async (_req, res) => {
+    try {
+        const templateIds = DOMAIN_TEMPLATES.map((t) => t.id);
+        const statsByTemplate = new Map(
+            DOMAIN_TEMPLATES.map((t) => [
+                t.id,
+                {
+                    templateId: t.id,
+                    name: t.name,
+                    emoji: t.emoji,
+                    description: t.description,
+                    roomsCreated: 0,
+                    messagesSent: 0,
+                    feedbackUp: 0,
+                    feedbackDown: 0,
+                    feedbackAverage: 0,
+                    d1RetainedRooms: 0,
+                    d7RetainedRooms: 0,
+                    d1RetentionRate: 0,
+                    d7RetentionRate: 0,
+                },
+            ])
+        );
+
+        const rooms = await Room.find(
+            { templateId: { $in: templateIds } },
+            { _id: 1, templateId: 1, createdAt: 1 }
+        ).lean();
+
+        const roomById = new Map();
+        for (const room of rooms) {
+            const roomId = String(room._id);
+            const templateId = String(room.templateId || '');
+            const createdAt = new Date(room.createdAt || Date.now());
+            roomById.set(roomId, { templateId, createdAt });
+            if (statsByTemplate.has(templateId)) {
+                statsByTemplate.get(templateId).roomsCreated += 1;
+            }
+        }
+
+        const roomIds = Array.from(roomById.keys());
+        if (roomIds.length > 0) {
+            const messages = await RoomMessage.find(
+                { roomId: { $in: roomIds } },
+                { roomId: 1, createdAt: 1, feedback: 1 }
+            ).lean();
+
+            const roomHasD1 = new Set();
+            const roomHasD7 = new Set();
+
+            for (const msg of messages) {
+                const roomId = String(msg.roomId);
+                const roomMeta = roomById.get(roomId);
+                if (!roomMeta) continue;
+
+                const templateStats = statsByTemplate.get(roomMeta.templateId);
+                if (!templateStats) continue;
+
+                templateStats.messagesSent += 1;
+
+                const msgCreatedAt = new Date(msg.createdAt || Date.now());
+                const ageMs = msgCreatedAt.getTime() - roomMeta.createdAt.getTime();
+                if (ageMs >= 24 * 60 * 60 * 1000) roomHasD1.add(roomId);
+                if (ageMs >= 7 * 24 * 60 * 60 * 1000) roomHasD7.add(roomId);
+
+                for (const vote of Array.isArray(msg.feedback) ? msg.feedback : []) {
+                    if (vote?.rating === 1) templateStats.feedbackUp += 1;
+                    if (vote?.rating === -1) templateStats.feedbackDown += 1;
+                }
+            }
+
+            for (const [roomId, roomMeta] of roomById.entries()) {
+                const templateStats = statsByTemplate.get(roomMeta.templateId);
+                if (!templateStats) continue;
+                if (roomHasD1.has(roomId)) templateStats.d1RetainedRooms += 1;
+                if (roomHasD7.has(roomId)) templateStats.d7RetainedRooms += 1;
+            }
+        }
+
+        const stats = DOMAIN_TEMPLATES.map((t) => {
+            const s = statsByTemplate.get(t.id);
+            const totalFeedback = s.feedbackUp + s.feedbackDown;
+            const feedbackAverage = totalFeedback
+                ? Math.round(((s.feedbackUp - s.feedbackDown) / totalFeedback) * 100) / 100
+                : 0;
+            return {
+                ...s,
+                feedbackAverage,
+                d1RetentionRate: toPercent(s.d1RetainedRooms, s.roomsCreated),
+                d7RetentionRate: toPercent(s.d7RetainedRooms, s.roomsCreated),
+            };
+        });
+
+        res.json({ stats, generatedAt: new Date().toISOString() });
+    } catch (err) {
+        console.error('[rooms] template stats error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 router.post('/', validateBody(validateCreateRoomPayload), async (req, res, next) => {
     try {
         const { name, type, members, purpose, visibility, templateId } = req.validatedBody;
@@ -514,6 +623,7 @@ router.post('/', validateBody(validateCreateRoomPayload), async (req, res, next)
             name: String(name || '').trim() || 'Nouveau channel',
             type,
             purpose: resolvedPurpose,
+            templateId: template?.id || '',
             visibility,
             ownerId: req.userId,
             members: allMembers,

@@ -22,6 +22,8 @@ class RoomProvider extends ChangeNotifier {
 
   List<DomainTemplate> templates = [];
   bool loadingTemplates = false;
+  List<DomainTemplateStats> templateStats = [];
+  bool loadingTemplateStats = false;
 
   Future<void> loadTemplates() async {
     if (templates.isNotEmpty) return; // already cached
@@ -33,6 +35,21 @@ class RoomProvider extends ChangeNotifier {
       // non-fatal — templates optional
     } finally {
       loadingTemplates = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadTemplateStats({bool force = false}) async {
+    if (loadingTemplateStats) return;
+    if (!force && templateStats.isNotEmpty) return;
+    loadingTemplateStats = true;
+    notifyListeners();
+    try {
+      templateStats = await _svc.fetchTemplateStats();
+    } catch (_) {
+      // Non-blocking for channels list view.
+    } finally {
+      loadingTemplateStats = false;
       notifyListeners();
     }
   }

@@ -154,6 +154,13 @@ class RoomService {
         .toList();
   }
 
+  Future<List<DomainTemplateStats>> fetchTemplateStats() async {
+    final r = await _get('/api/rooms/templates/stats');
+    return (r['stats'] as List)
+        .map((j) => DomainTemplateStats.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<Room> createRoom({
     required String name,
     String type = 'group',

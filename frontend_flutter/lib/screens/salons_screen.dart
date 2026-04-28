@@ -23,6 +23,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final prov = context.read<RoomProvider>();
       prov.loadRooms();
+      prov.loadTemplateStats();
       _handleInviteLinkIfPresent(prov);
     });
   }
@@ -117,6 +118,16 @@ class _SalonsScreenState extends State<SalonsScreen> {
               ),
             ),
           ),
+
+          if (prov.loadingTemplateStats || prov.templateStats.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: _TemplateStatsCard(
+                loading: prov.loadingTemplateStats,
+                stats: prov.templateStats,
+                onRefresh: () => prov.loadTemplateStats(force: true),
+              ),
+            ),
 
           // Body
           Expanded(
@@ -282,6 +293,121 @@ class _RoomTile extends StatelessWidget {
   }
 }
 
+class _TemplateStatsCard extends StatelessWidget {
+  final bool loading;
+  final List<DomainTemplateStats> stats;
+  final VoidCallback onRefresh;
+
+  const _TemplateStatsCard({
+    required this.loading,
+    required this.stats,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final ranked = [...stats]
+      ..sort((a, b) => b.feedbackAverage.compareTo(a.feedbackAverage));
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.analytics_outlined, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Performance des modèles IA',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Actualiser les stats',
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  onPressed: onRefresh,
+                ),
+              ],
+            ),
+            if (loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 6),
+                child: LinearProgressIndicator(minHeight: 3),
+              )
+            else if (ranked.isEmpty)
+              Text(
+                'Aucune donnée template pour le moment.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurface.withValues(alpha: 0.6),
+                ),
+              )
+            else
+              SizedBox(
+                height: 84,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: ranked.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (ctx, i) {
+                    final s = ranked[i];
+                    return Container(
+                      width: 190,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: scheme.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: scheme.outlineVariant),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${s.emoji} ${s.name}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${s.roomsCreated} rooms • ${s.messagesSent} msgs',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurface.withValues(alpha: 0.65),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Score ${s.feedbackAverage.toStringAsFixed(2)} • D7 ${s.d7RetentionRate.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurface.withValues(alpha: 0.65),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Empty / Error states ──────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
@@ -426,11 +552,9 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                         return GestureDetector(
                           onTap: () {
                             setState(() {
-                              _selectedTemplateId =
-                                  selected ? null : t.id;
+                              _selectedTemplateId = selected ? null : t.id;
                               // Auto-fill name if still empty
-                              if (!selected &&
-                                  widget.nameCtrl.text.isEmpty) {
+                              if (!selected && widget.nameCtrl.text.isEmpty) {
                                 widget.nameCtrl.text = t.name;
                               }
                             });
