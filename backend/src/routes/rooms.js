@@ -118,6 +118,16 @@ function isRoomOwner(room, userId) {
     );
 }
 
+function getRoomRole(room, userId) {
+    const member = room.members.find((item) => item.userId === userId);
+    return String(member?.role || '').trim().toLowerCase();
+}
+
+function canReviewArtifacts(room, userId) {
+    const role = getRoomRole(room, userId);
+    return role === 'owner' || role === 'member';
+}
+
 async function loadRoomOr404(roomId, res) {
     const room = await Room.findById(roomId);
     if (!room) {
@@ -2241,6 +2251,9 @@ router.post('/:id/artifacts/:artifactId/versions/:versionId/comment', validateBo
         if (!isRoomMember(room, req.userId)) {
             return res.status(403).json({ error: 'Not a member of this room' });
         }
+        if (!canReviewArtifacts(room, req.userId)) {
+            return res.status(403).json({ error: 'Owner or member role required for artifact comments' });
+        }
 
         const artifact = await RoomArtifact.findOne({
             _id: req.params.artifactId,
@@ -2392,6 +2405,9 @@ router.patch(
             if (!isRoomMember(room, req.userId)) {
                 return res.status(403).json({ error: 'Not a member of this room' });
             }
+            if (!canReviewArtifacts(room, req.userId)) {
+                return res.status(403).json({ error: 'Owner or member role required for artifact comments' });
+            }
 
             const artifact = await RoomArtifact.findOne({
                 _id: req.params.artifactId,
@@ -2413,11 +2429,6 @@ router.patch(
             const comment = version.comments.id(req.params.commentId);
             if (!comment) {
                 return res.status(404).json({ error: 'Comment not found' });
-            }
-
-            // Only the comment author or an owner can resolve/unresolve
-            if (comment.authorId !== req.userId && !isRoomOwner(room, req.userId)) {
-                return res.status(403).json({ error: 'Not authorized to resolve this comment' });
             }
 
             comment.resolved = resolved;

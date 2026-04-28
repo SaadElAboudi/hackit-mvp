@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 import mongoose from 'mongoose';
+import Room from '../src/models/Room.js';
 
 process.env.NODE_ENV = 'test';
 const { createApp } = await import('../src/index.js');
@@ -24,6 +25,14 @@ function restoreMongoReady() {
     if (originalReadyStateDescriptor) {
         Object.defineProperty(mongoose.connection, 'readyState', originalReadyStateDescriptor);
     }
+}
+
+function mockRoomFindById(t, roomDoc) {
+    const original = Room.findById;
+    Room.findById = async () => roomDoc;
+    t.after(() => {
+        Room.findById = original;
+    });
 }
 
 function startServer(app, port = 0) {
@@ -208,4 +217,70 @@ await test('POST version comment — empty content returns BAD_REQUEST envelope'
     assert.equal(json.code, 'BAD_REQUEST');
     assert.match(String(json.message || ''), /content/i);
     assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+});
+
+await test('POST version comment — guest role is forbidden', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeArtifactId = '507f191e810c19729de860eb';
+    const fakeVersionId = '507f191e810c19729de860ec';
+    const userId = 'user_wf_guest_comment';
+
+    mockRoomFindById(t, {
+        _id: fakeRoomId,
+        members: [{ userId, role: 'guest' }],
+    });
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/artifacts/${fakeArtifactId}/versions/${fakeVersionId}/comment`,
+        body: { content: 'Please update this section' },
+        headers: { 'x-user-id': userId },
+    });
+
+    assert.equal(res.status, 403);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.match(String(json.code || ''), /(FORBIDDEN|BAD_REQUEST)/i);
+    assert.match(String(json.message || ''), /owner or member role required/i);
+});
+
+await test('PATCH comment resolve — guest role is forbidden', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeArtifactId = '507f191e810c19729de860eb';
+    const fakeVersionId = '507f191e810c19729de860ec';
+    const fakeCommentId = '507f191e810c19729de860ed';
+    const userId = 'user_wf_guest_resolve';
+
+    mockRoomFindById(t, {
+        _id: fakeRoomId,
+        members: [{ userId, role: 'guest' }],
+    });
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/artifacts/${fakeArtifactId}/versions/${fakeVersionId}/comments/${fakeCommentId}/resolve`,
+        method: 'PATCH',
+        body: { resolved: true },
+        headers: { 'x-user-id': userId },
+    });
+
+    assert.equal(res.status, 403);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.match(String(json.code || ''), /(FORBIDDEN|BAD_REQUEST)/i);
+    assert.match(String(json.message || ''), /owner or member role required/i);
 });
