@@ -78,7 +78,11 @@ import {
     validateUpdateWorkspacePagePayload,
     validateUpdateWorkspaceTaskPayload,
 } from '../middleware/validation.js';
-import DOMAIN_TEMPLATES, { getTemplateById } from '../config/domainTemplates.js';
+import DOMAIN_TEMPLATES, {
+    getTemplateById,
+    getTemplateVersions,
+    resolveTemplateVariant,
+} from '../config/domainTemplates.js';
 
 const router = express.Router();
 const APP_BASE_URL =
@@ -574,32 +578,34 @@ router.get('/templates/stats', async (req, res) => {
                 : String(templateId || '');
 
         const orderedKeys = [];
-        const statsByTemplate = new Map(
-            DOMAIN_TEMPLATES.map((t) => {
-                const templateVersion = String(t.version || 'v1');
+        const statsByTemplate = new Map();
+        for (const t of DOMAIN_TEMPLATES) {
+            const versions =
+                groupBy === 'version'
+                    ? getTemplateVersions(t)
+                    : [String(t.version || 'v1')];
+            for (const templateVersion of versions) {
                 const key = keyFor(t.id, templateVersion);
+                if (statsByTemplate.has(key)) continue;
                 orderedKeys.push(key);
-                return [
-                    key,
-                    {
-                        templateId: t.id,
-                        templateVersion: groupBy === 'version' ? templateVersion : null,
-                        name: t.name,
-                        emoji: t.emoji,
-                        description: t.description,
-                        roomsCreated: 0,
-                        messagesSent: 0,
-                        feedbackUp: 0,
-                        feedbackDown: 0,
-                        feedbackAverage: 0,
-                        d1RetainedRooms: 0,
-                        d7RetainedRooms: 0,
-                        d1RetentionRate: 0,
-                        d7RetentionRate: 0,
-                    },
-                ];
-            })
-        );
+                statsByTemplate.set(key, {
+                    templateId: t.id,
+                    templateVersion: groupBy === 'version' ? templateVersion : null,
+                    name: t.name,
+                    emoji: t.emoji,
+                    description: t.description,
+                    roomsCreated: 0,
+                    messagesSent: 0,
+                    feedbackUp: 0,
+                    feedbackDown: 0,
+                    feedbackAverage: 0,
+                    d1RetainedRooms: 0,
+                    d7RetainedRooms: 0,
+                    d1RetentionRate: 0,
+                    d7RetentionRate: 0,
+                });
+            }
+        }
 
         const roomQuery = {
             templateId: { $in: templateIds },
@@ -720,12 +726,28 @@ router.get('/templates/stats', async (req, res) => {
 
 router.post('/', validateBody(validateCreateRoomPayload), async (req, res, next) => {
     try {
-        const { name, type, members, purpose, visibility, templateId } = req.validatedBody;
+        const {
+            name,
+            type,
+            members,
+            purpose,
+            visibility,
+            templateId,
+            templateVersion,
+        } = req.validatedBody;
 
         // Apply domain template directives if a valid templateId was supplied
         const template = templateId ? getTemplateById(templateId) : null;
+        const selectedTemplate = template
+            ? resolveTemplateVariant(template, templateVersion)
+            : null;
+        if (template && templateVersion && !selectedTemplate) {
+            return res
+                .status(400)
+                .json({ error: 'templateVersion is invalid for this template' });
+        }
         const resolvedPurpose = (purpose || template?.purpose || '').slice(0, 240);
-        const resolvedDirectives = template ? template.aiDirectives : '';
+        const resolvedDirectives = selectedTemplate?.aiDirectives || '';
 
         const allMembers = [
             {
@@ -751,7 +773,7 @@ router.post('/', validateBody(validateCreateRoomPayload), async (req, res, next)
             type,
             purpose: resolvedPurpose,
             templateId: template?.id || '',
-            templateVersion: template?.version || '',
+            templateVersion: selectedTemplate?.version || '',
             visibility,
             ownerId: req.userId,
             members: allMembers,

@@ -123,6 +123,7 @@ await test('POST /api/rooms persists templateId and applies directives', async (
         body: {
             name: 'Canal marketing',
             templateId: 'marketing',
+            templateVersion: 'v1',
         },
     });
 
@@ -130,6 +131,99 @@ await test('POST /api/rooms persists templateId and applies directives', async (
     assert.equal(captured.payload.templateId, 'marketing');
     assert.equal(captured.payload.templateVersion, 'v1');
     assert.ok(String(captured.payload.aiDirectives || '').length > 0);
+});
+
+await test('POST /api/rooms rejects invalid templateVersion for template', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms',
+        method: 'POST',
+        headers: {
+            'x-user-id': 'user_template_create_invalid_v',
+            'x-display-name': 'Template Owner',
+        },
+        body: {
+            name: 'Canal marketing',
+            templateId: 'marketing',
+            templateVersion: 'v99',
+        },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.error, 'templateVersion is invalid for this template');
+});
+
+await test('POST /api/rooms uses weighted template version when no explicit override', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const originalCreate = Room.create;
+    const originalRandom = Math.random;
+    const capturedVersions = [];
+
+    Room.create = async (payload) => {
+        capturedVersions.push(payload.templateVersion);
+        return {
+            ...payload,
+            _id: `507f191e810c19729de86${String(capturedVersions.length).padStart(3, '0')}`,
+            updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+            lastActivityAt: new Date('2026-01-01T00:00:00.000Z'),
+            toObject() {
+                return this;
+            },
+        };
+    };
+
+    t.after(() => {
+        Room.create = originalCreate;
+        Math.random = originalRandom;
+    });
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    Math.random = () => 0.05; // falls into marketing v1 (80%)
+    const resV1 = await requestJson({
+        port,
+        path: '/api/rooms',
+        method: 'POST',
+        headers: {
+            'x-user-id': 'user_template_create_weighted_1',
+            'x-display-name': 'Template Owner',
+        },
+        body: {
+            name: 'Canal marketing v1',
+            templateId: 'marketing',
+        },
+    });
+
+    Math.random = () => 0.95; // falls into marketing v2 (20%)
+    const resV2 = await requestJson({
+        port,
+        path: '/api/rooms',
+        method: 'POST',
+        headers: {
+            'x-user-id': 'user_template_create_weighted_2',
+            'x-display-name': 'Template Owner',
+        },
+        body: {
+            name: 'Canal marketing v2',
+            templateId: 'marketing',
+        },
+    });
+
+    assert.equal(resV1.status, 201);
+    assert.equal(resV2.status, 201);
+    assert.deepEqual(capturedVersions, ['v1', 'v2']);
 });
 
 await test('GET /api/rooms/templates/stats aggregates usage and retention metrics', async (t) => {
