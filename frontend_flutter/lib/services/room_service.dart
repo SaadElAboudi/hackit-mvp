@@ -235,6 +235,11 @@ class RoomService {
     return r['link'] as String;
   }
 
+  Future<Room> joinRoom(String roomId) async {
+    final r = await _post('/api/rooms/$roomId/join', const {});
+    return Room.fromJson(r['room'] as Map<String, dynamic>);
+  }
+
   // ── Document upload ───────────────────────────────────────────────────────────
 
   Future<RoomMessage> uploadDocument(

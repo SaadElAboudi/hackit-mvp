@@ -51,6 +51,24 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<Room?> joinRoomById(String roomId) async {
+    try {
+      final room = await _svc.joinRoom(roomId);
+      final idx = rooms.indexWhere((r) => r.id == room.id);
+      if (idx >= 0) {
+        rooms[idx] = room;
+      } else {
+        rooms.insert(0, room);
+      }
+      notifyListeners();
+      return room;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
   // ── Current room chat ─────────────────────────────────────────────────────────
 
   Room? currentRoom;

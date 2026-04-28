@@ -1639,6 +1639,33 @@ router.delete('/:id/members/:uid', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/rooms/:id/join
+ * Join a room from an invite link.
+ */
+router.post('/:id/join', async (req, res) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        const alreadyMember = room.members.some((member) => member.userId === req.userId);
+        if (!alreadyMember) {
+            room.members.push({
+                userId: req.userId,
+                displayName: req.displayName || `User_${req.userId.slice(-6)}`,
+                role: 'member',
+            });
+            room.lastActivityAt = new Date();
+            await room.save();
+        }
+
+        res.json({ room: roomResponse(room), joined: !alreadyMember });
+    } catch (err) {
+        console.error('[rooms] join error:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 router.get('/:id/invite', async (req, res) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);
@@ -1647,7 +1674,7 @@ router.get('/:id/invite', async (req, res) => {
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
-        const link = `${APP_BASE_URL}/#/channel/${req.params.id}`;
+        const link = `${APP_BASE_URL}/#/invite/${req.params.id}`;
         res.json({ link, roomName: room.name });
     } catch (err) {
         console.error('[rooms] invite error:', err);

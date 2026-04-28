@@ -15,12 +15,61 @@ class SalonsScreen extends StatefulWidget {
 }
 
 class _SalonsScreenState extends State<SalonsScreen> {
+  bool _inviteHandled = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<RoomProvider>().loadRooms();
+      final prov = context.read<RoomProvider>();
+      prov.loadRooms();
+      _handleInviteLinkIfPresent(prov);
     });
+  }
+
+  Future<void> _handleInviteLinkIfPresent(RoomProvider prov) async {
+    if (_inviteHandled || !mounted) return;
+
+    final uri = Uri.base;
+    final roomId = _extractInviteRoomId(uri);
+    if (roomId == null || roomId.isEmpty) return;
+
+    _inviteHandled = true;
+    final room = await prov.joinRoomById(roomId);
+    if (!mounted) return;
+
+    if (room == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            prov.actionError ?? 'Impossible de rejoindre ce channel',
+          ),
+        ),
+      );
+      return;
+    }
+
+    _openRoom(context, room);
+  }
+
+  String? _extractInviteRoomId(Uri uri) {
+    String normalize(String value) => value.startsWith('/') ? value : '/$value';
+
+    final candidates = <String>[];
+    if (uri.path.isNotEmpty) candidates.add(normalize(uri.path));
+    if (uri.fragment.isNotEmpty) candidates.add(normalize(uri.fragment));
+
+    for (final candidate in candidates) {
+      final inviteMatch =
+          RegExp(r'^/invite/([a-fA-F0-9]{24})').firstMatch(candidate);
+      if (inviteMatch != null) return inviteMatch.group(1);
+
+      final channelMatch =
+          RegExp(r'^/channel/([a-fA-F0-9]{24})').firstMatch(candidate);
+      if (channelMatch != null) return channelMatch.group(1);
+    }
+
+    return null;
   }
 
   @override
@@ -63,7 +112,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
             child: Text(
               'Collaborez dans des channels partageables. L’IA est un collègue visible par tous quand vous l’interpellez avec @ia ou une commande.',
               style: TextStyle(
-                color: scheme.onSurface.withOpacity(0.55),
+                color: scheme.onSurface.withValues(alpha: 0.55),
                 fontSize: 13,
               ),
             ),
@@ -128,7 +177,8 @@ class _SalonsScreenState extends State<SalonsScreen> {
               'Le channel partagera une IA commune. Utilisez @ia, /doc, /search, /decide ou /mission une fois dedans.',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.5),
+                color:
+                    Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
               ),
             ),
           ],
@@ -233,14 +283,14 @@ class _RoomTile extends StatelessWidget {
                               ? Icons.person_outline_rounded
                               : Icons.group_outlined,
                           size: 13,
-                          color: scheme.onSurface.withOpacity(0.5),
+                          color: scheme.onSurface.withValues(alpha: 0.5),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${room.memberCount} membre${room.memberCount > 1 ? 's' : ''}',
                           style: TextStyle(
                             fontSize: 12,
-                            color: scheme.onSurface.withOpacity(0.5),
+                            color: scheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
                       ],
@@ -251,7 +301,7 @@ class _RoomTile extends StatelessWidget {
 
               Icon(
                 Icons.chevron_right_rounded,
-                color: scheme.onSurface.withOpacity(0.3),
+                color: scheme.onSurface.withValues(alpha: 0.3),
               ),
             ],
           ),
@@ -277,7 +327,7 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.forum_outlined,
-                size: 64, color: scheme.primary.withOpacity(0.4)),
+                size: 64, color: scheme.primary.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             Text(
               'Pas encore de channel',
@@ -290,7 +340,7 @@ class _EmptyState extends StatelessWidget {
               'Créez un channel pour collaborer avec vos collègues.\nL’IA commune du channel vous aidera à produire, chercher et décider.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: scheme.onSurface.withOpacity(0.55),
+                color: scheme.onSurface.withValues(alpha: 0.55),
               ),
             ),
             const SizedBox(height: 24),
@@ -325,7 +375,7 @@ class _ErrorState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: scheme.onSurface.withOpacity(0.7)),
+              style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
