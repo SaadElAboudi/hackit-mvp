@@ -118,7 +118,7 @@ await test('error envelope is normalized for 404 routes', async (t) => {
     assert.equal(res.status, 404);
     const json = JSON.parse(res.data);
     assertEnvelope(json);
-    assert.equal(json.code, 'BAD_REQUEST');
+    assert.equal(json.code, 'NOT_FOUND');
 });
 
 await test('error envelope is normalized for 5xx service errors', async (t) => {

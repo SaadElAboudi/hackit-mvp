@@ -107,7 +107,7 @@ await test('PATCH artifact status — invalid status returns BAD_REQUEST envelop
     assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
     assert.ok(
         typeof res.headers['x-request-id'] === 'string' &&
-            res.headers['x-request-id'].length > 0
+        res.headers['x-request-id'].length > 0
     );
 });
 
@@ -247,7 +247,7 @@ await test('POST version comment — guest role is forbidden', async (t) => {
     assert.equal(res.status, 403);
     const json = JSON.parse(res.data);
     assert.equal(json.ok, false);
-    assert.match(String(json.code || ''), /(FORBIDDEN|BAD_REQUEST)/i);
+    assert.equal(json.code, 'FORBIDDEN');
     assert.match(String(json.message || ''), /owner or member role required/i);
 });
 
@@ -281,6 +281,6 @@ await test('PATCH comment resolve — guest role is forbidden', async (t) => {
     assert.equal(res.status, 403);
     const json = JSON.parse(res.data);
     assert.equal(json.ok, false);
-    assert.match(String(json.code || ''), /(FORBIDDEN|BAD_REQUEST)/i);
+    assert.equal(json.code, 'FORBIDDEN');
     assert.match(String(json.message || ''), /owner or member role required/i);
 });

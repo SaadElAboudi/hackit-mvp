@@ -27,7 +27,15 @@ dotenv.config({ quiet: true });
 
 const featureFlags = getFeatureFlags();
 
-
+function mapStatusToErrorCode(statusCode) {
+  const code = Number(statusCode || 500);
+  if (code === 401) return 'UNAUTHORIZED';
+  if (code === 403) return 'FORBIDDEN';
+  if (code === 404) return 'NOT_FOUND';
+  if (code === 429) return 'RATE_LIMITED';
+  if (code >= 500) return 'INTERNAL_ERROR';
+  return 'BAD_REQUEST';
+}
 
 const app = express();
 // CORS middleware at the very top
@@ -62,7 +70,7 @@ app.use((req, res, next) => {
         const message = String(payload.error || '').trim() || (statusCode >= 500 ? 'Internal server error' : 'Request failed');
         const normalized = {
           ok: false,
-          code: statusCode === 429 ? 'RATE_LIMITED' : (statusCode >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST'),
+          code: mapStatusToErrorCode(statusCode),
           message,
           details: Object.prototype.hasOwnProperty.call(payload, 'details')
             ? payload.details
@@ -2131,7 +2139,7 @@ app.use((err, _req, res, next) => {
     });
   }
   const status = Number(err?.status || err?.statusCode) || 500;
-  const code = err?.code || (status === 429 ? 'RATE_LIMITED' : (status >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST'));
+  const code = err?.code || mapStatusToErrorCode(status);
   if (status === 429) {
     const retryAfter = Number(err?.retryAfterSec || err?.details?.retryAfterSec || 60);
     res.setHeader('Retry-After', String(Math.max(1, Math.floor(retryAfter))));
