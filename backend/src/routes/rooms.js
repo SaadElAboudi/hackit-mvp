@@ -234,6 +234,196 @@ function fallbackExtractDecisionsFromMessages(messages, maxDecisions = 5, maxTas
     });
 }
 
+async function executeDecisionExtraction(req, res, next, { missionIdOverride = '' } = {}) {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { recentLimit, maxDecisions, maxTasksPerDecision, persist } = req.validatedBody;
+        const missionId = String(missionIdOverride || req.validatedBody?.missionId || '').trim();
+
+        const recentMessages = await RoomMessage.find({ roomId: req.params.id })
+            .sort({ createdAt: -1 })
+            .limit(recentLimit)
+            .lean();
+
+        const chronology = recentMessages
+            .slice()
+            .reverse()
+            .map((msg) => {
+                const sender = msg?.isAI ? 'AI' : String(msg?.senderName || 'Member').slice(0, 40);
+                const content = String(msg?.content || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+                return `${sender}: ${content}`;
+            })
+            .filter((line) => line.length > 4)
+            .slice(-recentLimit);
+
+        let missionContext = null;
+        if (missionId) {
+            const mission = await RoomMission.findOne({
+                _id: missionId,
+                roomId: req.params.id,
+            }).lean();
+
+            if (!mission && missionIdOverride) {
+                return res.status(404).json({ error: 'Mission not found' });
+            }
+
+            if (mission) {
+                const resultMessage = mission.resultMessageId
+                    ? await RoomMessage.findOne({
+                        _id: mission.resultMessageId,
+                        roomId: req.params.id,
+                    }).lean()
+                    : null;
+                const missionPrompt = String(mission.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 600);
+                const missionResult = String(resultMessage?.content || '').replace(/\s+/g, ' ').trim().slice(0, 900);
+                missionContext = {
+                    missionId: String(mission._id),
+                    prompt: missionPrompt,
+                    result: missionResult,
+                };
+            }
+        }
+
+        const contextLines = [];
+        if (missionContext?.prompt) {
+            contextLines.push(`Mission prompt: ${missionContext.prompt}`);
+        }
+        if (missionContext?.result) {
+            contextLines.push(`Mission result: ${missionContext.result}`);
+        }
+        const extractionLines = [...contextLines, ...chronology].slice(-Math.max(recentLimit, 10));
+
+        let extracted = [];
+        if (extractionLines.length) {
+            const prompt = [
+                'Tu es un facilitateur operationnel.',
+                'A partir de la conversation suivante, extrais des decisions actionnables et des taches associees.',
+                `Contraintes: max ${maxDecisions} decisions, max ${maxTasksPerDecision} taches par decision.`,
+                'Reponds STRICTEMENT en JSON valide, sans texte hors JSON.',
+                'Schema:',
+                '{"decisions":[{"title":"...","summary":"...","tasks":[{"title":"...","description":"..."}]}]}',
+                'La reponse doit etre en francais, concrete, sans formulations generiques.',
+                '',
+                'Conversation:',
+                extractionLines.join('\n'),
+            ].join('\n');
+
+            try {
+                const llmText = await generateWithGeminiShared(prompt, 1400, {
+                    model: 'models/gemini-2.0-flash-lite',
+                    preferModels: ['models/gemini-2.0-flash-lite', 'models/gemini-2.0-flash'],
+                    timeoutMs: 25000,
+                    temperature: 0.25,
+                    maxAttemptsPerModel: 2,
+                    allowQualityRepair: true,
+                });
+                const parsed = extractJsonObject(llmText);
+                const list = Array.isArray(parsed?.decisions) ? parsed.decisions : [];
+                extracted = list
+                    .map((entry) => ({
+                        title: String(entry?.title || '').trim().slice(0, 180),
+                        summary: String(entry?.summary || '').trim().slice(0, 2000),
+                        tasks: (Array.isArray(entry?.tasks) ? entry.tasks : [])
+                            .map((task) => ({
+                                title: String(task?.title || '').trim().slice(0, 180),
+                                description: String(task?.description || '').trim().slice(0, 2000),
+                            }))
+                            .filter((task) => task.title)
+                            .slice(0, maxTasksPerDecision),
+                    }))
+                    .filter((entry) => entry.title)
+                    .slice(0, maxDecisions);
+            } catch (extractErr) {
+                console.warn('[rooms] decisions extract fallback:', extractErr?.message || extractErr);
+            }
+        }
+
+        if (!extracted.length) {
+            const fallbackSource = [
+                ...(missionContext?.prompt ? [{ content: missionContext.prompt }] : []),
+                ...(missionContext?.result ? [{ content: missionContext.result }] : []),
+                ...recentMessages,
+            ];
+            extracted = fallbackExtractDecisionsFromMessages(fallbackSource, maxDecisions, maxTasksPerDecision)
+                .slice(0, maxDecisions);
+        }
+
+        if (!persist) {
+            return res.json({
+                extracted,
+                persisted: false,
+                sourceMessageCount: extractionLines.length,
+                missionContext: missionContext ? { missionId: missionContext.missionId } : null,
+            });
+        }
+
+        const createdDecisions = [];
+        const createdTasks = [];
+        for (const item of extracted) {
+            const decision = await WorkspaceDecision.create({
+                roomId: req.params.id,
+                sourceType: missionContext ? 'mission' : 'message',
+                sourceId: missionContext?.missionId || '',
+                title: item.title,
+                summary: item.summary,
+                createdBy: req.userId,
+                createdByName: req.displayName,
+            });
+            createdDecisions.push(decision);
+
+            if (item.tasks?.length) {
+                const tasks = await WorkspaceTask.insertMany(
+                    item.tasks.map((task) => ({
+                        roomId: req.params.id,
+                        decisionId: decision._id,
+                        title: task.title,
+                        description: task.description || '',
+                        createdBy: req.userId,
+                        createdByName: req.displayName,
+                        lastUpdatedBy: req.userId,
+                        lastUpdatedByName: req.displayName,
+                    }))
+                );
+                createdTasks.push(...tasks);
+            }
+
+            decision.convertedAt = new Date();
+            await decision.save();
+
+            broadcastRoomDecisionCreated(req.params.id, {
+                type: 'workspace_decision_extracted',
+                data: {
+                    decisionId: String(decision._id),
+                    title: decision.title,
+                    sourceType: decision.sourceType,
+                },
+                authorId: req.userId,
+                authorName: req.displayName,
+                createdAt: decision.createdAt,
+            });
+        }
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        return res.status(201).json({
+            extracted,
+            persisted: true,
+            sourceMessageCount: extractionLines.length,
+            missionContext: missionContext ? { missionId: missionContext.missionId } : null,
+            decisions: createdDecisions.map((decision) => workspaceDecisionSummary(decision)),
+            tasks: createdTasks.map((task) => workspaceTaskSummary(task)),
+        });
+    } catch (err) {
+        return next(err);
+    }
+}
+
 function tooManyRequestsError(message = 'Too many requests') {
     const err = new Error(message);
     err.status = 429;
@@ -1087,187 +1277,7 @@ router.post('/:id/decisions', validateBody(validateCreateWorkspaceDecisionPayloa
 });
 
 router.post('/:id/decisions/extract', validateBody(validateExtractWorkspaceDecisionsPayload), async (req, res, next) => {
-    try {
-        const room = await loadRoomOr404(req.params.id, res);
-        if (!room) return;
-        if (!isRoomMember(room, req.userId)) {
-            return res.status(403).json({ error: 'Not a member of this room' });
-        }
-
-        const { recentLimit, maxDecisions, maxTasksPerDecision, persist, missionId } = req.validatedBody;
-
-        const recentMessages = await RoomMessage.find({ roomId: req.params.id })
-            .sort({ createdAt: -1 })
-            .limit(recentLimit)
-            .lean();
-
-        const chronology = recentMessages
-            .slice()
-            .reverse()
-            .map((msg) => {
-                const sender = msg?.isAI ? 'AI' : String(msg?.senderName || 'Member').slice(0, 40);
-                const content = String(msg?.content || '').replace(/\s+/g, ' ').trim().slice(0, 400);
-                return `${sender}: ${content}`;
-            })
-            .filter((line) => line.length > 4)
-            .slice(-recentLimit);
-
-        let missionContext = null;
-        if (missionId) {
-            const mission = await RoomMission.findOne({
-                _id: missionId,
-                roomId: req.params.id,
-            }).lean();
-            if (mission) {
-                const resultMessage = mission.resultMessageId
-                    ? await RoomMessage.findOne({
-                        _id: mission.resultMessageId,
-                        roomId: req.params.id,
-                    }).lean()
-                    : null;
-                const missionPrompt = String(mission.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 600);
-                const missionResult = String(resultMessage?.content || '').replace(/\s+/g, ' ').trim().slice(0, 900);
-                missionContext = {
-                    missionId: String(mission._id),
-                    prompt: missionPrompt,
-                    result: missionResult,
-                };
-            }
-        }
-
-        const contextLines = [];
-        if (missionContext?.prompt) {
-            contextLines.push(`Mission prompt: ${missionContext.prompt}`);
-        }
-        if (missionContext?.result) {
-            contextLines.push(`Mission result: ${missionContext.result}`);
-        }
-        const extractionLines = [...contextLines, ...chronology].slice(-Math.max(recentLimit, 10));
-
-        let extracted = [];
-        if (extractionLines.length) {
-            const prompt = [
-                'Tu es un facilitateur operationnel.',
-                'A partir de la conversation suivante, extrais des decisions actionnables et des taches associees.',
-                `Contraintes: max ${maxDecisions} decisions, max ${maxTasksPerDecision} taches par decision.`,
-                'Reponds STRICTEMENT en JSON valide, sans texte hors JSON.',
-                'Schema:',
-                '{"decisions":[{"title":"...","summary":"...","tasks":[{"title":"...","description":"..."}]}]}',
-                'La reponse doit etre en francais, concrete, sans formulations generiques.',
-                '',
-                'Conversation:',
-                extractionLines.join('\n'),
-            ].join('\n');
-
-            try {
-                const llmText = await generateWithGeminiShared(prompt, 1400, {
-                    model: 'models/gemini-2.0-flash-lite',
-                    preferModels: ['models/gemini-2.0-flash-lite', 'models/gemini-2.0-flash'],
-                    timeoutMs: 25000,
-                    temperature: 0.25,
-                    maxAttemptsPerModel: 2,
-                    allowQualityRepair: true,
-                });
-                const parsed = extractJsonObject(llmText);
-                const list = Array.isArray(parsed?.decisions) ? parsed.decisions : [];
-                extracted = list
-                    .map((entry) => ({
-                        title: String(entry?.title || '').trim().slice(0, 180),
-                        summary: String(entry?.summary || '').trim().slice(0, 2000),
-                        tasks: (Array.isArray(entry?.tasks) ? entry.tasks : [])
-                            .map((task) => ({
-                                title: String(task?.title || '').trim().slice(0, 180),
-                                description: String(task?.description || '').trim().slice(0, 2000),
-                            }))
-                            .filter((task) => task.title)
-                            .slice(0, maxTasksPerDecision),
-                    }))
-                    .filter((entry) => entry.title)
-                    .slice(0, maxDecisions);
-            } catch (extractErr) {
-                console.warn('[rooms] decisions extract fallback:', extractErr?.message || extractErr);
-            }
-        }
-
-        if (!extracted.length) {
-            const fallbackSource = [
-                ...(missionContext?.prompt ? [{ content: missionContext.prompt }] : []),
-                ...(missionContext?.result ? [{ content: missionContext.result }] : []),
-                ...recentMessages,
-            ];
-            extracted = fallbackExtractDecisionsFromMessages(fallbackSource, maxDecisions, maxTasksPerDecision)
-                .slice(0, maxDecisions);
-        }
-
-        if (!persist) {
-            return res.json({
-                extracted,
-                persisted: false,
-                sourceMessageCount: extractionLines.length,
-                missionContext: missionContext ? { missionId: missionContext.missionId } : null,
-            });
-        }
-
-        const createdDecisions = [];
-        const createdTasks = [];
-        for (const item of extracted) {
-            const decision = await WorkspaceDecision.create({
-                roomId: req.params.id,
-                sourceType: missionContext ? 'mission' : 'message',
-                sourceId: missionContext?.missionId || '',
-                title: item.title,
-                summary: item.summary,
-                createdBy: req.userId,
-                createdByName: req.displayName,
-            });
-            createdDecisions.push(decision);
-
-            if (item.tasks?.length) {
-                const tasks = await WorkspaceTask.insertMany(
-                    item.tasks.map((task) => ({
-                        roomId: req.params.id,
-                        decisionId: decision._id,
-                        title: task.title,
-                        description: task.description || '',
-                        createdBy: req.userId,
-                        createdByName: req.displayName,
-                        lastUpdatedBy: req.userId,
-                        lastUpdatedByName: req.displayName,
-                    }))
-                );
-                createdTasks.push(...tasks);
-            }
-
-            decision.convertedAt = new Date();
-            await decision.save();
-
-            broadcastRoomDecisionCreated(req.params.id, {
-                type: 'workspace_decision_extracted',
-                data: {
-                    decisionId: String(decision._id),
-                    title: decision.title,
-                    sourceType: decision.sourceType,
-                },
-                authorId: req.userId,
-                authorName: req.displayName,
-                createdAt: decision.createdAt,
-            });
-        }
-
-        room.lastActivityAt = new Date();
-        await room.save();
-
-        return res.status(201).json({
-            extracted,
-            persisted: true,
-            sourceMessageCount: extractionLines.length,
-            missionContext: missionContext ? { missionId: missionContext.missionId } : null,
-            decisions: createdDecisions.map((decision) => workspaceDecisionSummary(decision)),
-            tasks: createdTasks.map((task) => workspaceTaskSummary(task)),
-        });
-    } catch (err) {
-        next(err);
-    }
+    return executeDecisionExtraction(req, res, next);
 });
 
 router.post('/:id/decisions/:decisionId/convert', validateBody(validateConvertDecisionToTasksPayload), async (req, res, next) => {
@@ -2063,6 +2073,12 @@ router.post('/:id/missions', validateBody(validateCreateMissionPayload), async (
         console.error('[rooms] mission create error:', err);
         next(err);
     }
+});
+
+router.post('/:id/missions/:missionId/extract', validateBody(validateExtractWorkspaceDecisionsPayload), async (req, res, next) => {
+    return executeDecisionExtraction(req, res, next, {
+        missionIdOverride: req.params.missionId,
+    });
 });
 
 router.get('/:id/memory', async (req, res) => {

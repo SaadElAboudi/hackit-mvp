@@ -225,3 +225,122 @@ await test('POST decisions extract persists mission-linked decisions and tasks',
     assert.equal(createdDecisionPayloads[0].sourceType, 'mission');
     assert.equal(createdDecisionPayloads[0].sourceId, fakeMissionId);
 });
+
+await test('POST mission extract endpoint persists decisions without missionId in body', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeUserId = 'user_extract_3';
+    const fakeMissionId = '507f191e810c19729de860f4';
+
+    const restoreFindRoom = withStub(Room, 'findById', async () => ({
+        _id: fakeRoomId,
+        members: [{ userId: fakeUserId, role: 'owner' }],
+        save: async () => { },
+    }));
+    const restoreFindMission = withStub(RoomMission, 'findOne', () => ({
+        lean: async () => ({
+            _id: fakeMissionId,
+            roomId: fakeRoomId,
+            prompt: 'Generer un plan d\'execution commercial Q3.',
+            resultMessageId: null,
+        }),
+    }));
+    const restoreFindMessages = withStub(RoomMessage, 'find', () => buildChain([
+        {
+            _id: '507f191e810c19729de860f5',
+            senderName: 'Ops',
+            isAI: false,
+            content: 'On formalise le plan GTM et les owners par segment.',
+        },
+    ]));
+
+    let createdDecisionPayloads = [];
+    const restoreCreateDecision = withStub(WorkspaceDecision, 'create', async (payload) => {
+        createdDecisionPayloads.push(payload);
+        return {
+            _id: `decision_endpoint_${createdDecisionPayloads.length}`,
+            createdAt: new Date(),
+            ...payload,
+            async save() {
+                return this;
+            },
+            toObject() {
+                return { _id: this._id, ...payload };
+            },
+        };
+    });
+    const restoreInsertTasks = withStub(WorkspaceTask, 'insertMany', async (items) => {
+        return items.map((item, idx) => ({ _id: `task_endpoint_${idx + 1}`, ...item }));
+    });
+
+    t.after(() => {
+        restoreFindRoom();
+        restoreFindMission();
+        restoreFindMessages();
+        restoreCreateDecision();
+        restoreInsertTasks();
+    });
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/missions/${fakeMissionId}/extract`,
+        method: 'POST',
+        body: { persist: true, recentLimit: 20 },
+        headers: { 'x-user-id': fakeUserId, 'x-display-name': 'Ops' },
+    });
+
+    assert.equal(res.status, 201);
+    const json = JSON.parse(res.data);
+    assert.equal(json.persisted, true);
+    assert.equal(json.missionContext?.missionId, fakeMissionId);
+    assert.ok(createdDecisionPayloads.length >= 1);
+    assert.equal(createdDecisionPayloads[0].sourceType, 'mission');
+    assert.equal(createdDecisionPayloads[0].sourceId, fakeMissionId);
+});
+
+await test('POST mission extract endpoint returns 404 when mission does not exist', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeUserId = 'user_extract_4';
+    const fakeMissionId = '507f191e810c19729de860f6';
+
+    const restoreFindRoom = withStub(Room, 'findById', async () => ({
+        _id: fakeRoomId,
+        members: [{ userId: fakeUserId, role: 'owner' }],
+        save: async () => { },
+    }));
+    const restoreFindMission = withStub(RoomMission, 'findOne', () => ({
+        lean: async () => null,
+    }));
+    const restoreFindMessages = withStub(RoomMessage, 'find', () => buildChain([]));
+
+    t.after(() => {
+        restoreFindRoom();
+        restoreFindMission();
+        restoreFindMessages();
+    });
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/missions/${fakeMissionId}/extract`,
+        method: 'POST',
+        body: { persist: true },
+        headers: { 'x-user-id': fakeUserId, 'x-display-name': 'Ops' },
+    });
+
+    assert.equal(res.status, 404);
+    const json = JSON.parse(res.data);
+    assert.equal(json.error, 'Mission not found');
+});
