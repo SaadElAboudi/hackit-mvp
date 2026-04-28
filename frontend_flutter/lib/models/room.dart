@@ -794,3 +794,58 @@ class DomainTemplateStats {
         d7RetentionRate: (j['d7RetentionRate'] as num?)?.toDouble() ?? 0,
       );
 }
+
+class DomainTemplateInsights {
+  final DomainTemplateStats? topByFeedback;
+  final DomainTemplateStats? topByD7Retention;
+  final List<DomainTemplateStats> underperformingTemplates;
+
+  const DomainTemplateInsights({
+    required this.topByFeedback,
+    required this.topByD7Retention,
+    required this.underperformingTemplates,
+  });
+
+  factory DomainTemplateInsights.fromJson(Map<String, dynamic> j) =>
+      DomainTemplateInsights(
+        topByFeedback: j['topByFeedback'] is Map<String, dynamic>
+            ? DomainTemplateStats.fromJson(
+                j['topByFeedback'] as Map<String, dynamic>)
+            : null,
+        topByD7Retention: j['topByD7Retention'] is Map<String, dynamic>
+            ? DomainTemplateStats.fromJson(
+                j['topByD7Retention'] as Map<String, dynamic>)
+            : null,
+        underperformingTemplates:
+            (j['underperformingTemplates'] as List? ?? [])
+                .whereType<Map>()
+                .map((e) =>
+                  DomainTemplateStats.fromJson(e.cast<String, dynamic>()))
+                .toList(),
+      );
+}
+
+class DomainTemplateStatsResponse {
+  final List<DomainTemplateStats> stats;
+  final DomainTemplateInsights? insights;
+  final int? sinceDays;
+
+  const DomainTemplateStatsResponse({
+    required this.stats,
+    required this.insights,
+    required this.sinceDays,
+  });
+
+  factory DomainTemplateStatsResponse.fromJson(Map<String, dynamic> j) =>
+      DomainTemplateStatsResponse(
+        stats: (j['stats'] as List? ?? [])
+            .whereType<Map>()
+          .map((e) => DomainTemplateStats.fromJson(e.cast<String, dynamic>()))
+            .toList(),
+        insights: j['insights'] is Map<String, dynamic>
+            ? DomainTemplateInsights.fromJson(
+                j['insights'] as Map<String, dynamic>)
+            : null,
+        sinceDays: (j['sinceDays'] as num?)?.toInt(),
+      );
+}

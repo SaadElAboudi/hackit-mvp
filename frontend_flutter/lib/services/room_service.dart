@@ -154,11 +154,10 @@ class RoomService {
         .toList();
   }
 
-  Future<List<DomainTemplateStats>> fetchTemplateStats() async {
-    final r = await _get('/api/rooms/templates/stats');
-    return (r['stats'] as List)
-        .map((j) => DomainTemplateStats.fromJson(j as Map<String, dynamic>))
-        .toList();
+  Future<DomainTemplateStatsResponse> fetchTemplateStats({int? sinceDays}) async {
+    final query = sinceDays == null ? '' : '?sinceDays=$sinceDays';
+    final r = await _get('/api/rooms/templates/stats$query');
+    return DomainTemplateStatsResponse.fromJson(r);
   }
 
   Future<Room> createRoom({

@@ -487,12 +487,72 @@ function toPercent(part, total) {
     return Math.round((part / total) * 1000) / 10;
 }
 
+function parseSinceDays(raw) {
+    if (raw === undefined || raw === null || raw === '') return null;
+    const value = Number.parseInt(String(raw), 10);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    if (![7, 30, 90].includes(value)) return null;
+    return value;
+}
+
+function buildTemplateInsights(stats) {
+    const active = stats.filter((s) => s.roomsCreated > 0);
+
+    const byFeedback = [...active].sort((a, b) => {
+        if (b.feedbackAverage !== a.feedbackAverage) {
+            return b.feedbackAverage - a.feedbackAverage;
+        }
+        return b.roomsCreated - a.roomsCreated;
+    });
+
+    const byD7 = [...active].sort((a, b) => {
+        if (b.d7RetentionRate !== a.d7RetentionRate) {
+            return b.d7RetentionRate - a.d7RetentionRate;
+        }
+        return b.roomsCreated - a.roomsCreated;
+    });
+
+    const underperformingTemplates = [...active]
+        .filter(
+            (s) =>
+                s.roomsCreated >= 2 &&
+                (s.feedbackAverage < 0 || s.d7RetentionRate < 20)
+        )
+        .sort((a, b) => {
+            if (a.feedbackAverage !== b.feedbackAverage) {
+                return a.feedbackAverage - b.feedbackAverage;
+            }
+            return a.d7RetentionRate - b.d7RetentionRate;
+        })
+        .slice(0, 3);
+
+    return {
+        topByFeedback: byFeedback[0] || null,
+        topByD7Retention: byD7[0] || null,
+        underperformingTemplates,
+    };
+}
+
 /**
  * GET /api/rooms/templates/stats
  * Returns usage and quality metrics by template.
  */
-router.get('/templates/stats', async (_req, res) => {
+router.get('/templates/stats', async (req, res) => {
     try {
+        const rawSinceDays = req.query?.sinceDays;
+        const hasSinceDays =
+            rawSinceDays !== undefined && rawSinceDays !== null && rawSinceDays !== '';
+        const sinceDays = parseSinceDays(rawSinceDays);
+        if (hasSinceDays && !sinceDays) {
+            return res
+                .status(400)
+                .json({ error: 'sinceDays must be one of 7, 30, 90' });
+        }
+
+        const cutoffDate = sinceDays
+            ? new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000)
+            : null;
+
         const templateIds = DOMAIN_TEMPLATES.map((t) => t.id);
         const statsByTemplate = new Map(
             DOMAIN_TEMPLATES.map((t) => [
@@ -515,10 +575,16 @@ router.get('/templates/stats', async (_req, res) => {
             ])
         );
 
-        const rooms = await Room.find(
-            { templateId: { $in: templateIds } },
-            { _id: 1, templateId: 1, createdAt: 1 }
-        ).lean();
+        const roomQuery = {
+            templateId: { $in: templateIds },
+            ...(cutoffDate ? { createdAt: { $gte: cutoffDate } } : {}),
+        };
+
+        const rooms = await Room.find(roomQuery, {
+            _id: 1,
+            templateId: 1,
+            createdAt: 1,
+        }).lean();
 
         const roomById = new Map();
         for (const room of rooms) {
@@ -533,10 +599,15 @@ router.get('/templates/stats', async (_req, res) => {
 
         const roomIds = Array.from(roomById.keys());
         if (roomIds.length > 0) {
-            const messages = await RoomMessage.find(
-                { roomId: { $in: roomIds } },
-                { roomId: 1, createdAt: 1, feedback: 1 }
-            ).lean();
+            const messageQuery = {
+                roomId: { $in: roomIds },
+                ...(cutoffDate ? { createdAt: { $gte: cutoffDate } } : {}),
+            };
+            const messages = await RoomMessage.find(messageQuery, {
+                roomId: 1,
+                createdAt: 1,
+                feedback: 1,
+            }).lean();
 
             const roomHasD1 = new Set();
             const roomHasD7 = new Set();
@@ -584,7 +655,13 @@ router.get('/templates/stats', async (_req, res) => {
             };
         });
 
-        res.json({ stats, generatedAt: new Date().toISOString() });
+        const insights = buildTemplateInsights(stats);
+        res.json({
+            stats,
+            insights,
+            sinceDays: sinceDays || null,
+            generatedAt: new Date().toISOString(),
+        });
     } catch (err) {
         console.error('[rooms] template stats error:', err);
         res.status(500).json({ error: 'Internal server error' });

@@ -125,7 +125,13 @@ class _SalonsScreenState extends State<SalonsScreen> {
               child: _TemplateStatsCard(
                 loading: prov.loadingTemplateStats,
                 stats: prov.templateStats,
+                insights: prov.templateInsights,
+                sinceDays: prov.templateStatsSinceDays,
                 onRefresh: () => prov.loadTemplateStats(force: true),
+                onSinceDaysChanged: (days) => prov.loadTemplateStats(
+                  force: true,
+                  sinceDays: days,
+                ),
               ),
             ),
 
@@ -296,12 +302,18 @@ class _RoomTile extends StatelessWidget {
 class _TemplateStatsCard extends StatelessWidget {
   final bool loading;
   final List<DomainTemplateStats> stats;
+  final DomainTemplateInsights? insights;
+  final int sinceDays;
   final VoidCallback onRefresh;
+  final ValueChanged<int> onSinceDaysChanged;
 
   const _TemplateStatsCard({
     required this.loading,
     required this.stats,
+    required this.insights,
+    required this.sinceDays,
     required this.onRefresh,
+    required this.onSinceDaysChanged,
   });
 
   @override
@@ -337,6 +349,18 @@ class _TemplateStatsCard extends StatelessWidget {
                 ),
               ],
             ),
+            Wrap(
+              spacing: 6,
+              children: [
+                for (final d in const [7, 30, 90])
+                  ChoiceChip(
+                    label: Text('${d}j'),
+                    selected: sinceDays == d,
+                    onSelected: (_) => onSinceDaysChanged(d),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
             if (loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 6),
@@ -399,6 +423,20 @@ class _TemplateStatsCard extends StatelessWidget {
                       ),
                     );
                   },
+                ),
+              ),
+            if (!loading && insights != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Top score: ${insights!.topByFeedback?.emoji ?? ''} ${insights!.topByFeedback?.name ?? 'n/a'} • '
+                  'Top D7: ${insights!.topByD7Retention?.emoji ?? ''} ${insights!.topByD7Retention?.name ?? 'n/a'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withValues(alpha: 0.65),
+                  ),
                 ),
               ),
           ],

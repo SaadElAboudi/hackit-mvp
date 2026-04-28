@@ -23,6 +23,8 @@ class RoomProvider extends ChangeNotifier {
   List<DomainTemplate> templates = [];
   bool loadingTemplates = false;
   List<DomainTemplateStats> templateStats = [];
+  DomainTemplateInsights? templateInsights;
+  int templateStatsSinceDays = 30;
   bool loadingTemplateStats = false;
 
   Future<void> loadTemplates() async {
@@ -39,13 +41,17 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadTemplateStats({bool force = false}) async {
+  Future<void> loadTemplateStats({bool force = false, int? sinceDays}) async {
     if (loadingTemplateStats) return;
+    if (sinceDays != null) templateStatsSinceDays = sinceDays;
     if (!force && templateStats.isNotEmpty) return;
     loadingTemplateStats = true;
     notifyListeners();
     try {
-      templateStats = await _svc.fetchTemplateStats();
+      final payload =
+          await _svc.fetchTemplateStats(sinceDays: templateStatsSinceDays);
+      templateStats = payload.stats;
+      templateInsights = payload.insights;
     } catch (_) {
       // Non-blocking for channels list view.
     } finally {
