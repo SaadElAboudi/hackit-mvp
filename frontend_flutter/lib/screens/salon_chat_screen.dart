@@ -14,6 +14,7 @@ import '../widgets/neumorphic_action_button.dart';
 import 'artifact_review_screen.dart';
 import 'canvas_screen.dart';
 import 'profile_screen.dart';
+import 'room_tasks_screen.dart';
 
 const String _uiStyle =
     String.fromEnvironment('UI_STYLE', defaultValue: 'glass-neumorph');
@@ -866,6 +867,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       onLaunchMission: _showLaunchMissionDialog,
       onExtractMission: _showMissionExtractionDialog,
       onEditTask: _showTaskEditDialog,
+      onOpenTaskBoard: _openTaskBoard,
       onRefreshIntegrations: prov.refreshIntegrationStatus,
       onRefreshShareHistory: () => prov.refreshShareHistory(),
       onOpenCanvas: (artifact) => Navigator.push(
@@ -876,6 +878,21 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
             artifactId: artifact.id,
             initialTitle: artifact.title,
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openTaskBoard() async {
+    final prov = context.read<RoomProvider>();
+    final room = prov.currentRoom ?? widget.room;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RoomTasksScreen(
+          roomName: room.name,
+          onEditTask: _showTaskEditDialog,
         ),
       ),
     );
@@ -1104,6 +1121,11 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
             context,
             MaterialPageRoute(builder: (_) => const ProfileScreen()),
           ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.view_kanban_outlined),
+          tooltip: 'Board des taches',
+          onPressed: _openTaskBoard,
         ),
         if (showWorkspaceButton)
           IconButton(
@@ -2578,6 +2600,7 @@ class _ContextPanel extends StatelessWidget {
   final VoidCallback onLaunchMission;
   final Future<void> Function(RoomMission mission) onExtractMission;
   final Future<void> Function(WorkspaceTask task) onEditTask;
+  final Future<void> Function() onOpenTaskBoard;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
   final void Function(RoomArtifact artifact) onOpenCanvas;
@@ -2601,6 +2624,7 @@ class _ContextPanel extends StatelessWidget {
     required this.onLaunchMission,
     required this.onExtractMission,
     required this.onEditTask,
+    required this.onOpenTaskBoard,
     required this.onRefreshIntegrations,
     required this.onRefreshShareHistory,
     required this.onOpenCanvas,
@@ -2626,27 +2650,38 @@ class _ContextPanel extends StatelessWidget {
     final researchArtifacts =
         artifacts.where((a) => a.kind == 'research').toList();
 
-    Widget sectionTitle(String title, {String? subtitle}) {
+    Widget sectionTitle(String title, {String? subtitle, Widget? trailing}) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-            if (subtitle != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: scheme.onSurface.withValues(alpha: 0.55),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
+                  if (subtitle != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurface.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ),
+                ],
               ),
+            ),
+            if (trailing != null) trailing,
           ],
         ),
       );
@@ -2866,6 +2901,11 @@ class _ContextPanel extends StatelessWidget {
         sectionTitle(
           'Taches',
           subtitle: tasks.isEmpty ? 'Aucune tache suivie actuellement.' : null,
+          trailing: TextButton.icon(
+            onPressed: onOpenTaskBoard,
+            icon: const Icon(Icons.view_kanban_outlined, size: 16),
+            label: const Text('Board'),
+          ),
         ),
         ...tasks.take(6).map(
               (task) => ListTile(
