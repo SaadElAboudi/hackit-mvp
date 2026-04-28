@@ -62,7 +62,7 @@ app.use((req, res, next) => {
         const message = String(payload.error || '').trim() || (statusCode >= 500 ? 'Internal server error' : 'Request failed');
         const normalized = {
           ok: false,
-          code: statusCode >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST',
+          code: statusCode === 429 ? 'RATE_LIMITED' : (statusCode >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST'),
           message,
           details: Object.prototype.hasOwnProperty.call(payload, 'details')
             ? payload.details
@@ -126,7 +126,7 @@ async function initRedisRateLimiter() {
 
 await initRedisRateLimiter();
 
-async function simpleRateLimit(key, maxPerMinute = 30) {
+async function checkRateLimit(key, maxPerMinute = 30) {
   if (redisReady && redisClient) {
     try {
       const bucket = Math.floor(Date.now() / 60000);
@@ -135,7 +135,14 @@ async function simpleRateLimit(key, maxPerMinute = 30) {
       if (current === 1) {
         await redisClient.expire(redisKey, 60);
       }
-      return current <= maxPerMinute;
+      if (current <= maxPerMinute) {
+        return { allowed: true, retryAfterSec: 0 };
+      }
+      const ttl = await redisClient.ttl(redisKey);
+      return {
+        allowed: false,
+        retryAfterSec: Math.max(1, Number.isFinite(ttl) && ttl > 0 ? ttl : 60),
+      };
     } catch (err) {
       redisReady = false;
       console.warn('Redis rate limiting failed, using memory fallback:', err?.message || err);
@@ -145,10 +152,22 @@ async function simpleRateLimit(key, maxPerMinute = 30) {
   const now = Date.now();
   if (!rateLimit[key]) rateLimit[key] = [];
   rateLimit[key] = rateLimit[key].filter((ts) => now - ts < 60000);
-  if (rateLimit[key].length >= maxPerMinute) return false;
+  if (rateLimit[key].length >= maxPerMinute) {
+    const oldest = rateLimit[key][0] || now;
+    const retryAfterMs = Math.max(1000, 60000 - (now - oldest));
+    return {
+      allowed: false,
+      retryAfterSec: Math.ceil(retryAfterMs / 1000),
+    };
+  }
   rateLimit[key].push(now);
-  return true;
+  return { allowed: true, retryAfterSec: 0 };
 }
+async function simpleRateLimit(key, maxPerMinute = 30) {
+  const result = await checkRateLimit(key, maxPerMinute);
+  return result.allowed;
+}
+app.locals.checkRateLimit = checkRateLimit;
 app.locals.simpleRateLimit = simpleRateLimit;
 // Enable concise logging in all non-test environments
 if (process.env.NODE_ENV && process.env.NODE_ENV !== "test") {
@@ -1388,7 +1407,9 @@ app.post('/api/analytics/ttv', async (req, res) => {
 app.post("/api/search", async (req, res) => {
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  if (!(await simpleRateLimit(`search:${ip}`, 20))) {
+  const searchLimit = await app.locals.checkRateLimit(`search:${ip}`, 20);
+  if (!searchLimit.allowed) {
+    res.setHeader('Retry-After', String(searchLimit.retryAfterSec));
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   let query;
@@ -1558,7 +1579,9 @@ app.post("/api/search", async (req, res) => {
 app.get("/api/search/stream", async (req, res) => {
   // Rate limit by IP
   const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  if (!(await simpleRateLimit(`stream:${ip}`, 10))) {
+  const streamLimit = await app.locals.checkRateLimit(`stream:${ip}`, 10);
+  if (!streamLimit.allowed) {
+    res.setHeader('Retry-After', String(streamLimit.retryAfterSec));
     return res.status(429).json({ error: 'Too many requests, slow down.' });
   }
   const validation = normalizeQueryInput(req.query.query, MAX_STREAM_QUERY_LEN);
@@ -2108,7 +2131,11 @@ app.use((err, _req, res, next) => {
     });
   }
   const status = Number(err?.status || err?.statusCode) || 500;
-  const code = err?.code || (status >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST');
+  const code = err?.code || (status === 429 ? 'RATE_LIMITED' : (status >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST'));
+  if (status === 429) {
+    const retryAfter = Number(err?.retryAfterSec || err?.details?.retryAfterSec || 60);
+    res.setHeader('Retry-After', String(Math.max(1, Math.floor(retryAfter))));
+  }
   return res.status(status).json({
     ok: false,
     code,

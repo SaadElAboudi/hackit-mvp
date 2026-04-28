@@ -24,7 +24,7 @@ async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 5000
                 let data = '';
                 res.setEncoding('utf8');
                 res.on('data', (c) => (data += c));
-                res.on('end', () => resolve({ status: res.statusCode, data }));
+                res.on('end', () => resolve({ status: res.statusCode, data, headers: res.headers }));
             }
         );
         req.on('error', reject);
@@ -55,4 +55,19 @@ await test('POST /api/search with invalid summaryLength returns 400', async (t) 
     assert.equal(res.status, 400);
     const json = JSON.parse(res.data);
     assert.equal(json.error, 'summaryLength must be one of: tldr, standard, deep');
+});
+
+await test('POST /api/search returns 429 with Retry-After when rate limited', async (t) => {
+    const app = createApp();
+    app.locals.checkRateLimit = async () => ({ allowed: false, retryAfterSec: 17 });
+
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await postJson({ port, path: '/api/search', body: { query: 'rate limited query' } });
+    assert.equal(res.status, 429);
+    const json = JSON.parse(res.data);
+    assert.equal(json.code, 'RATE_LIMITED');
+    assert.equal(json.error, 'Too many requests, slow down.');
+    assert.equal(res.headers['retry-after'], '17');
 });

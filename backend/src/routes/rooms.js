@@ -441,12 +441,32 @@ async function executeDecisionExtraction(req, res, next, { missionIdOverride = '
     }
 }
 
-function tooManyRequestsError(message = 'Too many requests') {
+function tooManyRequestsError(message = 'Too many requests', retryAfterSec = 60) {
     const err = new Error(message);
     err.status = 429;
     err.code = 'RATE_LIMITED';
-    err.details = null;
+    err.retryAfterSec = Math.max(1, Number.parseInt(String(retryAfterSec || 60), 10) || 60);
+    err.details = { retryAfterSec: err.retryAfterSec };
     return err;
+}
+
+async function enforceRouteRateLimit(req, key, maxPerMinute, message) {
+    const checkLimit = req.app?.locals?.checkRateLimit;
+    if (typeof checkLimit === 'function') {
+        const result = await checkLimit(key, maxPerMinute);
+        if (!result?.allowed) {
+            throw tooManyRequestsError(message, result?.retryAfterSec || 60);
+        }
+        return;
+    }
+
+    const legacyLimiter = req.app?.locals?.simpleRateLimit;
+    if (typeof legacyLimiter === 'function') {
+        const allowed = await legacyLimiter(key, maxPerMinute);
+        if (!allowed) {
+            throw tooManyRequestsError(message, 60);
+        }
+    }
 }
 
 async function buildShareSummary(room, artifactId = '') {
@@ -883,13 +903,12 @@ router.get('/:id/messages', async (req, res) => {
 router.post('/:id/messages', validateBody(validateSendMessagePayload), async (req, res, next) => {
     try {
         const { content } = req.validatedBody;
-        const limiter = req.app?.locals?.simpleRateLimit;
-        if (typeof limiter === 'function') {
-            const allowed = await limiter(`room-msg:${req.userId}:${req.params.id}`, 40);
-            if (!allowed) {
-                throw tooManyRequestsError('Rate limit exceeded for room messages');
-            }
-        }
+        await enforceRouteRateLimit(
+            req,
+            `room-msg:${req.userId}:${req.params.id}`,
+            40,
+            'Rate limit exceeded for room messages'
+        );
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2434,6 +2453,12 @@ router.get('/:id/missions', async (req, res) => {
 router.post('/:id/missions', validateBody(validateCreateMissionPayload), async (req, res, next) => {
     try {
         const { prompt, agentType } = req.validatedBody;
+        await enforceRouteRateLimit(
+            req,
+            `room-mission:${req.userId}:${req.params.id}`,
+            12,
+            'Rate limit exceeded for room missions'
+        );
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2548,6 +2573,12 @@ router.delete('/:id/memory/:memoryId', async (req, res) => {
 router.post('/:id/search', validateBody(validateRoomSearchPayload), async (req, res, next) => {
     try {
         const { query } = req.validatedBody;
+        await enforceRouteRateLimit(
+            req,
+            `room-search:${req.userId}:${req.params.id}`,
+            20,
+            'Rate limit exceeded for room search'
+        );
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2731,6 +2762,12 @@ router.delete('/:id/integrations/slack', async (req, res) => {
 router.post('/:id/share', validateBody(validateSharePayload), async (req, res, next) => {
     try {
         const { note, target, artifactId, idempotencyKey } = req.validatedBody;
+        await enforceRouteRateLimit(
+            req,
+            `room-share:${req.userId}:${req.params.id}`,
+            12,
+            'Rate limit exceeded for room share'
+        );
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
         if (!isRoomMember(room, req.userId)) {

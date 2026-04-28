@@ -99,7 +99,7 @@ await test('POST /api/rooms/:id/messages enforces route rate limit envelope', as
     t.after(() => restoreMongoReady());
 
     const app = createApp();
-    app.locals.simpleRateLimit = async () => false;
+    app.locals.checkRateLimit = async () => ({ allowed: false, retryAfterSec: 60 });
 
     const { server, port } = await startServer(app);
     t.after(() => server.close());
@@ -116,6 +116,57 @@ await test('POST /api/rooms/:id/messages enforces route rate limit envelope', as
     assert.equal(json.ok, false);
     assert.equal(json.code, 'RATE_LIMITED');
     assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+    assert.equal(res.headers['retry-after'], '60');
+});
+
+await test('POST /api/rooms/:id/missions enforces route rate limit envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    app.locals.checkRateLimit = async () => ({ allowed: false, retryAfterSec: 23 });
+
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/507f191e810c19729de860ea/missions',
+        body: { prompt: 'run a mission' },
+        headers: { 'x-user-id': 'user_test_rate_mission' },
+    });
+
+    assert.equal(res.status, 429);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'RATE_LIMITED');
+    assert.match(String(json.message || ''), /rate limit/i);
+    assert.equal(res.headers['retry-after'], '23');
+});
+
+await test('POST /api/rooms/:id/share enforces route rate limit envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    app.locals.checkRateLimit = async () => ({ allowed: false, retryAfterSec: 19 });
+
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const res = await requestJson({
+        port,
+        path: '/api/rooms/507f191e810c19729de860ea/share',
+        body: { target: 'slack' },
+        headers: { 'x-user-id': 'user_test_rate_share' },
+    });
+
+    assert.equal(res.status, 429);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'RATE_LIMITED');
+    assert.match(String(json.message || ''), /rate limit/i);
+    assert.equal(res.headers['retry-after'], '19');
 });
 
 await test('POST /api/rooms/:id/messages invalid body returns BAD_REQUEST envelope', async (t) => {
