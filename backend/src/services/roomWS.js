@@ -118,8 +118,37 @@ function _broadcastPresence(roomId) {
   _broadcast(roomId, { type: 'presence.updated', roomId, userIds });
 }
 
+function _isValidBroadcastPayload(payload) {
+  return Boolean(
+    payload &&
+    typeof payload === 'object' &&
+    typeof payload.type === 'string' &&
+    payload.type.trim().length > 0 &&
+    typeof payload.roomId === 'string' &&
+    payload.roomId.trim().length > 0
+  );
+}
+
 function _broadcast(roomId, payload) {
-  rooms.get(roomId)?.forEach((ws) => _send(ws, payload));
+  if (typeof roomId !== 'string' || roomId.trim().length === 0) return;
+  if (!_isValidBroadcastPayload(payload)) {
+    console.warn('[roomWS] Dropping malformed broadcast payload');
+    return;
+  }
+
+  let encoded = '';
+  try {
+    encoded = JSON.stringify(payload);
+  } catch (_err) {
+    console.warn('[roomWS] Dropping non-serializable broadcast payload');
+    return;
+  }
+
+  rooms.get(roomId)?.forEach((ws) => {
+    if (ws.readyState === 1 /* OPEN */) {
+      ws.send(encoded);
+    }
+  });
 }
 
 function _send(ws, payload) {
