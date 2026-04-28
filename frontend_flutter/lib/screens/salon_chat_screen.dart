@@ -498,6 +498,169 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
+  Future<void> _showTaskEditDialog(WorkspaceTask task) async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ownerCtrl = TextEditingController(text: task.ownerName);
+    String status = task.status;
+    DateTime? dueDate = task.dueDate;
+    bool clearDueDate = false;
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Mettre a jour la tache'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if (task.description.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(task.description),
+                ],
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  initialValue: status,
+                  decoration: const InputDecoration(
+                    labelText: 'Statut',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'todo', child: Text('A faire')),
+                    DropdownMenuItem(
+                      value: 'in_progress',
+                      child: Text('En cours'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'blocked',
+                      child: Text('Bloquee'),
+                    ),
+                    DropdownMenuItem(value: 'done', child: Text('Terminee')),
+                  ],
+                  onChanged: saving
+                      ? null
+                      : (value) =>
+                          setState(() => status = value ?? task.status),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ownerCtrl,
+                  enabled: !saving,
+                  decoration: const InputDecoration(
+                    labelText: 'Responsable',
+                    hintText: 'Nom du responsable',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: saving
+                      ? null
+                      : () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: dueDate ?? DateTime.now(),
+                            firstDate: DateTime.now().subtract(
+                              const Duration(days: 365),
+                            ),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 3650),
+                            ),
+                          );
+                          if (picked == null || !ctx.mounted) return;
+                          setState(() {
+                            dueDate = picked;
+                            clearDueDate = false;
+                          });
+                        },
+                  borderRadius: BorderRadius.circular(8),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Echeance',
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            dueDate == null || clearDueDate
+                                ? 'Aucune date'
+                                : '${dueDate!.day.toString().padLeft(2, '0')}/${dueDate!.month.toString().padLeft(2, '0')}/${dueDate!.year}',
+                          ),
+                        ),
+                        if (dueDate != null && !clearDueDate)
+                          IconButton(
+                            onPressed: saving
+                                ? null
+                                : () => setState(() {
+                                      clearDueDate = true;
+                                      dueDate = null;
+                                    }),
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            tooltip: 'Retirer la date',
+                          )
+                        else
+                          const Icon(Icons.event_rounded, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      setState(() => saving = true);
+                      final updated = await prov.updateTask(
+                        task,
+                        status: status,
+                        ownerName: ownerCtrl.text.trim(),
+                        ownerId:
+                            ownerCtrl.text.trim().isEmpty ? '' : task.ownerId,
+                        dueDate: dueDate,
+                        clearDueDate: clearDueDate,
+                      );
+                      if (!mounted || !ctx.mounted) return;
+                      if (updated == null) {
+                        setState(() => saving = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              prov.actionError ??
+                                  'Impossible de mettre a jour la tache',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.of(ctx).pop();
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Tache mise a jour')),
+                      );
+                    },
+              child: Text(saving ? 'Mise a jour...' : 'Enregistrer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showReviseArtifactDialog(RoomArtifact artifact) async {
     final ctrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -757,6 +920,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                         onReviseArtifact: _showReviseArtifactDialog,
                         onLaunchMission: _showLaunchMissionDialog,
                         onExtractMission: _showMissionExtractionDialog,
+                        onEditTask: _showTaskEditDialog,
                         onRefreshIntegrations: prov.refreshIntegrationStatus,
                         onRefreshShareHistory: () => prov.refreshShareHistory(),
                         onOpenCanvas: (artifact) => Navigator.push(
@@ -2338,6 +2502,7 @@ class _ContextPanel extends StatelessWidget {
   final Future<void> Function(RoomArtifact artifact) onReviseArtifact;
   final VoidCallback onLaunchMission;
   final Future<void> Function(RoomMission mission) onExtractMission;
+  final Future<void> Function(WorkspaceTask task) onEditTask;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
   final void Function(RoomArtifact artifact) onOpenCanvas;
@@ -2360,6 +2525,7 @@ class _ContextPanel extends StatelessWidget {
     required this.onReviseArtifact,
     required this.onLaunchMission,
     required this.onExtractMission,
+    required this.onEditTask,
     required this.onRefreshIntegrations,
     required this.onRefreshShareHistory,
     required this.onOpenCanvas,
@@ -2371,6 +2537,11 @@ class _ContextPanel extends StatelessWidget {
     if (delta.inHours < 1) return 'il y a ${delta.inMinutes} min';
     if (delta.inDays < 1) return 'il y a ${delta.inHours} h';
     return 'il y a ${delta.inDays} j';
+  }
+
+  String _dueLabel(DateTime? at) {
+    if (at == null) return '';
+    return '${at.day.toString().padLeft(2, '0')}/${at.month.toString().padLeft(2, '0')}/${at.year}';
   }
 
   @override
@@ -2624,6 +2795,7 @@ class _ContextPanel extends StatelessWidget {
         ...tasks.take(6).map(
               (task) => ListTile(
                 dense: true,
+                onTap: () => onEditTask(task),
                 leading: Icon(
                   task.status == 'done'
                       ? Icons.check_circle_outline_rounded
@@ -2645,12 +2817,16 @@ class _ContextPanel extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
-                  task.ownerName.isNotEmpty
-                      ? '${task.status} • ${task.ownerName}'
-                      : task.status,
+                  [
+                    task.status,
+                    if (task.ownerName.isNotEmpty) task.ownerName,
+                    if (task.dueDate != null)
+                      'echeance ${_dueLabel(task.dueDate)}',
+                  ].join(' • '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                trailing: const Icon(Icons.edit_outlined, size: 18),
               ),
             ),
         sectionTitle(

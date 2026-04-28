@@ -286,6 +286,32 @@ class RoomService {
         .toList();
   }
 
+  Future<WorkspaceTask> updateTask(
+    String roomId,
+    String taskId, {
+    String? title,
+    String? description,
+    String? status,
+    String? ownerId,
+    String? ownerName,
+    DateTime? dueDate,
+    bool clearDueDate = false,
+  }) async {
+    final body = <String, dynamic>{
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (status != null) 'status': status,
+      if (ownerId != null) 'ownerId': ownerId,
+      if (ownerName != null) 'ownerName': ownerName,
+      if (clearDueDate)
+        'dueDate': null
+      else if (dueDate != null)
+        'dueDate': dueDate.toIso8601String(),
+    };
+    final r = await _patch('/api/rooms/$roomId/tasks/$taskId', body);
+    return WorkspaceTask.fromJson(r['task'] as Map<String, dynamic>);
+  }
+
   Future<DecisionExtractionResult> extractMissionDecisions(
     String roomId,
     String missionId, {

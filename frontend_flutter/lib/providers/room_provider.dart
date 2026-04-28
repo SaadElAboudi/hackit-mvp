@@ -693,6 +693,46 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<WorkspaceTask?> updateTask(
+    WorkspaceTask task, {
+    String? title,
+    String? description,
+    String? status,
+    String? ownerId,
+    String? ownerName,
+    DateTime? dueDate,
+    bool clearDueDate = false,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      final updated = await _svc.updateTask(
+        room.id,
+        task.id,
+        title: title,
+        description: description,
+        status: status,
+        ownerId: ownerId,
+        ownerName: ownerName,
+        dueDate: dueDate,
+        clearDueDate: clearDueDate,
+      );
+      final idx = tasks.indexWhere((item) => item.id == updated.id);
+      if (idx >= 0) {
+        tasks[idx] = updated;
+      } else {
+        tasks.insert(0, updated);
+      }
+      notifyListeners();
+      return updated;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<void> refreshIntegrationStatus() async {
     final room = currentRoom;
     if (room == null) return;
