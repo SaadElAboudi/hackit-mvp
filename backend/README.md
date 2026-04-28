@@ -78,7 +78,11 @@ npm run dev
 ```
 npm test
 npm run test:coverage
+npm run test:smoke
+npm run test:e2e-smoke
 ```
+
+`npm run test:e2e-smoke` validates the streaming search flow end-to-end (SSE meta/partial/final/done + timestamp citations) and writes a network log artifact to `backend/artifacts/e2e-smoke/`.
 
 ## Notes
 
