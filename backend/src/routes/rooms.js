@@ -2316,7 +2316,7 @@ router.patch(
             // Check owner-only transitions before artifact lookup
             const isOwner = isRoomOwner(room, req.userId);
             if ((targetStatus === 'validated' || targetStatus === 'archived') && !isOwner) {
-                return res.status(403).json({ 
+                return res.status(403).json({
                     error: 'Owner role required for this transition',
                     code: 'FORBIDDEN'
                 });
