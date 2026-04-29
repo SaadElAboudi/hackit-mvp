@@ -61,3 +61,27 @@ await test('POST decision-pack/share rejects unsupported target', async (t) => {
   const res = await requestJson({ port, method: 'POST', path: `/api/rooms/${fakeRoomId}/decision-pack/share`, headers: { 'x-user-id': fakeUserId }, body: { target: 'email', note: 'x' } });
   assert.equal(res.status, 400);
 });
+
+await test('GET decision-pack can disable open tasks', async (t) => {
+  forceMongoReady(); t.after(() => restoreMongoReady());
+  const fakeRoomId = '507f191e810c19729de860ad'; const fakeUserId = 'user_pack_4';
+  const restoreFindRoom = withStub(Room, 'findById', async () => ({ _id: fakeRoomId, name: 'Ops', members: [{ userId: fakeUserId, role: 'owner' }] }));
+  const restoreFindDecisions = withStub(WorkspaceDecision, 'find', () => buildChain([{ _id: 'd1', roomId: fakeRoomId, title: 'Rollout', summary: '' }]));
+  const restoreFindTasks = withStub(WorkspaceTask, 'find', () => buildChain([{ _id: 't1', roomId: fakeRoomId, decisionId: 'd1', title: 'Task linked' }]));
+  t.after(() => { restoreFindRoom(); restoreFindDecisions(); restoreFindTasks(); });
+  const app = createApp(); const server = app.listen(0); t.after(() => server.close()); await new Promise((r) => server.once('listening', r)); const port = server.address().port;
+  const res = await requestJson({ port, path: `/api/rooms/${fakeRoomId}/decision-pack?includeOpenTasks=false`, headers: { 'x-user-id': fakeUserId } });
+  assert.equal(res.status, 200);
+  const json = JSON.parse(res.data);
+  assert.equal(json.pack.includeOpenTasks, false);
+});
+
+await test('POST decision-pack/share returns 412 when target integration is missing', async (t) => {
+  forceMongoReady(); t.after(() => restoreMongoReady());
+  const fakeRoomId = '507f191e810c19729de860ae'; const fakeUserId = 'user_pack_5';
+  const restoreFindRoom = withStub(Room, 'findById', async () => ({ _id: fakeRoomId, name: 'Ops', members: [{ userId: fakeUserId, role: 'owner' }], integrations: { notion: { enabled: false } } }));
+  t.after(() => restoreFindRoom());
+  const app = createApp(); const server = app.listen(0); t.after(() => server.close()); await new Promise((r) => server.once('listening', r)); const port = server.address().port;
+  const res = await requestJson({ port, method: 'POST', path: `/api/rooms/${fakeRoomId}/decision-pack/share?mode=checklist`, headers: { 'x-user-id': fakeUserId }, body: { target: 'notion', note: 'x' } });
+  assert.equal(res.status, 412);
+});

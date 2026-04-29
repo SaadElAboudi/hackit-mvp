@@ -278,6 +278,34 @@ function formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt, mode 
     return lines.join('\n');
 }
 
+async function loadDecisionPackData(roomId, { limit = 10, includeOpenTasks = true } = {}) {
+    const decisions = await WorkspaceDecision.find({ roomId })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+    const decisionIds = decisions.map((decision) => decision._id);
+
+    const taskFilter = includeOpenTasks
+        ? {
+            roomId,
+            $or: [
+                { decisionId: { $in: decisionIds } },
+                { decisionId: null },
+            ],
+        }
+        : {
+            roomId,
+            decisionId: { $in: decisionIds },
+        };
+
+    const tasks = await WorkspaceTask.find(taskFilter)
+        .sort({ createdAt: -1 })
+        .limit(limit * 5)
+        .lean();
+
+    return { decisions, tasks };
+}
+
 function extractJsonObject(text) {
     const raw = String(text || '').trim();
     if (!raw) return null;
@@ -1797,21 +1825,13 @@ router.get('/:id/decision-pack', async (req, res, next) => {
         if (mode !== 'checklist' && mode !== 'executive') {
             return res.status(400).json({ error: 'Invalid mode. Use checklist or executive.' });
         }
-        const decisions = await WorkspaceDecision.find({ roomId: req.params.id })
-            .sort({ createdAt: -1 })
-            .limit(limit)
-            .lean();
-        const decisionIds = decisions.map((decision) => decision._id);
-        const tasks = await WorkspaceTask.find({
-            roomId: req.params.id,
-            $or: [
-                { decisionId: { $in: decisionIds } },
-                { decisionId: null },
-            ],
-        })
-            .sort({ createdAt: -1 })
-            .limit(limit * 5)
-            .lean();
+        const includeOpenTasks = String(req.query?.includeOpenTasks || 'true')
+            .trim()
+            .toLowerCase() !== 'false';
+        const { decisions, tasks } = await loadDecisionPackData(req.params.id, {
+            limit,
+            includeOpenTasks,
+        });
 
         const generatedAt = new Date();
         const markdown = formatDecisionPackMarkdown({
@@ -1830,6 +1850,7 @@ router.get('/:id/decision-pack', async (req, res, next) => {
                 decisionCount: decisions.length,
                 taskCount: tasks.length,
                 mode,
+                includeOpenTasks,
                 markdown,
             },
             decisions: decisions.map((decision) => workspaceDecisionSummary(decision)),
@@ -1857,11 +1878,16 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
             return res.status(412).json({ error: `${connector.target} integration is not configured` });
         }
 
-        const decisions = await WorkspaceDecision.find({ roomId: req.params.id }).sort({ createdAt: -1 }).limit(10).lean();
-        const decisionIds = decisions.map((decision) => decision._id);
-        const tasks = await WorkspaceTask.find({ roomId: req.params.id, decisionId: { $in: decisionIds } })
-            .sort({ createdAt: -1 }).limit(50).lean();
-        const summary = formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt: new Date(), mode: 'executive' });
+        const mode = String(req.query?.mode || 'executive').trim().toLowerCase();
+        if (mode !== 'checklist' && mode !== 'executive') {
+            return res.status(400).json({ error: 'Invalid mode. Use checklist or executive.' });
+        }
+
+        const { decisions, tasks } = await loadDecisionPackData(req.params.id, {
+            limit: 10,
+            includeOpenTasks: mode === 'checklist',
+        });
+        const summary = formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt: new Date(), mode });
 
         const history = await RoomShareHistory.create({
             roomId: room._id,
@@ -1892,6 +1918,7 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
                     target: history.target,
                     status: history.status,
                     externalUrl: history.externalUrl,
+                    mode,
                 },
             });
         } catch (err) {
