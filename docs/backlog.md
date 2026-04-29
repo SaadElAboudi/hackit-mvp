@@ -48,7 +48,7 @@ Goal: close remaining quality/ops gaps on already shipped capabilities.
 Goal: increase user trust and close the quality loop.
 
 1. [ ] Explicit feedback loop (pertinent/moyen/hors-sujet + reason)
-2. [ ] Trust & explainability blocks (why-this-plan, assumptions, limits, confidence)
+2. [x] Trust & explainability blocks (why-this-plan, assumptions, limits, confidence)
 3. [ ] Product KPI instrumentation dashboard (TTV, save rate, regenerate rate, feedback score, export rate)
 
 ### Phase C - Execution and Packaging (Next+1)
@@ -78,7 +78,7 @@ Goal: improve depth, relevance, and discovery quality.
 | BL-003 | Update operator runtime playbook | [~] | P0 | A | High | S | Playbook drafted; awaiting staging validation review |
 | BL-004 | Artifact review UX polish | [ ] | P1 | A | Medium | M | Reduce friction in compare/review flows |
 | BL-005 | Explicit feedback loop on AI relevance | [x] | P0 | B | High | M | Backend/UI/instrumentation v1 shipped with tests + KPI baseline evidence |
-| BL-006 | Trust & explainability sections in outputs | [~] | P0 | B | High | M | V1 trust blocks added on salon AI/research/decision messages |
+| BL-006 | Trust & explainability sections in outputs | [x] | P0 | B | High | M | Completed with backend + frontend trust payload/rendering tests |
 | BL-007 | Product KPI instrumentation dashboard | [ ] | P1 | B | High | M | Enables KPI-driven prioritization |
 | BL-008 | Execution export (Notion/Trello/Asana/CSV) | [ ] | P0 | C | High | M/L | Turns insight into action |
 | BL-009 | Output modes (one-pager vs checklist) | [ ] | P1 | C | Medium | M | Persona-fit packaging |
@@ -93,6 +93,10 @@ Goal: improve depth, relevance, and discovery quality.
 | BL-018 | Accessibility review (contrast, focus, semantics) | [ ] | P1 | A/B | High | M | Quality gate for scaling usage |
 | BL-019 | Internationalization (en/fr) | [ ] | P2 | C/D | Medium | M | User expansion |
 | BL-020 | Security audit + privacy policy update | [ ] | P1 | A/B | High | M | Compliance and risk reduction |
+
+BL-006 closure evidence (2026-04-29):
+- Backend: `npm test -- test/room.orchestrator.test.js test/room.trust.v1.test.js` (8/8 pass)
+- Frontend: `flutter test test/screens/salon_chat_explainability_v1_test.dart` (+2 pass)
 
 ## Sprint 1 Execution Plan (Ready to Build)
 
