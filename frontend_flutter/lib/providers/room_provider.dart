@@ -1192,11 +1192,13 @@ class RoomProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  /// Submit thumbs up (+1) or down (-1) on an AI message.
+  /// Submit v1 relevance feedback on an AI message.
   /// Optimistically updates the message in the local list.
   Future<void> submitMessageFeedback({
     required String messageId,
     required int rating,
+    String? reason,
+    Map<String, dynamic>? metadata,
   }) async {
     final room = currentRoom;
     if (room == null) return;
@@ -1214,6 +1216,8 @@ class RoomProvider extends ChangeNotifier {
         thumbsUp: newThumbsUp.clamp(0, 99999),
         thumbsDown: newThumbsDown.clamp(0, 99999),
         userRating: rating,
+        userRatingLabel:
+            rating == 1 ? 'pertinent' : (rating == 0 ? 'moyen' : 'hors_sujet'),
       );
       notifyListeners();
     }
@@ -1223,6 +1227,8 @@ class RoomProvider extends ChangeNotifier {
         roomId: room.id,
         messageId: messageId,
         rating: rating,
+        reason: reason,
+        metadata: metadata,
       );
       // Reconcile with server truth
       if (idx >= 0) {
@@ -1231,7 +1237,9 @@ class RoomProvider extends ChangeNotifier {
               (result['thumbsUp'] as num?)?.toInt() ?? messages[idx].thumbsUp,
           thumbsDown: (result['thumbsDown'] as num?)?.toInt() ??
               messages[idx].thumbsDown,
-          userRating: rating,
+          userRating: (result['userRating'] as num?)?.toInt() ?? rating,
+          userRatingLabel: result['userRatingLabel']?.toString() ??
+              messages[idx].userRatingLabel,
         );
         notifyListeners();
       }
@@ -1243,6 +1251,7 @@ class RoomProvider extends ChangeNotifier {
           thumbsUp: msg.thumbsUp,
           thumbsDown: msg.thumbsDown,
           userRating: 0,
+          userRatingLabel: '',
         );
         notifyListeners();
       }

@@ -753,16 +753,28 @@ class RoomService {
     _wsUserIds.remove(roomId);
   }
 
-  /// Submit thumbs up (+1) or down (-1) on an AI message.
+  /// Submit v1 relevance feedback on an AI message.
   Future<Map<String, dynamic>> submitMessageFeedback({
     required String roomId,
     required String messageId,
     required int rating,
+    String? reason,
+    Map<String, dynamic>? metadata,
   }) async {
+    final payload = <String, dynamic>{
+      'rating': rating,
+    };
+    if ((reason ?? '').trim().isNotEmpty) {
+      payload['reason'] = reason!.trim();
+    }
+    if (metadata != null && metadata.isNotEmpty) {
+      payload['metadata'] = metadata;
+    }
+
     final res = await _http.post(
       Uri.parse('$_base/api/rooms/$roomId/messages/$messageId/feedback'),
       headers: await _headers(),
-      body: jsonEncode({'rating': rating}),
+      body: jsonEncode(payload),
     );
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode != 200) {

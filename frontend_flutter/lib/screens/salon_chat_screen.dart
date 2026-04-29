@@ -1936,11 +1936,16 @@ class _MessageBubble extends StatelessWidget {
                 if (isAI)
                   _AiFeedbackRow(
                     message: message,
-                    onRate: (rating) {
+                    onRate: (rating, {reason}) {
                       context.read<RoomProvider>().submitMessageFeedback(
-                            messageId: message.id,
-                            rating: rating,
-                          );
+                        messageId: message.id,
+                        rating: rating,
+                        reason: reason,
+                        metadata: const {
+                          'source': 'chat',
+                          'surface': 'salon',
+                        },
+                      );
                     },
                   ),
               ],
@@ -2957,57 +2962,153 @@ class _DecisionCard extends StatelessWidget {
   }
 }
 
-// ── AI feedback row (thumbs up / down) ───────────────────────────────────────
+// ── AI feedback row (pertinent / moyen / hors-sujet) ─────────────────────────
 
-class _AiFeedbackRow extends StatelessWidget {
+class _AiFeedbackRow extends StatefulWidget {
   final RoomMessage message;
-  final void Function(int rating) onRate;
+  final void Function(int rating, {String? reason}) onRate;
 
   const _AiFeedbackRow({required this.message, required this.onRate});
 
   @override
+  State<_AiFeedbackRow> createState() => _AiFeedbackRowState();
+}
+
+class _AiFeedbackRowState extends State<_AiFeedbackRow> {
+  Future<void> _promptOptionalReasonAndSubmit(int rating) async {
+    if (rating == 1) {
+      widget.onRate(1);
+      return;
+    }
+
+    final controller = TextEditingController();
+    String? reason;
+
+    try {
+      reason = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (ctx) {
+          final scheme = Theme.of(ctx).colorScheme;
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 8,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ajouter un detail (optionnel)',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: controller,
+                  maxLength: 240,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Ex: trop general, manque de contexte, hors sujet...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(''),
+                      child: const Text('Passer'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () =>
+                          Navigator.of(ctx).pop(controller.text.trim()),
+                      child: const Text('Envoyer'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
+
+    widget.onRate(rating,
+        reason: (reason ?? '').trim().isEmpty ? null : reason!.trim());
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final userRating = message.userRating;
+    final message = widget.message;
+    final activeLabel = message.userRatingLabel;
 
-    Widget thumbButton(int value, IconData icon) {
-      final active = userRating == value;
+    Widget pill({
+      required String label,
+      required int value,
+      required Color activeColor,
+      required IconData icon,
+      int? count,
+    }) {
+      final active = activeLabel == label;
       return InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => onRate(active ? 0 : value),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => _promptOptionalReasonAndSubmit(value),
+        child: Container(
+          margin: const EdgeInsets.only(right: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            color: active
+                ? activeColor.withValues(alpha: 0.16)
+                : scheme.surfaceContainerHighest.withValues(alpha: 0.7),
+            border: Border.all(
+              color: active
+                  ? activeColor.withValues(alpha: 0.7)
+                  : scheme.outline.withValues(alpha: 0.25),
+            ),
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 icon,
-                size: 15,
+                size: 14,
                 color: active
-                    ? (value == 1 ? Colors.green.shade600 : Colors.red.shade400)
-                    : scheme.onSurface.withValues(alpha: 0.35),
+                    ? activeColor
+                    : scheme.onSurface.withValues(alpha: 0.6),
               ),
-              if (value == 1 && message.thumbsUp > 0) ...[
-                const SizedBox(width: 3),
-                Text(
-                  '${message.thumbsUp}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: active
-                        ? Colors.green.shade600
-                        : scheme.onSurface.withValues(alpha: 0.35),
-                  ),
+              const SizedBox(width: 4),
+              Text(
+                label == 'hors_sujet' ? 'Hors sujet' : _capitalize(label),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: active
+                      ? activeColor
+                      : scheme.onSurface.withValues(alpha: 0.7),
                 ),
-              ],
-              if (value == -1 && message.thumbsDown > 0) ...[
-                const SizedBox(width: 3),
+              ),
+              if (count != null && count > 0) ...[
+                const SizedBox(width: 5),
                 Text(
-                  '${message.thumbsDown}',
+                  '$count',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: active
-                        ? Colors.red.shade400
-                        : scheme.onSurface.withValues(alpha: 0.35),
+                        ? activeColor
+                        : scheme.onSurface.withValues(alpha: 0.55),
                   ),
                 ),
               ],
@@ -3019,14 +3120,38 @@ class _AiFeedbackRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(top: 2, left: 2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Wrap(
+        spacing: 0,
+        runSpacing: 4,
         children: [
-          thumbButton(1, Icons.thumb_up_outlined),
-          thumbButton(-1, Icons.thumb_down_outlined),
+          pill(
+            label: 'pertinent',
+            value: 1,
+            activeColor: Colors.green.shade700,
+            icon: Icons.thumb_up_alt_rounded,
+            count: message.thumbsUp,
+          ),
+          pill(
+            label: 'moyen',
+            value: 0,
+            activeColor: Colors.amber.shade800,
+            icon: Icons.horizontal_rule_rounded,
+          ),
+          pill(
+            label: 'hors_sujet',
+            value: -1,
+            activeColor: Colors.red.shade500,
+            icon: Icons.thumb_down_alt_rounded,
+            count: message.thumbsDown,
+          ),
         ],
       ),
     );
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return value[0].toUpperCase() + value.substring(1);
   }
 }
 
