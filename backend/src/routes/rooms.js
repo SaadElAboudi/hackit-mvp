@@ -210,6 +210,64 @@ function workspaceMilestoneSummary(milestone) {
     };
 }
 
+function formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt }) {
+    const safeRoomName = String(room?.name || 'Channel').trim() || 'Channel';
+    const lines = [];
+    lines.push(`# Decision Pack — ${safeRoomName}`);
+    lines.push('');
+    lines.push(`Generated at: ${generatedAt.toISOString()}`);
+    lines.push('');
+    lines.push('## Decisions');
+    lines.push('');
+
+    if (!decisions.length) {
+        lines.push('- No decisions available yet.');
+    } else {
+        decisions.forEach((decision, index) => {
+            const decisionId = String(decision?._id || '').trim();
+            const title = String(decision?.title || '').trim() || `Decision ${index + 1}`;
+            const summary = String(decision?.summary || '').trim();
+            lines.push(`### ${index + 1}. ${title}`);
+            if (summary) lines.push(summary);
+            const linkedTasks = tasks.filter(
+                (task) => String(task?.decisionId || '') === decisionId
+            );
+            if (!linkedTasks.length) {
+                lines.push('- Tasks: none linked yet.');
+            } else {
+                lines.push('- Tasks:');
+                linkedTasks.forEach((task) => {
+                    const taskTitle = String(task?.title || '').trim() || 'Untitled task';
+                    const ownerName = String(task?.ownerName || '').trim();
+                    const dueDate = task?.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : '';
+                    const suffix = [ownerName ? `owner: ${ownerName}` : '', dueDate ? `due: ${dueDate}` : '']
+                        .filter(Boolean)
+                        .join(', ');
+                    lines.push(`  - ${taskTitle}${suffix ? ` (${suffix})` : ''}`);
+                });
+            }
+            lines.push('');
+        });
+    }
+
+    lines.push('## Open Tasks (without decision link)');
+    lines.push('');
+    const unlinkedTasks = tasks.filter((task) => !task?.decisionId);
+    if (!unlinkedTasks.length) {
+        lines.push('- None.');
+    } else {
+        unlinkedTasks.forEach((task) => {
+            lines.push(`- ${String(task?.title || 'Untitled task').trim()}`);
+        });
+    }
+    lines.push('');
+    lines.push('## Next Review');
+    lines.push('');
+    lines.push('- Validate owners and deadlines for all critical tasks.');
+    lines.push('- Confirm decision status in the next channel review.');
+    return lines.join('\n');
+}
+
 function extractJsonObject(text) {
     const raw = String(text || '').trim();
     if (!raw) return null;
@@ -1710,6 +1768,56 @@ router.post('/:id/decisions/:decisionId/convert', validateBody(validateConvertDe
         res.status(201).json({
             decision: workspaceDecisionSummary(decision),
             tasks: createdTasks.map((task) => workspaceTaskSummary(task)),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/decision-pack', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const limit = Math.max(1, Math.min(50, Number.parseInt(String(req.query?.limit || '10'), 10) || 10));
+        const decisions = await WorkspaceDecision.find({ roomId: req.params.id })
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
+        const decisionIds = decisions.map((decision) => decision._id);
+        const tasks = await WorkspaceTask.find({
+            roomId: req.params.id,
+            $or: [
+                { decisionId: { $in: decisionIds } },
+                { decisionId: null },
+            ],
+        })
+            .sort({ createdAt: -1 })
+            .limit(limit * 5)
+            .lean();
+
+        const generatedAt = new Date();
+        const markdown = formatDecisionPackMarkdown({
+            room,
+            decisions,
+            tasks,
+            generatedAt,
+        });
+
+        res.json({
+            pack: {
+                generatedAt,
+                roomId: req.params.id,
+                roomName: room.name,
+                decisionCount: decisions.length,
+                taskCount: tasks.length,
+                markdown,
+            },
+            decisions: decisions.map((decision) => workspaceDecisionSummary(decision)),
+            tasks: tasks.map((task) => workspaceTaskSummary(task)),
         });
     } catch (err) {
         next(err);
