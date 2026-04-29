@@ -74,8 +74,8 @@ Goal: improve depth, relevance, and discovery quality.
 | ID | Item | Status | Priority | Phase | Impact | Effort | Notes |
 |---|---|---|---|---|---|---|---|
 | BL-001 | Flutter widget tests for artifact review/compare/status | [~] | P0 | A | High | M | Partially landed; finish coverage gaps |
-| BL-002 | Validate observability dashboards and alert routing in staging | [ ] | P0 | A | High | S | Required for Phase 8 operational sign-off |
-| BL-003 | Update operator runtime playbook | [ ] | P0 | A | High | S | Depends on BL-002 |
+| BL-002 | Validate observability dashboards and alert routing in staging | [~] | P0 | A | High | S | Local pre-staging report done; staging sign-off pending |
+| BL-003 | Update operator runtime playbook | [~] | P0 | A | High | S | Playbook drafted; awaiting staging validation review |
 | BL-004 | Artifact review UX polish | [ ] | P1 | A | Medium | M | Reduce friction in compare/review flows |
 | BL-005 | Explicit feedback loop on AI relevance | [ ] | P0 | B | High | M | Top product-value lever |
 | BL-006 | Trust & explainability sections in outputs | [ ] | P0 | B | High | M | Essential for team adoption |
@@ -222,3 +222,5 @@ Each item is considered done only when all are true:
 - Product specification: `codex.md`
 - Architecture context: `docs/architecture.md`
 - Staging observability validation checklist: `docs/observability_staging_checklist.md`
+- Validation report (2026-04-29): `docs/observability_validation_report_2026-04-29.md`
+- Operator playbook: `docs/operator_runtime_playbook.md`
