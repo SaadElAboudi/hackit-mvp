@@ -1,6 +1,31 @@
 const MAX_SAMPLES = 400;
 const ALERT_CONSECUTIVE_WINDOWS = 3;
 
+// ── SLO definitions (all thresholds documented here) ─────────────────────────
+// p95 latency budget in milliseconds per route pattern.
+// Exceed these to trigger an 'slo_latency_breach' alert.
+export const SLO_LATENCY_P95_MS = {
+  'POST /api/rooms/:id/messages': 2000,
+  'POST /api/search': 10000,
+  'GET /api/rooms/:id/messages': 3000,
+  'POST /api/rooms/:id/share': 15000,
+  default: 5000,
+};
+
+// 5xx budget thresholds (error rate, 0–1)
+export const SLO_ERROR_RATE = {
+  'POST /api/search': 0.05,       // 5% budget
+  'POST /api/rooms/:id/messages': 0.02, // 2% budget
+  default: 0.1,
+};
+
+// External provider SLO thresholds
+export const SLO_PROVIDER = {
+  geminiTimeoutRate: 0.1,   // >10% timeouts → alert
+  youtubeErrorRate: 0.15,   // >15% errors → alert
+  wsFanoutFailureRate: 0.05, // >5% WS send failures → alert
+};
+
 const state = {
   endpoints: new Map(),
   wsFanout: {
@@ -140,22 +165,45 @@ export function buildObservabilitySnapshot() {
 
 export function evaluateAlerts(snapshot) {
   const alerts = [];
+
+  // ── Route SLO: 5xx error-rate ─────────────────────────────────────────────
   const search = snapshot.endpoints['POST /api/search'];
-  if (search && search.errorRate5xx > 0.2) {
-    alerts.push({ severity: 'high', code: 'search_5xx_spike', message: '5xx spike on /api/search' });
+  const searchBudget = SLO_ERROR_RATE['POST /api/search'];
+  if (search && search.errorRate5xx > searchBudget) {
+    alerts.push({ severity: 'high', code: 'search_5xx_spike', message: `5xx error rate on /api/search exceeds SLO (${(searchBudget * 100).toFixed(0)}%)` });
   }
 
+  const roomMessages = snapshot.endpoints['POST /api/rooms/:id/messages'];
+  const roomBudget = SLO_ERROR_RATE['POST /api/rooms/:id/messages'];
+  if (roomMessages && roomMessages.errorRate5xx > roomBudget) {
+    alerts.push({ severity: 'high', code: 'room_message_5xx_spike', message: `5xx error rate on room messages exceeds SLO (${(roomBudget * 100).toFixed(0)}%)` });
+  }
+
+  // ── Route SLO: p95 latency ────────────────────────────────────────────────
+  for (const [route, budgetMs] of Object.entries(SLO_LATENCY_P95_MS)) {
+    if (route === 'default') continue;
+    const ep = snapshot.endpoints[route];
+    if (ep && ep.requests >= 10 && ep.latencyMs.p95 > budgetMs) {
+      alerts.push({
+        severity: 'medium',
+        code: 'slo_latency_breach',
+        message: `p95 latency on ${route} exceeds ${budgetMs}ms SLO (actual: ${ep.latencyMs.p95}ms)`,
+      });
+    }
+  }
+
+  // ── External provider SLOs ────────────────────────────────────────────────
   const gemini = snapshot.external.gemini;
-  if (gemini.total >= 10 && (gemini.timeout / gemini.total) > 0.25) {
-    alerts.push({ severity: 'high', code: 'gemini_timeout_spike', message: 'Gemini timeout ratio above threshold' });
+  if (gemini.total >= 10 && (gemini.timeout / gemini.total) > SLO_PROVIDER.geminiTimeoutRate) {
+    alerts.push({ severity: 'high', code: 'gemini_timeout_spike', message: `Gemini timeout rate exceeds SLO (${(SLO_PROVIDER.geminiTimeoutRate * 100).toFixed(0)}%)` });
   }
 
-  if (snapshot.external.youtube.total >= 10 && (snapshot.external.youtube.error / snapshot.external.youtube.total) > 0.2) {
-    alerts.push({ severity: 'medium', code: 'youtube_error_spike', message: 'YouTube error ratio above threshold' });
+  if (snapshot.external.youtube.total >= 10 && (snapshot.external.youtube.error / snapshot.external.youtube.total) > SLO_PROVIDER.youtubeErrorRate) {
+    alerts.push({ severity: 'medium', code: 'youtube_error_spike', message: `YouTube error rate exceeds SLO (${(SLO_PROVIDER.youtubeErrorRate * 100).toFixed(0)}%)` });
   }
 
-  if (snapshot.wsFanout?.attempts >= 30 && snapshot.wsFanout.failureRate > 0.1) {
-    alerts.push({ severity: 'high', code: 'ws_fanout_failures', message: 'WebSocket fanout failure ratio above threshold' });
+  if (snapshot.wsFanout?.attempts >= 30 && snapshot.wsFanout.failureRate > SLO_PROVIDER.wsFanoutFailureRate) {
+    alerts.push({ severity: 'high', code: 'ws_fanout_failures', message: `WebSocket fanout failure rate exceeds SLO (${(SLO_PROVIDER.wsFanoutFailureRate * 100).toFixed(0)}%)` });
   }
 
   state.alertsHistory.push({ at: Date.now(), count: alerts.length });

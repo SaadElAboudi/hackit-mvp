@@ -43,4 +43,9 @@ class AnalyticsManager {
     required String name,
     required String value,
   }) async {}
+
+  Future<void> logFeatureUsed({
+    required String feature,
+    Map<String, dynamic>? parameters,
+  }) async {}
 }

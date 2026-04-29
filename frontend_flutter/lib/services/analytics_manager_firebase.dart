@@ -140,4 +140,20 @@ class AnalyticsManager {
       value: value,
     );
   }
+
+  Future<void> logFeatureUsed({
+    required String feature,
+    Map<String, dynamic>? parameters,
+  }) async {
+    await _ensureInitialized();
+    if (!_enabled || _analytics == null) return;
+    await _analytics!.logEvent(
+      name: 'feature_used',
+      parameters: {
+        'feature': feature,
+        'timestamp': DateTime.now().toIso8601String(),
+        if (parameters != null) ...parameters,
+      },
+    );
+  }
 }

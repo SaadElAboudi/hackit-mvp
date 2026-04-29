@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/room.dart';
+import '../services/analytics_manager.dart';
 import '../services/room_service.dart';
 import '../services/project_service.dart' show ProjectService;
 
@@ -473,10 +474,17 @@ class RoomProvider extends ChangeNotifier {
       messages.add(saved);
 
       // Shared AI commands should show the thinking indicator immediately.
-      if (RegExp(r'(@ia\b|^/doc\b|^/mission\b|^/search\b|^/decide\b)',
-              caseSensitive: false)
-          .hasMatch(content)) {
+      const cmdRe =
+          r'(@ia\b|^/doc\b|^/mission\b|^/search\b|^/decide\b|^/brief\b|^/share\b)';
+      final cmdMatch = RegExp(cmdRe, caseSensitive: false).firstMatch(content);
+      if (cmdMatch != null) {
         aiThinking = true;
+        // opt-in telemetry: log which command was used
+        final cmd = cmdMatch.group(0) ?? 'unknown';
+        unawaited(AnalyticsManager().logFeatureUsed(
+          feature: 'ai_command',
+          parameters: {'command': cmd.trim()},
+        ));
       }
 
       sendingMessage = false;
@@ -802,6 +810,10 @@ class RoomProvider extends ChangeNotifier {
     try {
       await _svc.postMission(room.id, prompt, agentType: agentType);
       aiThinking = true;
+      unawaited(AnalyticsManager().logFeatureUsed(
+        feature: 'mission_created',
+        parameters: {'agentType': agentType},
+      ));
       notifyListeners();
       return true;
     } catch (e) {
@@ -984,6 +996,10 @@ class RoomProvider extends ChangeNotifier {
         botToken: botToken,
         channelId: channelId,
       );
+      unawaited(AnalyticsManager().logFeatureUsed(
+        feature: 'integration_connected',
+        parameters: {'provider': 'slack'},
+      ));
       await refreshIntegrationStatus();
       return true;
     } catch (e) {
@@ -1023,6 +1039,10 @@ class RoomProvider extends ChangeNotifier {
         apiToken: apiToken,
         parentPageId: parentPageId,
       );
+      unawaited(AnalyticsManager().logFeatureUsed(
+        feature: 'integration_connected',
+        parameters: {'provider': 'notion'},
+      ));
       await refreshIntegrationStatus();
       return true;
     } catch (e) {
@@ -1112,6 +1132,10 @@ class RoomProvider extends ChangeNotifier {
         target: target,
         note: note,
       );
+      unawaited(AnalyticsManager().logFeatureUsed(
+        feature: 'integration_shared',
+        parameters: {'target': target},
+      ));
       await refreshShareHistory(limit: 12);
       return true;
     } catch (e) {
