@@ -42,6 +42,63 @@ class _FakeRoomProvider extends RoomProvider {
   Future<void> closeRoom() async {}
 }
 
+class _FakeRoomProviderResearchDecision extends RoomProvider {
+  @override
+  Future<void> openRoom(Room room) async {
+    currentRoom = room;
+    loadingMessages = false;
+    messages = [
+      RoomMessage(
+        id: 'msg-research-trust-1',
+        roomId: room.id,
+        senderId: 'ai',
+        senderName: 'IA',
+        isAI: true,
+        content: 'Synthese recherche.',
+        type: 'research',
+        challenges: const [],
+        data: const {
+          'videoTitle': 'Source',
+          'videoUrl': 'https://example.com/video',
+          'trust': {
+            'confidence': 'moyen',
+            'whyThisPlan': 'Bloc trust recherche.',
+            'assumptions': ['Hypothese recherche'],
+            'limits': ['Limite recherche'],
+          }
+        },
+        createdAt: DateTime.now(),
+      ),
+      RoomMessage(
+        id: 'msg-decision-trust-1',
+        roomId: room.id,
+        senderId: 'ai',
+        senderName: 'IA',
+        isAI: true,
+        content: 'Synthese decision.',
+        type: 'decision',
+        challenges: const [],
+        data: const {
+          'decisions': ['Decision A'],
+          'risks': ['Risque A'],
+          'nextSteps': ['Etape A'],
+          'trust': {
+            'confidence': 'faible',
+            'whyThisPlan': 'Bloc trust decision.',
+            'assumptions': ['Hypothese decision'],
+            'limits': ['Limite decision'],
+          }
+        },
+        createdAt: DateTime.now(),
+      ),
+    ];
+    notifyListeners();
+  }
+
+  @override
+  Future<void> closeRoom() async {}
+}
+
 Room _testRoom() {
   final now = DateTime.now();
   return Room(
@@ -92,5 +149,24 @@ void main() {
     );
     expect(find.text('Hypotheses'), findsOneWidget);
     expect(find.text('Limites'), findsOneWidget);
+  });
+
+  testWidgets('renders explainability block for research and decision cards',
+      (tester) async {
+    final provider = _FakeRoomProviderResearchDecision();
+
+    await tester.pumpWidget(
+      _wrap(
+        SalonChatScreen(room: _testRoom(), disableHealthPolling: true),
+        provider,
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bloc trust recherche.'), findsOneWidget);
+    expect(find.text('Bloc trust decision.'), findsOneWidget);
+    expect(find.text('Limite recherche'), findsOneWidget);
+    expect(find.text('Limite decision'), findsOneWidget);
   });
 }
