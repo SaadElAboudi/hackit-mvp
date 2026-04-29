@@ -1864,6 +1864,7 @@ class _MessageBubble extends StatelessWidget {
 
     final scheme = Theme.of(context).colorScheme;
     final isAI = message.isAI;
+    final trust = _TrustPayload.fromMessage(message);
 
     Color bubbleColor;
     Color textColor;
@@ -1933,6 +1934,10 @@ class _MessageBubble extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (trust != null) ...[
+                  const SizedBox(height: 6),
+                  _TrustExplainabilityBlock(trust: trust),
+                ],
                 if (isAI)
                   _AiFeedbackRow(
                     message: message,
@@ -1963,6 +1968,155 @@ class _MessageBubble extends StatelessWidget {
       const SnackBar(
         content: Text('Copié dans le presse-papier'),
         duration: Duration(seconds: 1),
+      ),
+    );
+  }
+}
+
+class _TrustPayload {
+  final String confidence;
+  final String whyThisPlan;
+  final List<String> assumptions;
+  final List<String> limits;
+
+  const _TrustPayload({
+    required this.confidence,
+    required this.whyThisPlan,
+    required this.assumptions,
+    required this.limits,
+  });
+
+  static _TrustPayload? fromMessage(RoomMessage message) {
+    final raw = message.data['trust'];
+    if (raw is! Map) return null;
+
+    final confidence = raw['confidence']?.toString().trim() ?? '';
+    final whyThisPlan = raw['whyThisPlan']?.toString().trim() ?? '';
+    final assumptions = (raw['assumptions'] as List? ?? const [])
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .take(3)
+        .toList();
+    final limits = (raw['limits'] as List? ?? const [])
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .take(3)
+        .toList();
+
+    if (confidence.isEmpty &&
+        whyThisPlan.isEmpty &&
+        assumptions.isEmpty &&
+        limits.isEmpty) {
+      return null;
+    }
+
+    return _TrustPayload(
+      confidence: confidence,
+      whyThisPlan: whyThisPlan,
+      assumptions: assumptions,
+      limits: limits,
+    );
+  }
+}
+
+class _TrustExplainabilityBlock extends StatelessWidget {
+  final _TrustPayload trust;
+
+  const _TrustExplainabilityBlock({required this.trust});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final confidenceLabel = trust.confidence.isEmpty
+        ? 'n/a'
+        : trust.confidence[0].toUpperCase() + trust.confidence.substring(1);
+
+    Widget section(String label, List<String> items) {
+      if (items.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface.withValues(alpha: 0.72),
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  '- $item',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurface.withValues(alpha: 0.78),
+                    height: 1.28,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.72,
+      ),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: scheme.outline.withValues(alpha: 0.22),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.fact_check_outlined, size: 14, color: scheme.tertiary),
+              const SizedBox(width: 6),
+              Text(
+                'Pourquoi ce plan',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  color: scheme.onSurface,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Confiance: $confidenceLabel',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.tertiary,
+                ),
+              ),
+            ],
+          ),
+          if (trust.whyThisPlan.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              trust.whyThisPlan,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.3,
+                color: scheme.onSurface.withValues(alpha: 0.86),
+              ),
+            ),
+          ],
+          section('Hypotheses', trust.assumptions),
+          section('Limites', trust.limits),
+        ],
       ),
     );
   }
@@ -2674,6 +2828,7 @@ class _ResearchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final trust = _TrustPayload.fromMessage(message);
     final citations =
         (message.data['citations'] as List? ?? []).whereType<Map>().toList();
     final chapters =
@@ -2724,6 +2879,10 @@ class _ResearchCard extends StatelessWidget {
                 message.content,
                 style: const TextStyle(fontSize: 13, height: 1.45),
               ),
+              if (trust != null) ...[
+                const SizedBox(height: 10),
+                _TrustExplainabilityBlock(trust: trust),
+              ],
               if (videoUrl.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 InkWell(
@@ -2884,6 +3043,7 @@ class _DecisionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final trust = _TrustPayload.fromMessage(message);
     final decisions = (message.data['decisions'] as List? ?? [])
         .map((e) => e.toString())
         .toList();
@@ -2951,6 +3111,10 @@ class _DecisionCard extends StatelessWidget {
                 message.content,
                 style: const TextStyle(fontSize: 13, height: 1.45),
               ),
+              if (trust != null) ...[
+                const SizedBox(height: 10),
+                _TrustExplainabilityBlock(trust: trust),
+              ],
               section('Décisions', decisions),
               section('Risques', risks),
               section('Next steps', nextSteps),

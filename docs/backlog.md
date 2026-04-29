@@ -78,7 +78,7 @@ Goal: improve depth, relevance, and discovery quality.
 | BL-003 | Update operator runtime playbook | [~] | P0 | A | High | S | Playbook drafted; awaiting staging validation review |
 | BL-004 | Artifact review UX polish | [ ] | P1 | A | Medium | M | Reduce friction in compare/review flows |
 | BL-005 | Explicit feedback loop on AI relevance | [ ] | P0 | B | High | M | Top product-value lever |
-| BL-006 | Trust & explainability sections in outputs | [ ] | P0 | B | High | M | Essential for team adoption |
+| BL-006 | Trust & explainability sections in outputs | [~] | P0 | B | High | M | V1 trust blocks added on salon AI/research/decision messages |
 | BL-007 | Product KPI instrumentation dashboard | [ ] | P1 | B | High | M | Enables KPI-driven prioritization |
 | BL-008 | Execution export (Notion/Trello/Asana/CSV) | [ ] | P0 | C | High | M/L | Turns insight into action |
 | BL-009 | Output modes (one-pager vs checklist) | [ ] | P1 | C | Medium | M | Persona-fit packaging |

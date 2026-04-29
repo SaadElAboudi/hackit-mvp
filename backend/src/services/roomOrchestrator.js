@@ -335,6 +335,87 @@ function isCommandLike(text = '') {
   return /^\//.test(value) || /@ia\b/i.test(value);
 }
 
+function buildRoomTrustCard({
+  mode = 'ai',
+  prompt = '',
+  room,
+  context = null,
+}) {
+  const roomName = String(room?.name || 'channel').trim();
+  const subject = clip(prompt || room?.purpose || roomName, 120);
+  const messageCount = Array.isArray(context?.messages) ? context.messages.length : 0;
+  const memoryCount = Array.isArray(context?.memories) ? context.memories.length : 0;
+  const artifactCount = Array.isArray(context?.artifacts) ? context.artifacts.length : 0;
+  const contextScore = (messageCount >= 6 ? 1 : 0) + (memoryCount >= 1 ? 1 : 0) + (artifactCount >= 1 ? 1 : 0);
+  const confidence = contextScore >= 3 ? 'eleve' : contextScore >= 2 ? 'moyen' : 'faible';
+
+  const byMode = {
+    ai: {
+      whyThisPlan: `La reponse est optimisee pour faire avancer rapidement le channel ${roomName} sur "${subject}".`,
+      assumptions: [
+        'Le contexte recent du channel reflete la priorite actuelle.',
+        'Le niveau de detail attendu est operable a court terme.',
+      ],
+      limits: [
+        'Ne remplace pas une validation metier ou legale.',
+        'Peut manquer d informations hors historique du channel.',
+      ],
+    },
+    mission: {
+      whyThisPlan: `Le plan mission privilegie impact x rapidite d execution pour "${subject}".`,
+      assumptions: [
+        'Les ressources mentionnees seront disponibles sur le sprint.',
+        'Le channel partage le meme objectif prioritaire.',
+      ],
+      limits: [
+        'Les estimations restent indicatives sans donnees supplementaires.',
+        'N inclut pas de chiffrage financier complet.',
+      ],
+    },
+    decide: {
+      whyThisPlan: `La synthese de decision consolide les signaux du channel pour accelerer les arbitrages.`,
+      assumptions: [
+        'Les points saillants recents couvrent bien le sujet a trancher.',
+        'Les parties prenantes principales sont representees dans le fil.',
+      ],
+      limits: [
+        'Certaines dependances externes peuvent manquer.',
+        'Un alignement final humain reste necessaire.',
+      ],
+    },
+    research: {
+      whyThisPlan: `La recherche priorise des signaux rapidement exploitables sur "${subject}".`,
+      assumptions: [
+        'Les sources recuperees sont pertinentes pour le contexte actuel.',
+        'Le niveau de profondeur attendu est une base de travail, pas un rapport final.',
+      ],
+      limits: [
+        'La couverture des sources n est pas exhaustive.',
+        'La qualite depend de la fraicheur et de la disponibilite des sources.',
+      ],
+    },
+    artifact: {
+      whyThisPlan: `L artefact est structure pour etre partageable rapidement puis iterable en equipe.`,
+      assumptions: [
+        'Le format markdown convient au flux de collaboration du channel.',
+        'Le contenu sera revise avec feedback d equipe.',
+      ],
+      limits: [
+        'Version initiale potentiellement incomplete sur certains details.',
+        'Peut necessiter une adaptation au style de diffusion final.',
+      ],
+    },
+  };
+
+  const selected = byMode[mode] || byMode.ai;
+  return {
+    confidence,
+    whyThisPlan: selected.whyThisPlan,
+    assumptions: selected.assumptions,
+    limits: selected.limits,
+  };
+}
+
 export function buildSynthesisSuggestion({ roomName, lines = [] }) {
   const picked = (Array.isArray(lines) ? lines : [])
     .map((line) => clip(line, 180))
@@ -551,6 +632,7 @@ export async function createRoomArtifact({
   senderId,
   senderName,
   status = 'draft',
+  trust = null,
   tempId = null, // streaming placeholder ID forwarded to persistRoomMessage
 }) {
   const artifact = await RoomArtifact.create({
@@ -594,6 +676,7 @@ export async function createRoomArtifact({
       why: isAI
         ? 'Artefact généré par l’IA partagée à la demande du channel.'
         : 'Artefact partagé manuellement dans le channel.',
+      ...(trust ? { trust } : {}),
     },
   });
 
@@ -821,6 +904,7 @@ async function handleResearchCommand({ roomId, room, prompt }) {
     content,
     type: 'research',
     data: {
+      trust: buildRoomTrustCard({ mode: 'research', prompt: query, room }),
       query,
       videoTitle,
       videoUrl,
@@ -879,6 +963,7 @@ async function handleDecisionCommand({ roomId, room, prompt, actor, context }) {
     type: 'decision',
     tempId,
     data: {
+      trust: buildRoomTrustCard({ mode: 'decide', prompt: subject, room, context }),
       why: `Synthèse de décision demandée par ${actor.displayName || 'un membre du channel'}.`,
       decisions: extractSectionList(content, /##\s*Décisions\s*([\s\S]*?)(?:##\s+|$)/i),
       risks: extractSectionList(content, /##\s*Risques\s*([\s\S]*?)(?:##\s+|$)/i),
@@ -951,6 +1036,13 @@ async function handleConversationCommand({
       missionAgentLabel,
     });
 
+  const trust = buildRoomTrustCard({
+    mode: command === 'mission' ? 'mission' : (command === 'doc' ? 'artifact' : 'ai'),
+    prompt: effectivePrompt,
+    room,
+    context,
+  });
+
   const shouldCreateArtifact =
     command === 'doc' || /^#\s+/.test(String(content || '')) || isDocLikePrompt(effectivePrompt);
 
@@ -967,6 +1059,7 @@ async function handleConversationCommand({
       isAI: true,
       senderId: 'ai',
       senderName: 'IA',
+      trust,
       tempId,
     });
   }
@@ -981,6 +1074,7 @@ async function handleConversationCommand({
     tempId,
     data: {
       why: `Réponse IA partagée déclenchée par ${actor.displayName || 'un membre du channel'}.`,
+      trust,
     },
   });
 
