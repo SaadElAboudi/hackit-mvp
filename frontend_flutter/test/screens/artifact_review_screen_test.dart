@@ -91,7 +91,8 @@ void main() {
           summary: 'Initial',
         ),
       ],
-    })..artifacts = [artifact];
+    })
+      ..artifacts = [artifact];
 
     await tester.pumpWidget(
       _wrap(ArtifactReviewScreen(artifact: artifact), provider),
@@ -120,7 +121,8 @@ void main() {
           status: 'review',
         ),
       ],
-    })..artifacts = [artifact];
+    })
+      ..artifacts = [artifact];
 
     await tester.pumpWidget(
       _wrap(ArtifactReviewScreen(artifact: artifact), provider),
@@ -149,7 +151,8 @@ void main() {
           summary: 'Ajouts',
         ),
       ],
-    })..artifacts = [artifact];
+    })
+      ..artifacts = [artifact];
 
     await tester.pumpWidget(
       _wrap(ArtifactReviewScreen(artifact: artifact), provider),
@@ -180,7 +183,8 @@ void main() {
           status: 'validated',
         ),
       ],
-    })..artifacts = [artifact];
+    })
+      ..artifacts = [artifact];
 
     await tester.pumpWidget(
       _wrap(ArtifactReviewScreen(artifact: artifact), provider),
@@ -198,7 +202,8 @@ void main() {
     final artifact = _artifact(status: 'draft');
     final provider = _FakeReviewProvider({
       artifact.id: const <ArtifactVersion>[],
-    })..artifacts = [artifact];
+    })
+      ..artifacts = [artifact];
 
     await tester.pumpWidget(
       _wrap(ArtifactReviewScreen(artifact: artifact), provider),
