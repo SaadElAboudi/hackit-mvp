@@ -3,7 +3,18 @@ import mongoose from 'mongoose';
 const FeedbackSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true },
-    rating: { type: Number, enum: [-1, 1], required: true },
+    rating: { type: Number, enum: [-1, 0, 1], required: true },
+    ratingLabel: {
+      type: String,
+      enum: ['pertinent', 'moyen', 'hors_sujet'],
+      default: function defaultRatingLabel() {
+        if (this.rating === 1) return 'pertinent';
+        if (this.rating === 0) return 'moyen';
+        return 'hors_sujet';
+      },
+    },
+    reason: { type: String, default: '', trim: true, maxlength: 240 },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );

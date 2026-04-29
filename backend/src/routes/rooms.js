@@ -15,6 +15,7 @@ import RoomMemory from '../models/RoomMemory.js';
 import RoomMessage from '../models/RoomMessage.js';
 import RoomMission from '../models/RoomMission.js';
 import RoomShareHistory from '../models/RoomShareHistory.js';
+import RoomFeedbackEvent from '../models/RoomFeedbackEvent.js';
 import WorkspaceBlock from '../models/WorkspaceBlock.js';
 import WorkspaceComment from '../models/WorkspaceComment.js';
 import WorkspaceDecision from '../models/WorkspaceDecision.js';
@@ -66,6 +67,7 @@ import {
     validateDirectivesPayload,
     validateDiscoverNotionPagesPayload,
     validateEmptyBody,
+    validateFeedbackAggregateQuery,
     validateResolveCommentPayload,
     validateResolveWorkspaceCommentPayload,
     validateExtractWorkspaceDecisionsPayload,
@@ -3070,7 +3072,7 @@ router.delete('/:id/integrations/notion', async (req, res) => {
  */
 router.post('/:id/messages/:msgId/feedback', validateBody(validateAiFeedbackPayload), async (req, res, next) => {
     try {
-        const { rating } = req.validatedBody;
+        const { rating, ratingLabel, reason, metadata } = req.validatedBody;
 
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -3099,15 +3101,122 @@ router.post('/:id/messages/:msgId/feedback', validateBody(validateAiFeedbackPayl
         const existing = message.feedback.find((f) => f.userId === req.userId);
         if (existing) {
             existing.rating = rating;
+            existing.ratingLabel = ratingLabel;
+            existing.reason = reason;
+            existing.metadata = metadata;
         } else {
-            message.feedback.push({ userId: req.userId, rating });
+            message.feedback.push({ userId: req.userId, rating, ratingLabel, reason, metadata });
         }
         await message.save();
 
+        await RoomFeedbackEvent.findOneAndUpdate(
+            {
+                roomId: req.params.id,
+                messageId: req.params.msgId,
+                userId: req.userId,
+            },
+            {
+                $set: {
+                    rating,
+                    ratingLabel,
+                    reason,
+                    metadata,
+                },
+            },
+            {
+                upsert: true,
+                new: true,
+                setDefaultsOnInsert: true,
+            }
+        );
+
         const thumbsUp = message.feedback.filter((f) => f.rating === 1).length;
+        const mixed = message.feedback.filter((f) => f.rating === 0).length;
         const thumbsDown = message.feedback.filter((f) => f.rating === -1).length;
 
-        res.json({ ok: true, messageId: String(message._id), thumbsUp, thumbsDown, userRating: rating });
+        res.json({
+            ok: true,
+            messageId: String(message._id),
+            thumbsUp,
+            mixed,
+            thumbsDown,
+            userRating: rating,
+            userRatingLabel: ratingLabel,
+            userReason: reason,
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * GET /api/rooms/:id/feedback/aggregate
+ * Return basic rating aggregates for product analytics seed.
+ */
+router.get('/:id/feedback/aggregate', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { from, to, rating, ratingLabel } = validateFeedbackAggregateQuery(req.query || {});
+        const match = {
+            roomId: req.params.id,
+            createdAt: {
+                $gte: from,
+                $lte: to,
+            },
+        };
+        if (Number.isFinite(rating)) {
+            match.rating = rating;
+        }
+
+        const events = await RoomFeedbackEvent.find(match).sort({ createdAt: 1 }).lean();
+
+        const byRating = {
+            pertinent: 0,
+            moyen: 0,
+            hors_sujet: 0,
+        };
+        const byDayMap = new Map();
+
+        for (const event of events) {
+            const label = String(event?.ratingLabel || '').trim();
+            if (byRating[label] !== undefined) {
+                byRating[label] += 1;
+            }
+
+            const day = new Date(event.createdAt).toISOString().slice(0, 10);
+            if (!byDayMap.has(day)) {
+                byDayMap.set(day, {
+                    day,
+                    pertinent: 0,
+                    moyen: 0,
+                    hors_sujet: 0,
+                });
+            }
+            const slot = byDayMap.get(day);
+            if (slot[label] !== undefined) {
+                slot[label] += 1;
+            }
+        }
+
+        const byDay = [...byDayMap.values()];
+        const filteredByRating = ratingLabel
+            ? { [ratingLabel]: byRating[ratingLabel] || 0 }
+            : byRating;
+
+        return res.json({
+            ok: true,
+            roomId: String(req.params.id),
+            from: from.toISOString(),
+            to: to.toISOString(),
+            total: events.length,
+            byRating: filteredByRating,
+            byDay,
+        });
     } catch (err) {
         next(err);
     }

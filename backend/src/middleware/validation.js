@@ -759,9 +759,92 @@ export function validateDiscoverNotionPagesPayload(body) {
 }
 
 export function validateAiFeedbackPayload(body) {
-  const rating = Number(body?.rating);
-  if (![-1, 1].includes(rating)) {
-    throw badRequest('rating must be 1 (thumbs up) or -1 (thumbs down)', { field: 'rating' });
+  const rawRating = body?.rating;
+
+  let rating = null;
+  let ratingLabel = '';
+  if (typeof rawRating === 'number' && Number.isFinite(rawRating)) {
+    rating = Number(rawRating);
+  } else {
+    const normalized = String(rawRating || '').trim().toLowerCase();
+    if (['1', '+1', 'up', 'thumbs_up', 'pertinent', 'relevant'].includes(normalized)) {
+      rating = 1;
+    } else if (['0', 'moyen', 'mixed', 'neutral'].includes(normalized)) {
+      rating = 0;
+    } else if (['-1', 'down', 'thumbs_down', 'hors-sujet', 'hors_sujet', 'off_topic'].includes(normalized)) {
+      rating = -1;
+    }
   }
-  return { rating };
+
+  if (![-1, 0, 1].includes(rating)) {
+    throw badRequest('rating must be one of: 1/pertinent, 0/moyen, -1/hors_sujet', { field: 'rating' });
+  }
+
+  if (rating === 1) ratingLabel = 'pertinent';
+  if (rating === 0) ratingLabel = 'moyen';
+  if (rating === -1) ratingLabel = 'hors_sujet';
+
+  const reason = String(body?.reason || '').trim();
+  if (reason.length > 240) {
+    throw badRequest('reason is too long', { field: 'reason', max: 240 });
+  }
+
+  const source = String(body?.metadata?.source || '').trim().slice(0, 60);
+  const surface = String(body?.metadata?.surface || '').trim().slice(0, 60);
+  const locale = String(body?.metadata?.locale || '').trim().slice(0, 32);
+  const sessionId = String(body?.metadata?.sessionId || '').trim().slice(0, 80);
+
+  const metadata = {};
+  if (source) metadata.source = source;
+  if (surface) metadata.surface = surface;
+  if (locale) metadata.locale = locale;
+  if (sessionId) metadata.sessionId = sessionId;
+
+  return { rating, ratingLabel, reason, metadata };
+}
+
+export function validateFeedbackAggregateQuery(query) {
+  const fromRaw = String(query?.from || '').trim();
+  const toRaw = String(query?.to || '').trim();
+  const ratingRaw = String(query?.rating || '').trim();
+
+  const now = Date.now();
+  const defaultFrom = new Date(now - (7 * 24 * 60 * 60 * 1000));
+  const from = fromRaw ? new Date(fromRaw) : defaultFrom;
+  const to = toRaw ? new Date(toRaw) : new Date(now);
+
+  if (Number.isNaN(from.getTime())) {
+    throw badRequest('from must be a valid ISO date', { field: 'from' });
+  }
+  if (Number.isNaN(to.getTime())) {
+    throw badRequest('to must be a valid ISO date', { field: 'to' });
+  }
+  if (from > to) {
+    throw badRequest('from must be before to', { field: 'from' });
+  }
+
+  let rating = null;
+  let ratingLabel = null;
+  if (ratingRaw) {
+    const normalized = ratingRaw.toLowerCase();
+    if (['1', '+1', 'pertinent'].includes(normalized)) {
+      rating = 1;
+      ratingLabel = 'pertinent';
+    } else if (['0', 'moyen'].includes(normalized)) {
+      rating = 0;
+      ratingLabel = 'moyen';
+    } else if (['-1', 'hors-sujet', 'hors_sujet'].includes(normalized)) {
+      rating = -1;
+      ratingLabel = 'hors_sujet';
+    } else if (!['all', '*'].includes(normalized)) {
+      throw badRequest('rating filter must be one of: 1, 0, -1, pertinent, moyen, hors_sujet', { field: 'rating' });
+    }
+  }
+
+  return {
+    from,
+    to,
+    rating,
+    ratingLabel,
+  };
 }
