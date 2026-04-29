@@ -81,4 +81,5 @@ flutter:
   uses-material-design: true
 
 dependency_overrides:
-  # (empty) Previously used to pin web; removed after upgrading Flutter SDK.
+  # Temporary compatibility pin for Dart 3.10 test compilation.
+  win32: ^5.8.0

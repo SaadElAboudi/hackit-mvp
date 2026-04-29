@@ -52,6 +52,7 @@ class SalonChatScreen extends StatefulWidget {
 class _SalonChatScreenState extends State<SalonChatScreen> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  late final RoomProvider _roomProvider;
   Timer? _healthTicker;
   Map<String, dynamic>? _backendHealth;
   bool _isAtBottom = true; // track whether user is near the bottom
@@ -65,6 +66,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   @override
   void initState() {
     super.initState();
+    _roomProvider = context.read<RoomProvider>();
     _backendHealth = widget.debugInitialBackendHealth;
     _scrollCtrl.addListener(() {
       if (!_scrollCtrl.hasClients) return;
@@ -72,8 +74,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       _isAtBottom = pos.pixels >= pos.maxScrollExtent - 100;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final prov = context.read<RoomProvider>();
-      await prov.openRoom(widget.room);
+      await _roomProvider.openRoom(widget.room);
       if (!widget.disableHealthPolling) {
         await _refreshBackendHealth();
         _healthTicker = Timer.periodic(
@@ -90,7 +91,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     _healthTicker?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
-    context.read<RoomProvider>().closeRoom();
+    _roomProvider.closeRoom();
     super.dispose();
   }
 

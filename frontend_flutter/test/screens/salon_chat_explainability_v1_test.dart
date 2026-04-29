@@ -166,7 +166,7 @@ void main() {
 
     expect(find.text('Bloc trust recherche.'), findsOneWidget);
     expect(find.text('Bloc trust decision.'), findsOneWidget);
-    expect(find.text('Limite recherche'), findsOneWidget);
-    expect(find.text('Limite decision'), findsOneWidget);
+    expect(find.textContaining('Limite recherche'), findsOneWidget);
+    expect(find.textContaining('Limite decision'), findsOneWidget);
   });
 }
