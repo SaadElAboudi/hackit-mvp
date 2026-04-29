@@ -3274,6 +3274,55 @@ class _ContextPanel extends StatelessWidget {
     return '${at.day.toString().padLeft(2, '0')}/${at.month.toString().padLeft(2, '0')}/${at.year}';
   }
 
+  // Returns the subtitle for an integration tile using share history
+  // (last sync time or last failure reason), falling back to connectedAt.
+  String _integrationSubtitle(String target, RoomIntegrationStatus? status) {
+    final key = target.toLowerCase();
+    // Most recent history entry for this target (list is newest-first from API)
+    final last = shareHistory.where((h) => h.target == key).firstOrNull;
+    if (last != null) {
+      if (last.isFailed) {
+        final reason = last.errorCode.isNotEmpty
+            ? last.errorCode
+            : last.errorMessage.isNotEmpty
+                ? last.errorMessage
+                : 'Erreur inconnue';
+        return 'Echec · $reason · ${_timeAgo(last.createdAt)}';
+      }
+      if (last.isSuccess) {
+        final who = last.actorName.isNotEmpty ? last.actorName : 'inconnu';
+        return 'Dernier partage  $who · ${_timeAgo(last.createdAt)}';
+      }
+    }
+    if (status == null || status.connectedAt == null) {
+      return 'Aucune synchronisation recente.';
+    }
+    final who = status.connectedBy.isEmpty ? 'inconnu' : status.connectedBy;
+    return 'Connecte par $who · ${_timeAgo(status.connectedAt!)}';
+  }
+
+  // Returns the trailing icon color for an integration tile.
+  Color _integrationTrailingColor(
+    String target,
+    bool connected,
+    ColorScheme scheme,
+  ) {
+    final key = target.toLowerCase();
+    final last = shareHistory.where((h) => h.target == key).firstOrNull;
+    if (last != null && last.isFailed) return Colors.orange;
+    if (connected) return Colors.green;
+    return scheme.error;
+  }
+
+  IconData _integrationTrailingIcon(String target, bool connected) {
+    final key = target.toLowerCase();
+    final last = shareHistory.where((h) => h.target == key).firstOrNull;
+    if (last != null && last.isFailed) return Icons.warning_amber_rounded;
+    return connected
+        ? Icons.check_circle_outline_rounded
+        : Icons.error_outline_rounded;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -3604,18 +3653,14 @@ class _ContextPanel extends StatelessWidget {
               title:
                   Text('$label · ${connected ? 'Connecte' : 'Non connecte'}'),
               subtitle: Text(
-                status == null || status.connectedAt == null
-                    ? 'Aucune synchronisation recente.'
-                    : '${status.connectedBy.isEmpty ? 'inconnu' : status.connectedBy} · ${_timeAgo(status.connectedAt!)}',
+                _integrationSubtitle(label, status),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               trailing: Icon(
-                connected
-                    ? Icons.check_circle_outline_rounded
-                    : Icons.error_outline_rounded,
+                _integrationTrailingIcon(label, connected),
                 size: 17,
-                color: connected ? Colors.green : scheme.error,
+                color: _integrationTrailingColor(label, connected, scheme),
               ),
             );
           },
