@@ -33,7 +33,17 @@ const bool _useNeumorphControls = _uiStyle != 'glass-only';
 /// - AI thinking indicator + reconnecting banner
 class SalonChatScreen extends StatefulWidget {
   final Room room;
-  const SalonChatScreen({super.key, required this.room});
+  @visibleForTesting
+  final Map<String, dynamic>? debugInitialBackendHealth;
+  @visibleForTesting
+  final bool disableHealthPolling;
+
+  const SalonChatScreen({
+    super.key,
+    required this.room,
+    this.debugInitialBackendHealth,
+    this.disableHealthPolling = false,
+  });
 
   @override
   State<SalonChatScreen> createState() => _SalonChatScreenState();
@@ -55,6 +65,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   @override
   void initState() {
     super.initState();
+    _backendHealth = widget.debugInitialBackendHealth;
     _scrollCtrl.addListener(() {
       if (!_scrollCtrl.hasClients) return;
       final pos = _scrollCtrl.position;
@@ -63,11 +74,13 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<RoomProvider>();
       await prov.openRoom(widget.room);
-      await _refreshBackendHealth();
-      _healthTicker = Timer.periodic(
-        const Duration(seconds: 45),
-        (_) => _refreshBackendHealth(),
-      );
+      if (!widget.disableHealthPolling) {
+        await _refreshBackendHealth();
+        _healthTicker = Timer.periodic(
+          const Duration(seconds: 45),
+          (_) => _refreshBackendHealth(),
+        );
+      }
       _scrollToBottom();
     });
   }
