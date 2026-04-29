@@ -1,5 +1,10 @@
 # Hackit Implementation Roadmap (2026)
 
+> Reference-only document.
+>
+> For prioritized planning and execution order, use `docs/backlog.md` only.
+> If this file and `docs/backlog.md` diverge, `docs/backlog.md` is authoritative.
+
 Last updated: 2026-04-29
 
 This document turns product direction into concrete engineering deliverables for the current repository.

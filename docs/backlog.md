@@ -1,186 +1,115 @@
-# Backlog
+# Unified Product Backlog (Single Source of Truth)
 
-## Important Context
+Last updated: 2026-04-29
 
-Primary source of truth for current direction:
-- `codex.md` for product specification and phase status.
-- `docs/architecture.md` for architecture boundaries.
-- `docs/implementation_roadmap.md` for next engineering phases.
+This file is the only prioritized backlog reference for product, engineering, and release planning.
 
-The sections below include historical backlog items from earlier product framing. Keep them as reference, but prioritize new work according to the documents above.
+## Governance
 
-## Current Delivery Status (2026-04-29)
+- `docs/backlog.md` is the unique source of truth for priorities.
+- `docs/implementation_roadmap.md`, `docs/features.md`, and `docs/issues_plan.md` are context/reference docs only.
+- Any new feature proposal must be added here with: business impact, effort, priority, and target phase.
 
-Current repository state, ahead of the historical backlog below:
-- Phase 5 is complete: validation, requestId propagation, recoverable retries, and room-governance hardening are shipped.
-- Phase 6 is mostly complete: artifact comments, version metadata, and status transitions exist; remaining work is mainly Flutter UX polish and widget coverage.
-- Phase 7 is complete: connector abstraction, retries/idempotency, share history, and integration status center are shipped.
-- Phase 8 is code-complete: observability metrics, health endpoints, SLO alerts, degraded banner, telemetry, and room load smoke are implemented; staging dashboard/alert validation remains.
+## Status Legend
 
-Near-term remaining work:
-1. Flutter widget tests for artifact review, compare UI, and degraded banner flows.
-2. Staging validation for observability dashboards and alert routing.
-3. Operator/runtime docs updates after staging validation.
-4. Additional export connectors only if product priority moves beyond Slack and Notion.
+- `[x]` done
+- `[~]` in progress / partially delivered
+- `[ ]` not started
 
-# Ajouts UX/UI & Fonctionnalités 2025
-- [x] Refonte visuelle premium (headers, cards, navigation)
-- [x] Favoris & historique local-first (SharedPreferences, badge, suppression)
-- [x] Mode invité et démo (userId anonyme, JWT)
-- [x] Nettoyage du code, conventions et process contribution
-# Hackit MVP Backlog
+## Current Baseline (Delivered)
 
-Status legend: [ ] not-started · [~] in-progress · [x] completed
+- [x] Shared AI in channels with slash commands (`/doc`, `/search`, `/decide`, `/brief`, `/mission`, `/share`)
+- [x] Slack/Notion integration flows (connect/disconnect/status/share)
+- [x] Core artifact lifecycle backend (comments, versions, status transitions)
+- [x] Reliability hardening (validation, requestId propagation, rate-limiting on command-heavy routes)
+- [x] Observability stack (health endpoints, SLO thresholds/alerts, smoke script, degraded banner, opt-in telemetry)
 
-## Product & UX
-- [ ] (1) Clarify MVP Scope — Define core user journey: ask question → AI summary → video list → detail view across web/mobile/flutter.
-- [ ] (25) Accessibility Review — Audit color contrast, semantics, focus order; fix issues; add tests.
-- [ ] (26) Dark Mode Support — Implement theme switching for RN and Flutter; persist preference.
-- [ ] (31) Error UX Improvements — User-friendly retry + fallback suggestions on provider failures.
-- [ ] (33) Monetization Placeholder — Optional ad-slot/subscription gating placeholder (no billing yet).
+## Prioritization Framework
 
-## Backend (Node/Express)
-- [ ] (2) Backend Env Standardization — Create `.env.example` with OPENAI, GEMINI, YT, MOCK_MODE, REAL_MODE, CACHE_TTL, RATE_LIMIT.
-- [ ] (3) Rate Limiting — Protect `/api/search` with express-rate-limit.
-- [ ] (4) Request Logging — Add pino/winston with correlation IDs; log latency and external API calls.
-- [ ] (5) Services Abstraction — Unified AI provider interface (OpenAI/Gemini) with fallback + circuit breaker.
-- [ ] (6) YouTube Pagination — Support `nextPageToken` and multiple pages.
-- [ ] (7) Video Transcript Ingestion — Endpoint to fetch/summarize transcripts; cache transcripts.
-- [ ] (8) Caching Layer — In-memory + optional Redis cache with configurable TTL.
-- [ ] (9) Error Handling Middleware — Map errors to structured JSON problem format.
-- [ ] (18) Unit Tests — Tests for gemini.js, openai.js, youtube.js using nock; target 70% coverage.
-- [ ] (19) Integration Smoke (REAL) — Hit `/api/search` with live YouTube; verify non-mock path.
-- [ ] (21) Input Validation — zod/joi schemas for request bodies.
-- [ ] (22) Observability Metrics — Basic metrics: request_count, latency, cache_hit, provider_failures.
-- [ ] (23) Performance Profiling — Baseline average search latency; optimize parallel provider calls.
-- [ ] (32) Video Platform Expansion — Add TikTok/alt provider behind abstraction; flag source in response.
-- [ ] (34) Feature Flags — Lightweight flag config (JSON + env) for experimental providers.
-- [ ] (35) Refactor searchController — Extract pure functions; improve testability.
-- [ ] (39) OpenAI Cost Guard — Token usage estimation + soft hourly cap.
-- [ ] (40) Gemini/OpenAI Failover — Timeout >2s triggers fallback; record usage stats.
+Scoring guidance used for ordering:
 
-## Frontend (React Native)
-- [ ] (10) Navigation — Ensure stack navigation + deep linking (question → results → video).
-- [ ] (11) Offline State — Offline detection banner; queue queries until connectivity returns.
-- [ ] (31) Error UX — Friendly retry flows and diagnostics in UI.
+- `Impact` (1-5): user/business value
+- `Urgency` (1-5): risk reduction / dependency unlock
+- `Effort` (1-5): implementation complexity
+- Priority score = `(Impact * Urgency) / Effort`
 
-## Frontend (Flutter)
-- [ ] (12) State Management — Introduce Bloc or Riverpod for search feature; test scaffolding (`search_bloc_test`).
-- [ ] (13) Search Feature Completion — Search screen, results list, video detail, summary widget calling backend API.
-- [ ] (24) Internationalization — i18n (en/fr); externalize strings; language switch.
-- [ ] (37) Golden Tests — Add golden tests for summary widget and result list.
+## Phase Plan (Roadmap)
 
-## Shared Contracts & Types
-- [ ] (14) Shared Type Definitions — Consolidate search result/summary types in `shared/types`; generate from OpenAPI.
-- [ ] (15) API Contract Spec — OpenAPI 3 spec for search + transcript endpoints; publish JSON.
+### Phase A - Stabilization and Operational Sign-off (Now)
 
-## CI/CD
-- [ ] (16) Lint Gates — ESLint + TS checks; Dart analyze + format checks in Flutter CI.
-- [ ] (17) Test Matrix — Unit + integration tests across Node versions and Flutter channels.
-- [ ] (38) Dependency Updates — Configure Dependabot for npm + pub weekly.
+Goal: close remaining quality/ops gaps on already shipped capabilities.
 
-## Security & Privacy
-- [ ] (20) Security Audit — Address npm audit/pub outdated issues; add resolutions.
-- [ ] (28) Privacy Policy — Draft markdown explaining data usage, retention, third-party APIs.
+1. [~] Flutter widget coverage for artifact review/compare/status and degraded banner
+2. [ ] Staging validation for observability dashboards + alert routing
+3. [ ] Operator playbook finalization after staging validation
 
-## Analytics & Metrics
-- [ ] (27) Analytics Instrumentation — Event tracking (query_submitted, result_clicked) with privacy toggle.
+### Phase B - Product Trust and Feedback (Next)
 
-## Product Relevance 2026
-- [x] (41) Context-Aware Personalization — Add optional context inputs (client type, budget, deadline, maturity) and adapt deliveryPlan sections from those signals.
-- [x] (42) Decision Assistant — Return 2-3 strategy variants (fast/balanced/ambitious) with trade-offs and recommendation.
-- [ ] (43) Explicit Feedback Loop — Add relevance feedback (pertinent/moyen/hors-sujet + reason) and feed it back into ranking/scoring.
-- [ ] (44) Domain Templates — Add domain packs (Marketing, Product, Ops, Sales, Agency) with tailored vocabulary and acceptance criteria.
-- [ ] (45) Execution Export — Convert plans to tasks (owner, priority, due date) and export to Notion/Trello/Asana/CSV.
-- [ ] (46) Trust & Explainability — Show why-this-plan, assumptions, limits, and section-level confidence.
-- [ ] (47) Output Modes — Add executive one-pager (client-ready/PDF) and team mode (detailed checklist) views.
-- [ ] (48) Product KPI Instrumentation — Track TTV, save rate, regenerate rate, feedback score, export rate.
+Goal: increase user trust and close the quality loop.
 
-## Docs & Architecture
-- [ ] (29) README Feature List — Populate README features with current capabilities; link diagram.
-- [ ] (30) Architecture Diagram — High-level diagram (frontends → backend → providers) in `docs/`.
+1. [ ] Explicit feedback loop (pertinent/moyen/hors-sujet + reason)
+2. [ ] Trust & explainability blocks (why-this-plan, assumptions, limits, confidence)
+3. [ ] Product KPI instrumentation dashboard (TTV, save rate, regenerate rate, feedback score, export rate)
 
----
+### Phase C - Execution and Packaging (Next+1)
 
-### Suggested Near-Term Priorities (first 2 sprints)
-1. (2) Env standardization, (9) error handling, (21) input validation
-2. (5) Provider abstraction with (40) failover and (3) rate limiting
-3. (13) Flutter search feature + (12) state management
-4. (18) Backend unit tests + (16) CI lint gates
+Goal: move from "good answer" to "ready to execute" outputs.
 
-### Acceptance Criteria Example
-- (3) Rate Limiting: Requests to `/api/search` exceeding 60/min from same IP receive 429 with `Retry-After`; included unit test and configuration via env.
-- (13) Flutter Search: Given a query and reachable backend, results list shows ≥1 item with title, summary snippet, and playable link; error state and loading skeleton covered by tests.
+1. [ ] Execution export (Notion/Trello/Asana/CSV)
+2. [ ] Output modes (executive one-pager vs team checklist)
+3. [ ] Domain template packs v2 (Marketing, Product, Ops, Sales, Agency)
 
----
+### Phase D - Search Intelligence Expansion (Later)
 
-## New Feature Backlog Proposals — 2025-11-09
+Goal: improve depth, relevance, and discovery quality.
 
-The items below are grouped for planning and complement the existing backlog. Use them to create milestones; each has a clear outcome for quick adoption.
+1. [ ] Transcript fetch + cache layer
+2. [ ] Summaries with citations + timestamp links
+3. [ ] Automatic chapterization
+4. [ ] Hybrid search embeddings + rerank
+5. [ ] Entity extraction, related content, diversity/dedup, freshness/safe-search
 
-### Core search and answers
-- Summaries with citations and timestamp deep links (API returns citations[] with url, startSec, endSec, quote; UI shows tap-to-open deep links).
-- Multi-length outputs (TL;DR, medium, deep) via `summaryLength` param and UI toggle persisted in preferences.
-- Streaming answers with progress steps (SSE emits meta, partials, done; UI renders incremental text with step indicator).
-- Conversational follow-ups (conversationId + context; reformulate follow-ups to improve results).
+## Prioritized Backlog (Master List)
 
-### Video intelligence
-- Auto transcript fetch + caching (captions first; policy-gated fallback provider; TTL cache).
-- Automatic chapterization (titles + timestamps) based on transcript; versioned storage.
-- Entity/keyword extraction and topic tags for filtering and navigation.
-- Related content suggestions with diversity and dedupe across channels.
+| ID | Item | Status | Priority | Phase | Impact | Effort | Notes |
+|---|---|---|---|---|---|---|---|
+| BL-001 | Flutter widget tests for artifact review/compare/status | [~] | P0 | A | High | M | Partially landed; finish coverage gaps |
+| BL-002 | Validate observability dashboards and alert routing in staging | [ ] | P0 | A | High | S | Required for Phase 8 operational sign-off |
+| BL-003 | Update operator runtime playbook | [ ] | P0 | A | High | S | Depends on BL-002 |
+| BL-004 | Artifact review UX polish | [ ] | P1 | A | Medium | M | Reduce friction in compare/review flows |
+| BL-005 | Explicit feedback loop on AI relevance | [ ] | P0 | B | High | M | Top product-value lever |
+| BL-006 | Trust & explainability sections in outputs | [ ] | P0 | B | High | M | Essential for team adoption |
+| BL-007 | Product KPI instrumentation dashboard | [ ] | P1 | B | High | M | Enables KPI-driven prioritization |
+| BL-008 | Execution export (Notion/Trello/Asana/CSV) | [ ] | P0 | C | High | M/L | Turns insight into action |
+| BL-009 | Output modes (one-pager vs checklist) | [ ] | P1 | C | Medium | M | Persona-fit packaging |
+| BL-010 | Domain templates v2 (vertical packs) | [ ] | P1 | C | Medium | M | Quality by domain |
+| BL-011 | Additional connectors (Drive/Jira/Asana) | [ ] | P2 | C | Medium | M | Only if priority justifies |
+| BL-012 | Transcript fetch + caching layer | [ ] | P1 | D | High | M | Dependency for deep citation quality |
+| BL-013 | Summaries with citations and timestamps | [ ] | P1 | D | High | M | Core search trust feature |
+| BL-014 | Automatic chapterization | [ ] | P2 | D | Medium | M | Depends on BL-012 |
+| BL-015 | Hybrid search embeddings + rerank | [ ] | P2 | D | Medium | L | Later-phase relevance optimization |
+| BL-016 | Entity extraction and topic tags | [ ] | P2 | D | Medium | M | Discovery enhancement |
+| BL-017 | Related suggestions + diversity/dedupe + freshness/safe-search | [ ] | P2 | D | Medium | M/L | Ranking quality track |
+| BL-018 | Accessibility review (contrast, focus, semantics) | [ ] | P1 | A/B | High | M | Quality gate for scaling usage |
+| BL-019 | Internationalization (en/fr) | [ ] | P2 | C/D | Medium | M | User expansion |
+| BL-020 | Security audit + privacy policy update | [ ] | P1 | A/B | High | M | Compliance and risk reduction |
 
-### Discovery and ranking
-- Hybrid search (keyword + embeddings) with vector store and LLM reranking for relevance/recency.
-- Diversity and deduplication; creator/topic mix constraints.
-- Freshness and safe-search filters; creator allow/deny lists.
+## Legacy / Archive Items
 
-### Personalization
-- Tone and expertise level controls affecting prompt style/structure.
-- Language preferences and optional bilingual summaries (original + translated).
-- Topic/creator subscriptions and notifications (server-stubbed initially).
+Historical items from earlier framing remain relevant only if mapped to a `BL-*` entry above.
+If a historical item is not mapped, it is not active this cycle.
 
-### Interaction & sharing
-- Inline transcript quotes with preview; “jump to moment” on tap.
-- Export summaries to Markdown/Notion; shareable public links.
-- Bookmarks and history with quick re-run.
+## Definition of Done (Per Backlog Item)
 
-### Reliability & performance
-- Caching and fallback badges (REAL/FALLBACK/CACHED) exposed in API/UI.
-- Retries with backoff and circuit breaker around providers.
+Each item is considered done only when all are true:
 
-### Safety & trust
-- Moderation pipeline (NSFW/category filters); source trust scores.
-- “Why this result” rationale in UI.
+1. User-facing behavior and acceptance criteria are validated.
+2. Relevant automated tests are added/updated.
+3. Observability and error handling are in place for the changed flow.
+4. Documentation updates are reflected in this file.
 
-### Analytics & feedback
-- Thumbs up/down + “what’s missing?” prompt; basic telemetry dashboard.
+## References
 
-### Mobile (Flutter) UX polish
-- Offline cache for saved summaries/transcripts; deep links to timestamps; skeleton loaders; pull-to-refresh.
-
-### E2E & data platform
-- E2E smoke: search → stream → timestamp click → verify (screenshots on failure).
-- RAG ingestion + vector store (channels/playlists to embeddings; semantic recall API).
-
-### Suggested Milestone 1 (shipping set)
-1. Summaries with citations + timestamp links
-2. Automatic chapterization
-3. Caching layer + fallback badges
-4. Bookmarks and history (Flutter)
-5. E2E smoke test flow
-
-
----
-
-## 2026 Strategic Execution Addendum
-
-For a complete execution plan with KPIs, phased delivery, SLOs, and product positioning, see:
-
-- `docs/product_strategy_2026.md`
-
-This addendum translates the backlog into a practical 12-week roadmap focused on:
-- time-to-first-value,
-- answer trustworthiness,
-- personalization,
-- and operational reliability.
+- Product specification: `codex.md`
+- Architecture context: `docs/architecture.md`
+- Staging observability validation checklist: `docs/observability_staging_checklist.md`

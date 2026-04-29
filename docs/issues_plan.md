@@ -1,5 +1,10 @@
 ## Prioritized Issue Plan (Generated 2025-11-09)
 
+> Historical reference only.
+>
+> This file is no longer the active prioritization source.
+> Use `docs/backlog.md` for current priorities and phase allocation.
+
 This document converts the feature backlog into a prioritized issue list with suggested milestones. Scoring model: IMPACT (user/business value 1–5) × URGENCY (reduces risk/unblocks others 1–5) ÷ EFFORT (estimated size 1=XS,2=S,3=M,5=L). Higher score ⇒ earlier.
 
 ### Scoring Legend

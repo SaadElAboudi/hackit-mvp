@@ -1,5 +1,10 @@
 # Hackit MVP — Fonctionnalités
 
+> Document de contexte (catalogue des capacités).
+>
+> La priorisation et le séquencement ne sont plus maintenus ici.
+> Source de vérité unique: `docs/backlog.md`.
+
 Ce document liste les fonctionnalités du produit dans son cadrage actuel : workspace collaboratif basé sur des canaux (`Salons`) et une IA partagée.
 
 Légende : `[x]` implémenté, `[~]` partiel, `[ ]` à planifier.
