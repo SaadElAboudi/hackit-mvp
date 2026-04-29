@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 process.env.NODE_ENV = 'test';
 
 const {
+  buildRoomTrustCard,
   buildTranscriptCitations,
   inferMissionAgentType,
   parseRoomCommand,
@@ -59,4 +60,39 @@ await test('resolveMissionAgentProfile honors explicit agent type over inference
 
   assert.equal(profile.type, 'writer');
   assert.equal(profile.label, 'Writer');
+});
+
+await test('buildRoomTrustCard returns explainability payload with expected sections', async () => {
+  const trust = buildRoomTrustCard({
+    mode: 'mission',
+    prompt: 'Lancer une nouvelle offre B2B',
+    room: { name: 'Growth Lab', purpose: 'Go to market Q3' },
+    context: {
+      messages: [{}, {}, {}, {}, {}, {}],
+      memories: [{}],
+      artifacts: [{}],
+    },
+  });
+
+  assert.equal(typeof trust.whyThisPlan, 'string');
+  assert.ok(trust.whyThisPlan.length > 0);
+  assert.ok(Array.isArray(trust.assumptions) && trust.assumptions.length > 0);
+  assert.ok(Array.isArray(trust.limits) && trust.limits.length > 0);
+  assert.equal(trust.confidence, 'eleve');
+});
+
+await test('buildRoomTrustCard lowers confidence when context is sparse', async () => {
+  const trust = buildRoomTrustCard({
+    mode: 'ai',
+    prompt: 'Aider a prioriser',
+    room: { name: 'Ops' },
+    context: {
+      messages: [{}, {}],
+      memories: [],
+      artifacts: [],
+    },
+  });
+
+  assert.equal(trust.confidence, 'faible');
+  assert.match(trust.whyThisPlan, /Ops|prioriser/i);
 });

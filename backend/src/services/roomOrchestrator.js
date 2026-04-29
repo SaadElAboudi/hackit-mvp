@@ -335,7 +335,7 @@ function isCommandLike(text = '') {
   return /^\//.test(value) || /@ia\b/i.test(value);
 }
 
-function buildRoomTrustCard({
+export function buildRoomTrustCard({
   mode = 'ai',
   prompt = '',
   room,
