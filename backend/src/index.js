@@ -2118,11 +2118,13 @@ if (isDirectRun) {
 // to prevent localhost connection attempts that crash the process after
 // the serverSelectionTimeout expires (unhandled buffered-command rejections).
 const mongoUri = process.env.MONGODB_URI || '';
+const allowLocalMongo = String(process.env.ALLOW_LOCAL_MONGODB || '').toLowerCase() === 'true';
+const isLocalMongoUri =
+  mongoUri.includes('localhost') || mongoUri.includes('127.0.0.1');
 const shouldConnectMongo =
   process.env.NODE_ENV !== 'test' &&
   mongoUri.length > 0 &&
-  !mongoUri.includes('localhost') &&
-  !mongoUri.includes('127.0.0.1');
+  (!isLocalMongoUri || allowLocalMongo);
 
 if (shouldConnectMongo) {
   mongoose.connect(mongoUri, { bufferCommands: false })
@@ -2133,7 +2135,11 @@ if (shouldConnectMongo) {
       console.error('MongoDB connection error:', err?.message || err);
     });
 } else if (process.env.NODE_ENV !== 'test') {
-  console.warn('MongoDB: no MONGODB_URI configured — lessons persistence disabled.');
+  if (mongoUri.length > 0 && isLocalMongoUri && !allowLocalMongo) {
+    console.warn('MongoDB: local MONGODB_URI blocked (set ALLOW_LOCAL_MONGODB=true to opt in).');
+  } else {
+    console.warn('MongoDB: no MONGODB_URI configured — lessons persistence disabled.');
+  }
 }
 
 // Mount rooms router.

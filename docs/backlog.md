@@ -190,6 +190,8 @@ Sprint goal: close Phase A operational sign-off and start Phase B product loop.
 - Acceptance criteria:
 	- Dashboard/query returns daily feedback volume and split
 	- KPI snapshot shared at sprint close
+- Evidence:
+	- Local baseline snapshot (2026-04-29): `docs/feedback_kpi_baseline_2026-04-29.md`
 
 ### Sprint Exit Criteria
 
@@ -224,3 +226,4 @@ Each item is considered done only when all are true:
 - Staging observability validation checklist: `docs/observability_staging_checklist.md`
 - Validation report (2026-04-29): `docs/observability_validation_report_2026-04-29.md`
 - Operator playbook: `docs/operator_runtime_playbook.md`
+- Feedback KPI baseline (local): `docs/feedback_kpi_baseline_2026-04-29.md`

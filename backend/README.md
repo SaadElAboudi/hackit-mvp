@@ -51,6 +51,7 @@ MOCK_MODE=true npm start
 - GEMINI_TIMEOUT_MS: defaults to 4000.
 - MOCK_MODE: when true, always returns a deterministic mock response.
 - ALLOW_FALLBACK: when true (default), degrades to mock if all providers fail.
+- ALLOW_LOCAL_MONGODB: optional flag. When `true`, allows a localhost/127.0.0.1 `MONGODB_URI` for local development.
 
 ## Run & dev
 

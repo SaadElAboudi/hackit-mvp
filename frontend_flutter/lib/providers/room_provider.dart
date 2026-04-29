@@ -10,9 +10,25 @@ const _tag = '[RoomProvider]';
 /// State management for the Salons (Rooms) feature.
 class RoomProvider extends ChangeNotifier {
   final RoomService _svc;
+  final Future<void> Function({
+    required String outcome,
+    required String ratingLabel,
+    required bool hasReason,
+    required String surface,
+  }) _logFeedbackSignal;
   final Set<String> _feedbackFailedMessageIds = <String>{};
 
-  RoomProvider({RoomService? service}) : _svc = service ?? roomService;
+  RoomProvider({
+    RoomService? service,
+    Future<void> Function({
+      required String outcome,
+      required String ratingLabel,
+      required bool hasReason,
+      required String surface,
+    })? logFeedbackSignal,
+  })  : _svc = service ?? roomService,
+        _logFeedbackSignal =
+            logFeedbackSignal ?? AnalyticsManager().logFeedbackSignal;
 
   // ── Rooms list ────────────────────────────────────────────────────────────────
 
@@ -1237,7 +1253,7 @@ class RoomProvider extends ChangeNotifier {
       );
 
       if (isRetry) {
-        unawaited(AnalyticsManager().logFeedbackSignal(
+        unawaited(_logFeedbackSignal(
           outcome: 'retried',
           ratingLabel: ratingLabel,
           hasReason: hasReason,
@@ -1245,7 +1261,7 @@ class RoomProvider extends ChangeNotifier {
         ));
       }
       _feedbackFailedMessageIds.remove(messageId);
-      unawaited(AnalyticsManager().logFeedbackSignal(
+      unawaited(_logFeedbackSignal(
         outcome: 'submitted',
         ratingLabel: result['userRatingLabel']?.toString() ?? ratingLabel,
         hasReason: (result['userReason']?.toString() ?? '').trim().isNotEmpty ||
@@ -1268,7 +1284,7 @@ class RoomProvider extends ChangeNotifier {
       }
     } catch (e) {
       _feedbackFailedMessageIds.add(messageId);
-      unawaited(AnalyticsManager().logFeedbackSignal(
+      unawaited(_logFeedbackSignal(
         outcome: 'failed',
         ratingLabel: ratingLabel,
         hasReason: hasReason,
