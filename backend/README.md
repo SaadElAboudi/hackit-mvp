@@ -84,6 +84,18 @@ npm run test:e2e-smoke
 
 `npm run test:e2e-smoke` validates the streaming search flow end-to-end (SSE meta/partial/final/done + timestamp citations) and writes a network log artifact to `backend/artifacts/e2e-smoke/`.
 
+## Feedback KPI baseline
+
+Extract feedback baseline metrics (daily volume + relevance split) from the room aggregate endpoint:
+
+```bash
+API_BASE=http://localhost:3000 \
+ROOM_ID=<roomId> \
+X_USER_ID=<memberUserId> \
+DAYS=7 \
+npm run kpi:feedback
+```
+
 ## Notes
 
 - On Node >= 20 without YT_API_KEY, the service uses `yt-search` as a fallback.

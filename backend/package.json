@@ -9,6 +9,7 @@
     "predev": "node scripts/checkNodeVersion.js",
     "dev": "nodemon src/index.js",
     "test:smoke": "node scripts/ciSmoke.js",
+    "kpi:feedback": "node scripts/feedbackKpiBaseline.js",
     "test:e2e-smoke": "node scripts/e2eSmokeStream.js",
     "test": "node --test --import ./test/_setup.mjs",
     "test:coverage": "c8 --reporter=text --reporter=lcov node --test --import ./test/_setup.mjs",
