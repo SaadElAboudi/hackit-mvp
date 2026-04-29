@@ -167,4 +167,45 @@ void main() {
 
     expect(find.text('Contenu version 1'), findsOneWidget);
   });
+
+  testWidgets('validated artifact shows archive action only', (tester) async {
+    final artifact = _artifact(status: 'validated');
+    final provider = _FakeReviewProvider({
+      artifact.id: [
+        _version(
+          id: 'v1',
+          number: 1,
+          content: 'Contenu valide',
+          summary: 'Finale',
+          status: 'validated',
+        ),
+      ],
+    })..artifacts = [artifact];
+
+    await tester.pumpWidget(
+      _wrap(ArtifactReviewScreen(artifact: artifact), provider),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Archiver'), findsOneWidget);
+    expect(find.text('Approuver'), findsNothing);
+    expect(find.text('Refuser'), findsNothing);
+    expect(find.text('Soumettre en revue'), findsNothing);
+  });
+
+  testWidgets('shows empty-version fallback when no version exists',
+      (tester) async {
+    final artifact = _artifact(status: 'draft');
+    final provider = _FakeReviewProvider({
+      artifact.id: const <ArtifactVersion>[],
+    })..artifacts = [artifact];
+
+    await tester.pumpWidget(
+      _wrap(ArtifactReviewScreen(artifact: artifact), provider),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Aucune version'), findsOneWidget);
+    expect(find.text('Soumettre en revue'), findsOneWidget);
+  });
 }
