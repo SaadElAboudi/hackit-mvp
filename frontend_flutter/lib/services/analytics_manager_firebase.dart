@@ -156,4 +156,24 @@ class AnalyticsManager {
       },
     );
   }
+
+  Future<void> logFeedbackSignal({
+    required String outcome,
+    required String ratingLabel,
+    required bool hasReason,
+    required String surface,
+  }) async {
+    await _ensureInitialized();
+    if (!_enabled || _analytics == null) return;
+    await _analytics!.logEvent(
+      name: 'feedback_signal',
+      parameters: {
+        'outcome': outcome,
+        'rating_label': ratingLabel,
+        'has_reason': hasReason,
+        'surface': surface,
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    );
+  }
 }

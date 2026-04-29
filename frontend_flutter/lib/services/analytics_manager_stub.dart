@@ -48,4 +48,11 @@ class AnalyticsManager {
     required String feature,
     Map<String, dynamic>? parameters,
   }) async {}
+
+  Future<void> logFeedbackSignal({
+    required String outcome,
+    required String ratingLabel,
+    required bool hasReason,
+    required String surface,
+  }) async {}
 }

@@ -10,6 +10,7 @@ const _tag = '[RoomProvider]';
 /// State management for the Salons (Rooms) feature.
 class RoomProvider extends ChangeNotifier {
   final RoomService _svc;
+  final Set<String> _feedbackFailedMessageIds = <String>{};
 
   RoomProvider({RoomService? service}) : _svc = service ?? roomService;
 
@@ -1202,6 +1203,10 @@ class RoomProvider extends ChangeNotifier {
   }) async {
     final room = currentRoom;
     if (room == null) return;
+    final ratingLabel =
+        rating == 1 ? 'pertinent' : (rating == 0 ? 'moyen' : 'hors_sujet');
+    final hasReason = (reason ?? '').trim().isNotEmpty;
+    final isRetry = _feedbackFailedMessageIds.contains(messageId);
 
     // Optimistic update
     final idx = messages.indexWhere((m) => m.id == messageId);
@@ -1230,6 +1235,24 @@ class RoomProvider extends ChangeNotifier {
         reason: reason,
         metadata: metadata,
       );
+
+      if (isRetry) {
+        unawaited(AnalyticsManager().logFeedbackSignal(
+          outcome: 'retried',
+          ratingLabel: ratingLabel,
+          hasReason: hasReason,
+          surface: 'salon',
+        ));
+      }
+      _feedbackFailedMessageIds.remove(messageId);
+      unawaited(AnalyticsManager().logFeedbackSignal(
+        outcome: 'submitted',
+        ratingLabel: result['userRatingLabel']?.toString() ?? ratingLabel,
+        hasReason: (result['userReason']?.toString() ?? '').trim().isNotEmpty ||
+            hasReason,
+        surface: 'salon',
+      ));
+
       // Reconcile with server truth
       if (idx >= 0) {
         messages[idx] = messages[idx].withFeedback(
@@ -1244,6 +1267,13 @@ class RoomProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
+      _feedbackFailedMessageIds.add(messageId);
+      unawaited(AnalyticsManager().logFeedbackSignal(
+        outcome: 'failed',
+        ratingLabel: ratingLabel,
+        hasReason: hasReason,
+        surface: 'salon',
+      ));
       // Revert optimistic on failure
       if (idx >= 0) {
         final msg = messages[idx];
