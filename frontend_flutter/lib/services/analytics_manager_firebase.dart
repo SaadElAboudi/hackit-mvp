@@ -3,13 +3,16 @@ import 'package:firebase_core/firebase_core.dart';
 
 import '../models/base_search_result.dart';
 
+const bool _analyticsOptIn =
+    bool.fromEnvironment('ANALYTICS_OPT_IN', defaultValue: false);
+
 class AnalyticsManager {
   static final AnalyticsManager _instance = AnalyticsManager._internal();
   factory AnalyticsManager() => _instance;
 
   FirebaseAnalytics? _analytics;
   bool _initialized = false;
-  bool _enabled = true;
+  bool _enabled = _analyticsOptIn;
 
   AnalyticsManager._internal();
 

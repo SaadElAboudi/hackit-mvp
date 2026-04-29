@@ -59,6 +59,8 @@ await test('observability endpoints expose snapshot and accept quality/ttv event
   assert.equal(obsRes.data.ok, true);
   assert.ok(obsRes.data.snapshot?.quality);
   assert.ok(obsRes.data.snapshot?.timeToValueMs);
+  assert.ok(obsRes.data.snapshot?.wsFanout);
+  assert.equal(typeof obsRes.data.snapshot.wsFanout.failureRate, 'number');
   assert.ok(Array.isArray(obsRes.data.alerts));
 });
 
@@ -97,4 +99,18 @@ await test('GET /api/feature-flags exposes runtime flags', async (t) => {
   assert.equal(res.status, 200);
   assert.equal(res.data.ok, true);
   assert.equal(typeof res.data.flags.multiLengthSummary, 'boolean');
+});
+
+await test('GET /health/integrations exposes readiness payload', async (t) => {
+  const app = createApp();
+  const { server, port } = await startServer(app);
+  t.after(() => server.close());
+
+  const res = await requestJson({ port, path: '/health/integrations', method: 'GET' });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.ok, true);
+  assert.ok(res.data.providers?.slack);
+  assert.ok(res.data.providers?.notion);
+  assert.equal(typeof res.data.providers.slack.ready, 'boolean');
+  assert.equal(typeof res.data.providers.notion.ready, 'boolean');
 });

@@ -25,6 +25,7 @@
 
 import { WebSocketServer } from 'ws';
 import { handleRoomConnection } from './roomWS.js';
+import { observeWsFanout } from '../utils/observability.js';
 
 /** @type {Map<string, Set<WebSocket>>} threadId → set of connected sockets */
 const rooms = new Map();
@@ -186,7 +187,11 @@ function _broadcast(threadId, payload) {
   if (!room) return;
   const text = JSON.stringify(payload);
   for (const ws of room) {
-    if (ws.readyState === 1 /* OPEN */) ws.send(text);
+    if (ws.readyState === 1 /* OPEN */) {
+      ws.send(text, (err) => {
+        observeWsFanout({ hub: 'threads', outcome: err ? 'failed' : 'success' });
+      });
+    }
   }
 }
 

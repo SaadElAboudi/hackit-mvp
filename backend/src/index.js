@@ -10,6 +10,7 @@ import mongoose from 'mongoose';
 import morgan from 'morgan';
 
 import { getFeatureFlags } from './config/featureFlags.js';
+import Room from './models/Room.js';
 import roomsRouter from './routes/rooms.js';
 import { attachWebSocketServer } from './services/threadRooms.js';
 import { generateWithGemini as generateWithGeminiShared } from './services/gemini.js';
@@ -1386,6 +1387,76 @@ app.get("/health/observability", (_req, res) => {
   const snapshot = buildObservabilitySnapshot();
   const alerts = evaluateAlerts(snapshot);
   res.json({ ok: true, snapshot, alerts });
+});
+
+app.get('/health/integrations', async (_req, res) => {
+  const dbConnected = mongoose.connection.readyState === 1;
+  if (!dbConnected) {
+    return res.json({
+      ok: true,
+      status: 'degraded',
+      dbConnected: false,
+      providers: {
+        slack: { ready: false, reason: 'DB_NOT_CONNECTED' },
+        notion: { ready: false, reason: 'DB_NOT_CONNECTED' },
+      },
+    });
+  }
+
+  try {
+    const [
+      slackEnabledRooms,
+      slackReadyRooms,
+      notionEnabledRooms,
+      notionReadyRooms,
+    ] = await Promise.all([
+      Room.countDocuments({ 'integrations.slack.enabled': true }),
+      Room.countDocuments({
+        'integrations.slack.enabled': true,
+        'integrations.slack.botToken': { $exists: true, $ne: '' },
+        'integrations.slack.channelId': { $exists: true, $ne: '' },
+      }),
+      Room.countDocuments({ 'integrations.notion.enabled': true }),
+      Room.countDocuments({
+        'integrations.notion.enabled': true,
+        'integrations.notion.apiToken': { $exists: true, $ne: '' },
+        'integrations.notion.parentPageId': { $exists: true, $ne: '' },
+      }),
+    ]);
+
+    const slackReady = slackEnabledRooms === 0 ? true : slackReadyRooms === slackEnabledRooms;
+    const notionReady = notionEnabledRooms === 0 ? true : notionReadyRooms === notionEnabledRooms;
+    const status = slackReady && notionReady ? 'ready' : 'degraded';
+
+    return res.json({
+      ok: true,
+      status,
+      dbConnected: true,
+      providers: {
+        slack: {
+          ready: slackReady,
+          enabledRooms: slackEnabledRooms,
+          configuredRooms: slackReadyRooms,
+        },
+        notion: {
+          ready: notionReady,
+          enabledRooms: notionEnabledRooms,
+          configuredRooms: notionReadyRooms,
+        },
+      },
+    });
+  } catch (err) {
+    return res.json({
+      ok: true,
+      status: 'degraded',
+      dbConnected: true,
+      error: String(err?.message || err),
+      providers: {
+        slack: { ready: false, reason: 'READINESS_QUERY_FAILED' },
+        notion: { ready: false, reason: 'READINESS_QUERY_FAILED' },
+      },
+    });
+  }
 });
 
 app.post('/api/search/feedback', async (req, res) => {

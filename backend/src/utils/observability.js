@@ -3,6 +3,15 @@ const ALERT_CONSECUTIVE_WINDOWS = 3;
 
 const state = {
   endpoints: new Map(),
+  wsFanout: {
+    attempts: 0,
+    success: 0,
+    failed: 0,
+    byHub: {
+      rooms: { attempts: 0, success: 0, failed: 0 },
+      threads: { attempts: 0, success: 0, failed: 0 },
+    },
+  },
   external: {
     gemini: { total: 0, timeout: 0, error: 0, success: 0, fallback: 0 },
     youtube: { total: 0, timeout: 0, error: 0, success: 0, fallback: 0 },
@@ -40,6 +49,20 @@ export function observeExternal(provider, outcome) {
   if (outcome === 'timeout') bucket.timeout += 1;
   if (outcome === 'error') bucket.error += 1;
   if (outcome === 'fallback') bucket.fallback += 1;
+}
+
+export function observeWsFanout({ hub = 'rooms', outcome }) {
+  if (outcome !== 'success' && outcome !== 'failed') return;
+  const bucket = state.wsFanout;
+  bucket.attempts += 1;
+  if (outcome === 'success') bucket.success += 1;
+  if (outcome === 'failed') bucket.failed += 1;
+
+  const hubKey = hub === 'threads' ? 'threads' : 'rooms';
+  const hubBucket = bucket.byHub[hubKey];
+  hubBucket.attempts += 1;
+  if (outcome === 'success') hubBucket.success += 1;
+  if (outcome === 'failed') hubBucket.failed += 1;
 }
 
 export function observeQualityEvent({ requestId, clicked = false, completed = false, rating = null }) {
@@ -83,6 +106,28 @@ export function buildObservabilitySnapshot() {
 
   return {
     endpoints,
+    wsFanout: {
+      attempts: state.wsFanout.attempts,
+      success: state.wsFanout.success,
+      failed: state.wsFanout.failed,
+      failureRate: state.wsFanout.attempts
+        ? Number((state.wsFanout.failed / state.wsFanout.attempts).toFixed(4))
+        : 0,
+      byHub: {
+        rooms: {
+          ...state.wsFanout.byHub.rooms,
+          failureRate: state.wsFanout.byHub.rooms.attempts
+            ? Number((state.wsFanout.byHub.rooms.failed / state.wsFanout.byHub.rooms.attempts).toFixed(4))
+            : 0,
+        },
+        threads: {
+          ...state.wsFanout.byHub.threads,
+          failureRate: state.wsFanout.byHub.threads.attempts
+            ? Number((state.wsFanout.byHub.threads.failed / state.wsFanout.byHub.threads.attempts).toFixed(4))
+            : 0,
+        },
+      },
+    },
     external: state.external,
     quality,
     timeToValueMs: {
@@ -107,6 +152,10 @@ export function evaluateAlerts(snapshot) {
 
   if (snapshot.external.youtube.total >= 10 && (snapshot.external.youtube.error / snapshot.external.youtube.total) > 0.2) {
     alerts.push({ severity: 'medium', code: 'youtube_error_spike', message: 'YouTube error ratio above threshold' });
+  }
+
+  if (snapshot.wsFanout?.attempts >= 30 && snapshot.wsFanout.failureRate > 0.1) {
+    alerts.push({ severity: 'high', code: 'ws_fanout_failures', message: 'WebSocket fanout failure ratio above threshold' });
   }
 
   state.alertsHistory.push({ at: Date.now(), count: alerts.length });

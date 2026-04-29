@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/room.dart';
 import '../providers/room_provider.dart';
+import '../services/api_service.dart';
 import '../services/project_service.dart' show ProjectService;
 import '../services/room_service.dart';
 import '../utils/web_download.dart';
@@ -39,6 +42,8 @@ class SalonChatScreen extends StatefulWidget {
 class _SalonChatScreenState extends State<SalonChatScreen> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  Timer? _healthTicker;
+  Map<String, dynamic>? _backendHealth;
   bool _isAtBottom = true; // track whether user is near the bottom
   String get _myUserId => ProjectService.currentUserId ?? '';
   String get _displayName {
@@ -58,16 +63,64 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<RoomProvider>();
       await prov.openRoom(widget.room);
+      await _refreshBackendHealth();
+      _healthTicker = Timer.periodic(
+        const Duration(seconds: 45),
+        (_) => _refreshBackendHealth(),
+      );
       _scrollToBottom();
     });
   }
 
   @override
   void dispose() {
+    _healthTicker?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     context.read<RoomProvider>().closeRoom();
     super.dispose();
+  }
+
+  Future<void> _refreshBackendHealth() async {
+    try {
+      final health = await ApiService.create().pingHealth(
+        timeout: const Duration(seconds: 3),
+      );
+      if (!mounted) return;
+      setState(() => _backendHealth = health);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _backendHealth = const {'ok': false, 'status': 'down'});
+    }
+  }
+
+  bool get _isBackendDegraded {
+    final h = _backendHealth;
+    if (h == null || h.isEmpty) return false;
+    final ok = h['ok'] == true || h['status'] == 200 || h['ok'] == null;
+    if (!ok) return true;
+    final mock = h['mode'] == 'MOCK' || h['mock'] == true;
+    final fallback = h['fallback'] == true;
+    final gemini = h['gemini'];
+    final breaker = gemini is Map && gemini['breakerActive'] == true;
+    final operational = gemini is Map ? gemini['operational'] != false : true;
+    return mock || fallback || breaker || !operational;
+  }
+
+  String get _backendDegradedMessage {
+    final h = _backendHealth;
+    if (h == null || h.isEmpty) return 'Mode degrade detecte.';
+    if (h['status'] == 'down' || h['ok'] == false) {
+      return 'Backend temporairement indisponible. Certaines actions peuvent ralentir.';
+    }
+    final gemini = h['gemini'];
+    if (gemini is Map && gemini['breakerActive'] == true) {
+      return 'Mode degrade actif: Gemini en protection (circuit breaker).';
+    }
+    if (h['mode'] == 'MOCK' || h['mock'] == true) {
+      return 'Mode degrade actif: backend en mode mock/fallback.';
+    }
+    return 'Mode degrade detecte. Fonctionnement partiel, sans blocage.';
   }
 
   void _scrollToBottom({bool animated = false}) {
@@ -1252,6 +1305,37 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
                 Text(
                   'Reconnexion en cours…',
                   style: TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        if (_isBackendDegraded)
+          Container(
+            color: Colors.amber.shade700,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _backendDegradedMessage,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                TextButton(
+                  onPressed: _refreshBackendHealth,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Actualiser'),
                 ),
               ],
             ),

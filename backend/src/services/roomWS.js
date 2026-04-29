@@ -32,6 +32,8 @@
  *     { type: 'error',     reason }
  */
 
+import { observeWsFanout } from '../utils/observability.js';
+
 /** @type {Map<string, Set<WebSocket>>} roomId → active sockets */
 const rooms = new Map();
 
@@ -146,7 +148,9 @@ function _broadcast(roomId, payload) {
 
   rooms.get(roomId)?.forEach((ws) => {
     if (ws.readyState === 1 /* OPEN */) {
-      ws.send(encoded);
+      ws.send(encoded, (err) => {
+        observeWsFanout({ hub: 'rooms', outcome: err ? 'failed' : 'success' });
+      });
     }
   });
 }

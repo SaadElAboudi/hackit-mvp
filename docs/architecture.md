@@ -34,6 +34,7 @@ Node backend (orchestrator + routes + services)
 - Main hub: `backend/src/services/roomWS.js`.
 - Broadcasts normalized events for messages, chunks, mission status, artifacts, and integration results.
 - Frontend applies these events in `frontend_flutter/lib/providers/room_provider.dart`.
+- WS fanout delivery is instrumented in observability (`wsFanout` success/failure rates).
 
 ### Integrations Layer
 - Slack service: `backend/src/services/slack.js`.
@@ -42,6 +43,19 @@ Node backend (orchestrator + routes + services)
 - Trigger path:
       - Direct REST endpoints for connect/disconnect/status.
       - Command path via `/share slack|notion` in orchestrator.
+- Operational readiness endpoint:
+      - `GET /health/integrations` returns provider readiness and configured-room counts.
+
+### Observability and Operations
+- HTTP route latency and 5xx rates are tracked for key endpoints.
+- External dependency outcomes are tracked for Gemini and YouTube (success/error/timeout/fallback).
+- WebSocket fanout metrics (`attempts`, `failed`, `failureRate`) are exposed per hub (`rooms`, `threads`).
+- Health endpoints:
+      - `GET /health`
+      - `GET /health/extended`
+      - `GET /health/observability`
+      - `GET /health/integrations`
+- Alert evaluation is computed server-side on snapshot windows (`search_5xx_spike`, provider spikes, persistent alerts, ws fanout failures).
 
 ### Data Layer (MongoDB)
 - `Room`: metadata, visibility, purpose, integration configs.
@@ -61,6 +75,7 @@ Node backend (orchestrator + routes + services)
       - Streaming AI responses.
       - Artifact/research/brief/synthesis cards in channel timeline.
       - Mission creation with agent profile selection.
+      - Non-blocking degraded-mode banner in channel chat when backend health indicates fallback/mock/breaker states.
 
 ## Deployment Topology
 
