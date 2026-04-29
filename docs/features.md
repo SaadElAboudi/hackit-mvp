@@ -25,7 +25,7 @@ Légende : `[x]` implémenté, `[~]` partiel, `[ ]` à planifier.
 - [x] Artefacts versionnés et affichage dans le flux.
 - [x] Missions avec suivi de statut.
 - [x] Mémoire room-scoped exploitable par l'orchestrateur.
-- [~] Workflow de revue d'artefact (commentaires, compare diff) à enrichir.
+- [~] Workflow de revue d'artefact présent (commentaires, statuts, compare), encore à polir côté UX/tests.
 
 ## 4) Proactivité contrôlée
 
@@ -44,21 +44,21 @@ Légende : `[x]` implémenté, `[~]` partiel, `[ ]` à planifier.
 - [x] Écran principal de chat collaboratif (`salon_chat_screen.dart`).
 - [x] Cartes de synthèse/brief/recherche/artefact dans le timeline.
 - [x] Sélection de profil agent lors du lancement de mission.
-- [~] Centre d'état intégrations et historique de partages.
+- [x] Centre d'état intégrations et historique de partages.
 
 ## 7) Qualité et robustesse
 
 - [x] Tests backend orientées orchestrateur, WS et intégrations.
-- [~] Uniformisation enveloppe d'erreur + `requestId` sur tous les flux.
-- [~] Validation stricte des payloads écriture sur toutes les routes room.
-- [ ] Métriques opérationnelles (latence commande, fallback IA, erreurs WS).
+- [~] Enveloppe d'erreur + `requestId` largement uniformisés sur les flux room, avec quelques flux legacy hors room encore hétérogènes.
+- [x] Validation stricte des payloads écriture sur les routes room.
+- [x] Métriques opérationnelles backend, endpoints santé, SLOs et alertes de base.
 
 ## 8) Priorités recommandées (prochaines itérations)
 
-1. Gouvernance API : validation schema, enveloppe erreur standard, requestId.
-2. Maturité artefacts : commentaires, diff de versions, transitions de statut.
-3. Intégrations : idempotence/retry des exports + historique de partage.
-4. Observabilité : métriques backend et alerting de dégradation.
+1. Finaliser la maturité artefacts côté Flutter : review UX, compare, widget tests.
+2. Valider l'observabilité en staging : dashboards, alert routing, playbook opérateur.
+3. Étendre les connecteurs d'export via l'abstraction existante (Drive/Jira/Asana si prioritaire).
+4. Continuer l'uniformisation des flux legacy hors rooms sur le même contrat d'erreur.
 
 ## Référence
 

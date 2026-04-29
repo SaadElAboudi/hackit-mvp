@@ -9,6 +9,20 @@ Primary source of truth for current direction:
 
 The sections below include historical backlog items from earlier product framing. Keep them as reference, but prioritize new work according to the documents above.
 
+## Current Delivery Status (2026-04-29)
+
+Current repository state, ahead of the historical backlog below:
+- Phase 5 is complete: validation, requestId propagation, recoverable retries, and room-governance hardening are shipped.
+- Phase 6 is mostly complete: artifact comments, version metadata, and status transitions exist; remaining work is mainly Flutter UX polish and widget coverage.
+- Phase 7 is complete: connector abstraction, retries/idempotency, share history, and integration status center are shipped.
+- Phase 8 is code-complete: observability metrics, health endpoints, SLO alerts, degraded banner, telemetry, and room load smoke are implemented; staging dashboard/alert validation remains.
+
+Near-term remaining work:
+1. Flutter widget tests for artifact review, compare UI, and degraded banner flows.
+2. Staging validation for observability dashboards and alert routing.
+3. Operator/runtime docs updates after staging validation.
+4. Additional export connectors only if product priority moves beyond Slack and Notion.
+
 # Ajouts UX/UI & Fonctionnalités 2025
 - [x] Refonte visuelle premium (headers, cards, navigation)
 - [x] Favoris & historique local-first (SharedPreferences, badge, suppression)

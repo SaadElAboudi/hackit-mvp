@@ -1,6 +1,6 @@
 # Hackit Implementation Roadmap (2026)
 
-Last updated: 2026-04-17
+Last updated: 2026-04-29
 
 This document turns product direction into concrete engineering deliverables for the current repository.
 
@@ -21,104 +21,106 @@ Already implemented in code:
 - Integrations: Slack and Notion connect/disconnect/share/export.
 - Mission specialist profiles and mission metadata in backend and Flutter.
 
-## Next Delivery Phases
+## Delivery Status
 
-## Phase 5: Reliability and Governance (2 weeks)
-
-### Backend
-- Add strict request schema validation on all room write routes.
-- Standardize error format (`code`, `message`, `details`, `requestId`).
-- Add correlation `requestId` propagation from API to logs and WS events.
-- Add rate limiting for command-heavy endpoints.
-
-### Frontend
-- Display recoverable error states with contextual retries for channel actions.
-- Surface `requestId` in debug panel for support diagnostics.
-
-### Verification
-- Add tests for validation failures and error envelope consistency.
-- Add regression tests for WS behavior under invalid payloads.
-
-## Phase 6: Artifact Workflow Maturity (2-3 weeks)
+## Phase 5: Reliability and Governance (2 weeks) ✅ complete
 
 ### Backend
-- Add artifact comments endpoint with role-aware permissions.
-- Add artifact version diff metadata (author, change summary).
-- Support artifact status transitions (`draft`, `review`, `validated`).
+- Strict request schema validation added on room write routes.
+- Standardized room error format with `code`, `message`, `details`, `requestId`.
+- Correlation `requestId` propagated from API to logs and WS events.
+- Rate limiting added for command-heavy endpoints.
 
 ### Frontend
-- Add artifact review panel with comments timeline.
-- Add version compare UI (summary-first, full diff on demand).
-- Add validation workflow actions for owners/moderators.
+- Recoverable error states and contextual retries added for channel actions.
+- `requestId` surfaced in the support/debug panel for diagnostics.
 
 ### Verification
-- Add integration tests for artifact review lifecycle.
-- Add widget tests for version and status rendering.
+- Validation failure and error envelope consistency tests added.
+- Regression coverage added for invalid room payload behavior.
 
-## Phase 7: Enterprise Integrations Expansion (2 weeks)
+## Phase 6: Artifact Workflow Maturity (2-3 weeks) [~] mostly complete
 
 ### Backend
-- Add connector abstraction for export targets (`slack`, `notion`, future `drive`, `jira`).
-- Implement retries and idempotency key for share/export jobs.
-- Persist share history per room and per artifact.
+- Artifact comments endpoints with role-aware permissions are implemented.
+- Artifact version metadata includes author and change summary.
+- Artifact status transitions (`draft`, `review`, `validated`, `archived`) are implemented.
 
 ### Frontend
-- Add integration status center (health, last sync, last failure reason).
-- Add share history cards in channel context panel.
+- Artifact review UX exists in Flutter and is usable in channel flows.
+- Version compare / review affordances exist but still need UX tightening.
+- Validation workflow actions are available for privileged roles.
 
 ### Verification
-- Add tests for connector fallback behavior and retry policy.
-- Add API tests for share history listing and filtering.
+- Backend integration coverage exists for core artifact lifecycle.
+- Remaining gap: widget coverage for review, compare, and status rendering in Flutter.
 
-## Phase 8: Observability and Operations (1-2 weeks)
+## Phase 7: Enterprise Integrations Expansion (2 weeks) ✅ complete
 
 ### Backend
-- Add metrics: command latency, AI fallback rate, WS fanout failures.
-- Add health endpoints for integration readiness checks.
-- Define SLOs and alert thresholds for key routes.
+- Connector abstraction is in place for export targets (`slack`, `notion`, future providers).
+- Retries and idempotency keys are implemented for share/export jobs.
+- Share history is persisted per room and per artifact.
 
 ### Frontend
-- Add lightweight telemetry events for feature usage (opt-in safe mode).
-- Add non-blocking status banner for degraded backend modes.
+- Integration status center exposes readiness, last sync, and last failure reason.
+- Share history cards are available in the channel context panel.
 
 ### Verification
-- Run load smoke on room messaging and command routes.
-- Validate dashboard and alert wiring in staging.
+- Connector retry / fallback behavior is covered.
+- Share history listing and filtering are covered by API tests.
+
+## Phase 8: Observability and Operations (1-2 weeks) [~] code complete, rollout validation pending
+
+### Backend
+- Metrics added for command latency, AI fallback rate, and WS fanout failures.
+- Health endpoints include integration readiness and observability snapshots.
+- SLOs and alert thresholds are defined for key routes.
+
+### Frontend
+- Lightweight opt-in telemetry events are implemented for key room actions.
+- Non-blocking status banner exists for degraded backend modes.
+
+### Verification
+- Room messaging / command load smoke script exists and passes local verification.
+- Remaining gap: validate dashboard and alert wiring in staging.
+
+## Remaining Delivery Focus
+
+- Finish Flutter widget coverage for artifact review, compare flows, and status rendering.
+- Tighten artifact review UX where compare/review affordances are still rough.
+- Validate observability dashboards and alert routing in staging.
+- Update operator playbook / runtime docs when alert wiring is confirmed.
+- Add additional export connectors (`drive`, `jira`, `asana`) when product priority justifies them.
 
 ## Detailed Backlog by Area
 
 ## Backend Services
 - `backend/src/routes/rooms.js`
-  - Validation middleware per route.
-  - Error envelope and requestId propagation.
+  - Maintain validation and requestId consistency as new routes are added.
 - `backend/src/services/roomOrchestrator.js`
   - Harden command parser edge cases.
-  - Add idempotency hooks for share operations.
+  - Keep share/export orchestration aligned with connector abstraction.
 - `backend/src/services/roomWS.js`
-  - Include requestId in relevant emitted events.
   - Add event-level guards for malformed payloads.
-- `backend/src/services/slack.js`
-  - Retry and idempotency controls.
-- `backend/src/services/notion.js`
-  - Export retries and normalized provider errors.
+- `backend/src/services/exportConnectors.js`
+  - Add future providers (`drive`, `jira`, `asana`) behind the same retry/idempotency contract.
 
 ## Frontend Flutter
 - `frontend_flutter/lib/screens/salon_chat_screen.dart`
-  - Error/retry affordances and integration status UI.
-  - Artifact review and compare affordances.
+  - Continue polishing artifact review and compare affordances.
 - `frontend_flutter/lib/providers/room_provider.dart`
-  - RequestId-aware error state pipeline.
-  - Share history state and synchronization.
+  - Preserve requestId-aware error handling as room flows expand.
 - `frontend_flutter/lib/services/room_service.dart`
-  - Typed error mapping and idempotent retry handling.
+  - Extend typed error mapping for any new connectors or review flows.
 - `frontend_flutter/lib/models/room.dart`
-  - Additional models for comments, share history, and status transitions.
+  - Extend models only when new review/export features are added.
 
 ## Test and CI
 - Backend:
-  - Add suites for validation, idempotency, and observability payloads.
+  - Maintain coverage for validation, idempotency, and observability payloads as routes evolve.
 - Flutter:
-  - Add widget tests for new cards, banners, and review flows.
+  - Add widget tests for review flows, compare UI, and degraded banner behavior.
 - CI:
   - Fail builds on schema drift and lint violations for touched files.
 
