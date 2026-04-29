@@ -94,6 +94,115 @@ Goal: improve depth, relevance, and discovery quality.
 | BL-019 | Internationalization (en/fr) | [ ] | P2 | C/D | Medium | M | User expansion |
 | BL-020 | Security audit + privacy policy update | [ ] | P1 | A/B | High | M | Compliance and risk reduction |
 
+## Sprint 1 Execution Plan (Ready to Build)
+
+Sprint goal: close Phase A operational sign-off and start Phase B product loop.
+
+### Scope Locked
+
+- `BL-002` Validate observability dashboards + alert routing in staging
+- `BL-003` Update operator runtime playbook
+- `BL-005` Explicit feedback loop on AI relevance (v1)
+
+### Sprint Deliverables
+
+1. Observability validation report with pass/fail evidence for staging
+2. Updated operator playbook with runbooks for alert handling
+3. Feedback v1 in product: rating + reason capture + event logging
+
+### Ticket Breakdown
+
+#### S1-01 - Staging observability validation run
+
+- Backlog link: `BL-002`
+- Type: Ops/QA
+- Estimate: `S` (1-2 days)
+- Dependencies: staging environment + dashboard access
+- Tasks:
+	- Execute `docs/observability_staging_checklist.md` end-to-end
+	- Validate `/health`, `/health/integrations`, `/health/observability`
+	- Validate alert visibility and routing for key codes (`slo_latency_breach`, `ws_fanout_failures`, `persistent_alerts`)
+	- Record timestamped evidence (screenshots/logs/links)
+- Acceptance criteria:
+	- Checklist completed with explicit pass/fail per step
+	- No unresolved critical alert routing gaps
+	- Validation report linked in release notes
+
+#### S1-02 - Operator playbook finalization
+
+- Backlog link: `BL-003`
+- Type: Docs/Ops
+- Estimate: `S` (0.5-1 day)
+- Dependencies: `S1-01`
+- Tasks:
+	- Document response actions per alert code and severity
+	- Add escalation path + owner matrix
+	- Add rollback/degraded-mode decision tree
+	- Add quick commands and dashboard links for first-response
+- Acceptance criteria:
+	- On-call can execute first response in under 10 minutes
+	- Playbook reviewed by engineering lead
+	- Playbook location linked from this backlog
+
+#### S1-03 - Feedback loop backend contract (v1)
+
+- Backlog link: `BL-005`
+- Type: Backend/API
+- Estimate: `M` (2-3 days)
+- Dependencies: none
+- Tasks:
+	- Define API payload for relevance feedback (`rating`, `reason`, metadata)
+	- Persist events with room/message context
+	- Add validation and error envelope consistency
+	- Expose simple aggregate endpoint for product analytics seed
+- Acceptance criteria:
+	- Invalid payloads rejected with standard error contract
+	- Events persisted and queryable by date and rating
+	- Tests cover happy path + validation failures
+
+#### S1-04 - Feedback loop UI capture (v1)
+
+- Backlog link: `BL-005`
+- Type: Flutter
+- Estimate: `M` (2-3 days)
+- Dependencies: `S1-03`
+- Tasks:
+	- Add UI actions for `pertinent`, `moyen`, `hors-sujet`
+	- Capture optional reason for low relevance
+	- Submit feedback non-blocking (no UX stall on failure)
+	- Add user confirmation and retry affordance
+- Acceptance criteria:
+	- User can submit rating in <=2 taps (without reason)
+	- Reason prompt appears for `moyen` and `hors-sujet`
+	- Submission failures surface recoverable retry
+	- Widget tests cover display and submission states
+
+#### S1-05 - Feedback instrumentation + KPI baseline
+
+- Backlog link: `BL-005`, `BL-007`
+- Type: Data/Product analytics
+- Estimate: `S` (1 day)
+- Dependencies: `S1-03`, `S1-04`
+- Tasks:
+	- Log events for feedback submitted/retried/failed
+	- Create baseline metrics query (feedback rate, rating distribution)
+	- Publish initial KPI snapshot in sprint report
+- Acceptance criteria:
+	- Dashboard/query returns daily feedback volume and split
+	- KPI snapshot shared at sprint close
+
+### Sprint Exit Criteria
+
+1. `BL-002` and `BL-003` are marked done with linked evidence.
+2. `BL-005` v1 is in production behind a safe rollout switch if needed.
+3. At least one week of feedback baseline data is collectible post-release.
+
+### Out of Scope (Do Not Expand)
+
+- Export connectors expansion (`BL-011`)
+- Explainability blocks (`BL-006`)
+- Search intelligence track (`BL-012` to `BL-017`)
+
 ## Legacy / Archive Items
 
 Historical items from earlier framing remain relevant only if mapped to a `BL-*` entry above.
