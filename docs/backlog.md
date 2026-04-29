@@ -77,7 +77,7 @@ Goal: improve depth, relevance, and discovery quality.
 | BL-002 | Validate observability dashboards and alert routing in staging | [~] | P0 | A | High | S | Local pre-staging report done; staging sign-off pending |
 | BL-003 | Update operator runtime playbook | [~] | P0 | A | High | S | Playbook drafted; awaiting staging validation review |
 | BL-004 | Artifact review UX polish | [ ] | P1 | A | Medium | M | Reduce friction in compare/review flows |
-| BL-005 | Explicit feedback loop on AI relevance | [~] | P0 | B | High | M | Backend/UI/instrumentation v1 shipped; rollout confirmation pending |
+| BL-005 | Explicit feedback loop on AI relevance | [x] | P0 | B | High | M | Backend/UI/instrumentation v1 shipped with tests + KPI baseline evidence |
 | BL-006 | Trust & explainability sections in outputs | [~] | P0 | B | High | M | V1 trust blocks added on salon AI/research/decision messages |
 | BL-007 | Product KPI instrumentation dashboard | [ ] | P1 | B | High | M | Enables KPI-driven prioritization |
 | BL-008 | Execution export (Notion/Trello/Asana/CSV) | [ ] | P0 | C | High | M/L | Turns insight into action |
@@ -161,6 +161,7 @@ Sprint goal: close Phase A operational sign-off and start Phase B product loop.
 	- Tests cover happy path + validation failures
 - Delivery status:
 	- Implemented with validation + aggregate endpoint + tests (`backend/test/room.feedback.v1.test.js`)
+	- Status: done
 
 #### S1-04 - Feedback loop UI capture (v1)
 
@@ -180,6 +181,7 @@ Sprint goal: close Phase A operational sign-off and start Phase B product loop.
 	- Widget tests cover display and submission states
 - Delivery status:
 	- Implemented in salon chat flow with widget coverage (`frontend_flutter/test/screens/salon_chat_feedback_v1_test.dart`)
+	- Status: done
 
 #### S1-05 - Feedback instrumentation + KPI baseline
 
@@ -197,6 +199,7 @@ Sprint goal: close Phase A operational sign-off and start Phase B product loop.
 - Evidence:
 	- Local baseline snapshot (2026-04-29): `docs/feedback_kpi_baseline_2026-04-29.md`
 	- Provider analytics instrumentation tests (`frontend_flutter/test/providers/room_provider_feedback_analytics_test.dart`)
+	- Status: done (local baseline captured)
 
 ### Sprint Exit Criteria
 
