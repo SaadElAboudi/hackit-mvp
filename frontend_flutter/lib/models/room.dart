@@ -432,6 +432,96 @@ class WorkspaceTask {
       );
 }
 
+class DecisionPackPayload {
+  final DateTime generatedAt;
+  final String roomId;
+  final String roomName;
+  final int decisionCount;
+  final int taskCount;
+  final String mode;
+  final bool includeOpenTasks;
+  final String markdown;
+
+  const DecisionPackPayload({
+    required this.generatedAt,
+    required this.roomId,
+    required this.roomName,
+    required this.decisionCount,
+    required this.taskCount,
+    required this.mode,
+    required this.includeOpenTasks,
+    required this.markdown,
+  });
+
+  factory DecisionPackPayload.fromJson(Map<String, dynamic> j) =>
+      DecisionPackPayload(
+        generatedAt: DateTime.tryParse(j['generatedAt']?.toString() ?? '') ??
+            DateTime.now(),
+        roomId: j['roomId']?.toString() ?? '',
+        roomName: j['roomName']?.toString() ?? '',
+        decisionCount: (j['decisionCount'] as num?)?.toInt() ?? 0,
+        taskCount: (j['taskCount'] as num?)?.toInt() ?? 0,
+        mode: j['mode']?.toString() ?? 'checklist',
+        includeOpenTasks: j['includeOpenTasks'] != false,
+        markdown: j['markdown']?.toString() ?? '',
+      );
+}
+
+class DecisionPackResult {
+  final DecisionPackPayload pack;
+  final List<WorkspaceDecision> decisions;
+  final List<WorkspaceTask> tasks;
+
+  const DecisionPackResult({
+    required this.pack,
+    required this.decisions,
+    required this.tasks,
+  });
+
+  factory DecisionPackResult.fromJson(Map<String, dynamic> j) =>
+      DecisionPackResult(
+        pack: DecisionPackPayload.fromJson(
+            (j['pack'] as Map?)?.cast<String, dynamic>() ?? const {}),
+        decisions: (j['decisions'] as List? ?? [])
+            .whereType<Map>()
+            .map((item) =>
+                WorkspaceDecision.fromJson(item.cast<String, dynamic>()))
+            .toList(),
+        tasks: (j['tasks'] as List? ?? [])
+            .whereType<Map>()
+            .map((item) => WorkspaceTask.fromJson(item.cast<String, dynamic>()))
+            .toList(),
+      );
+}
+
+class DecisionPackAggregate {
+  final int sinceDays;
+  final DateTime since;
+  final int viewed;
+  final int shared;
+  final int shareFailed;
+
+  const DecisionPackAggregate({
+    required this.sinceDays,
+    required this.since,
+    required this.viewed,
+    required this.shared,
+    required this.shareFailed,
+  });
+
+  factory DecisionPackAggregate.fromJson(Map<String, dynamic> j) {
+    final aggregate = (j['aggregate'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final events = (aggregate['events'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return DecisionPackAggregate(
+      sinceDays: (aggregate['sinceDays'] as num?)?.toInt() ?? 7,
+      since: DateTime.tryParse(aggregate['since']?.toString() ?? '') ?? DateTime.now(),
+      viewed: (events['viewed'] as num?)?.toInt() ?? 0,
+      shared: (events['shared'] as num?)?.toInt() ?? 0,
+      shareFailed: (events['share_failed'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class ExtractedTaskDraft {
   final String title;
   final String description;
