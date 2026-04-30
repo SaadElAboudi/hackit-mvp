@@ -143,5 +143,6 @@ void main() {
       find.textContaining('Conversion correcte, mais surveiller les échecs'),
       findsOneWidget,
     );
+    expect(find.text('Repartager vers Notion'), findsOneWidget);
   });
 }
