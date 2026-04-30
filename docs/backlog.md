@@ -33,6 +33,16 @@ Scoring guidance used for ordering:
 - `Effort` (1-5): implementation complexity
 - Priority score = `(Impact * Urgency) / Effort`
 
+### KPI Impact Requirement (new)
+
+Every new backlog item must declare:
+
+- Primary KPI impacted (one of: activation rate, useful-answer rate, export rate, D7 retention, API reliability)
+- Expected directional effect (e.g. `+10% export rate`, `-15% retry rate`)
+- Time-to-impact expectation (`<2 weeks`, `2-6 weeks`, `>6 weeks`)
+
+This rule prevents feature sprawl and keeps planning tied to business outcomes.
+
 ## Phase Plan (Roadmap)
 
 ### Phase A - Stabilization and Operational Sign-off (Now)

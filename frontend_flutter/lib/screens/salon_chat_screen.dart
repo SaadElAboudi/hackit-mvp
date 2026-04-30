@@ -1157,6 +1157,71 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
+  Future<void> _openDecisionPack({String mode = 'checklist'}) async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await prov.loadDecisionPack(mode: mode);
+    if (!mounted) return;
+    if (!ok || prov.decisionPack == null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(prov.actionError ?? 'Decision Pack indisponible')),
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Decision Pack (${prov.decisionPack!.pack.mode})'),
+        content: SizedBox(
+          width: 680,
+          child: SingleChildScrollView(
+            child: SelectableText(prov.decisionPack!.pack.markdown),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _shareDecisionPack({
+    required String target,
+    required String label,
+    String mode = 'executive',
+  }) async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await prov.shareDecisionPack(target: target, mode: mode);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Decision Pack partage vers $label'
+              : (prov.actionError ?? 'Partage Decision Pack impossible'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshDecisionPackAggregate() async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await prov.refreshDecisionPackAggregate(sinceDays: 14);
+    if (!mounted || ok) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          prov.actionError ?? 'Impossible de charger les KPI Decision Pack',
+        ),
+      ),
+    );
+  }
+
   Future<void> _showReviseArtifactDialog(RoomArtifact artifact) async {
     final ctrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -1483,6 +1548,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       shareHistory: prov.shareHistory,
       loadingIntegrations: prov.loadingIntegrations,
       loadingShareHistory: prov.loadingShareHistory,
+      decisionPackAggregate: prov.decisionPackAggregate,
+      loadingDecisionPackAggregate: prov.loadingDecisionPackAggregate,
       onlineUserIds: prov.onlineUserIds,
       useNeumorphControls: _useNeumorphControls,
       canManageIntegrations: canManageIntegrations,
@@ -1500,8 +1567,15 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           _shareToIntegration(target: 'slack', label: 'Slack'),
       onShareToNotion: () =>
           _shareToIntegration(target: 'notion', label: 'Notion'),
+      onOpenDecisionPackChecklist: () => _openDecisionPack(mode: 'checklist'),
+      onOpenDecisionPackExecutive: () => _openDecisionPack(mode: 'executive'),
+      onShareDecisionPackToSlack: () =>
+          _shareDecisionPack(target: 'slack', label: 'Slack'),
+      onShareDecisionPackToNotion: () =>
+          _shareDecisionPack(target: 'notion', label: 'Notion'),
       onRefreshIntegrations: prov.refreshIntegrationStatus,
       onRefreshShareHistory: () => prov.refreshShareHistory(),
+      onRefreshDecisionPackAggregate: _refreshDecisionPackAggregate,
       onOpenCanvas: (artifact) => Navigator.push(
         context,
         MaterialPageRoute(
@@ -3597,6 +3671,8 @@ class _ContextPanel extends StatelessWidget {
   final List<RoomShareHistoryItem> shareHistory;
   final bool loadingIntegrations;
   final bool loadingShareHistory;
+  final DecisionPackAggregate? decisionPackAggregate;
+  final bool loadingDecisionPackAggregate;
   final List<String> onlineUserIds;
   final bool useNeumorphControls;
   final bool canManageIntegrations;
@@ -3612,8 +3688,13 @@ class _ContextPanel extends StatelessWidget {
   final Future<void> Function() onDisconnectNotionIntegration;
   final Future<void> Function() onShareToSlack;
   final Future<void> Function() onShareToNotion;
+  final Future<void> Function() onOpenDecisionPackChecklist;
+  final Future<void> Function() onOpenDecisionPackExecutive;
+  final Future<void> Function() onShareDecisionPackToSlack;
+  final Future<void> Function() onShareDecisionPackToNotion;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
+  final Future<void> Function() onRefreshDecisionPackAggregate;
   final void Function(RoomArtifact artifact) onOpenCanvas;
 
   const _ContextPanel({
@@ -3628,6 +3709,8 @@ class _ContextPanel extends StatelessWidget {
     required this.shareHistory,
     required this.loadingIntegrations,
     required this.loadingShareHistory,
+    required this.decisionPackAggregate,
+    required this.loadingDecisionPackAggregate,
     required this.onlineUserIds,
     required this.useNeumorphControls,
     required this.canManageIntegrations,
@@ -3643,8 +3726,13 @@ class _ContextPanel extends StatelessWidget {
     required this.onDisconnectNotionIntegration,
     required this.onShareToSlack,
     required this.onShareToNotion,
+    required this.onOpenDecisionPackChecklist,
+    required this.onOpenDecisionPackExecutive,
+    required this.onShareDecisionPackToSlack,
+    required this.onShareDecisionPackToNotion,
     required this.onRefreshIntegrations,
     required this.onRefreshShareHistory,
+    required this.onRefreshDecisionPackAggregate,
     required this.onOpenCanvas,
   });
 
@@ -3942,6 +4030,19 @@ class _ContextPanel extends StatelessWidget {
           subtitle: decisions.isEmpty
               ? 'Aucune decision structuree pour le moment.'
               : null,
+          trailing: Wrap(
+            spacing: 6,
+            children: [
+              TextButton(
+                onPressed: onOpenDecisionPackChecklist,
+                child: const Text('Pack checklist'),
+              ),
+              TextButton(
+                onPressed: onOpenDecisionPackExecutive,
+                child: const Text('Pack executive'),
+              ),
+            ],
+          ),
         ),
         ...decisions.take(4).map(
               (decision) => ListTile(
@@ -3965,6 +4066,42 @@ class _ContextPanel extends StatelessWidget {
                 ),
               ),
             ),
+        sectionTitle(
+          'KPI Decision Pack',
+          subtitle: 'Usage sur les 14 derniers jours',
+          trailing: TextButton.icon(
+            onPressed: onRefreshDecisionPackAggregate,
+            icon: const Icon(Icons.query_stats_rounded, size: 16),
+            label: const Text('Actualiser'),
+          ),
+        ),
+        if (loadingDecisionPackAggregate)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                Chip(
+                  avatar: const Icon(Icons.visibility_outlined, size: 16),
+                  label: Text('Vues: ${decisionPackAggregate?.viewed ?? 0}'),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.share_outlined, size: 16),
+                  label: Text('Partages: ${decisionPackAggregate?.shared ?? 0}'),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.error_outline, size: 16),
+                  label: Text('Echecs: ${decisionPackAggregate?.shareFailed ?? 0}'),
+                ),
+              ],
+            ),
+          ),
         sectionTitle(
           'Taches',
           subtitle: tasks.isEmpty ? 'Aucune tache suivie actuellement.' : null,
@@ -4115,6 +4252,20 @@ class _ContextPanel extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
+              FilledButton.icon(
+                onPressed: slackIntegration?.connected == true
+                    ? onShareDecisionPackToSlack
+                    : null,
+                icon: const Icon(Icons.fact_check_outlined, size: 16),
+                label: const Text('Decision Pack → Slack'),
+              ),
+              FilledButton.icon(
+                onPressed: notionIntegration?.connected == true
+                    ? onShareDecisionPackToNotion
+                    : null,
+                icon: const Icon(Icons.fact_check_outlined, size: 16),
+                label: const Text('Decision Pack → Notion'),
+              ),
               FilledButton.tonalIcon(
                 onPressed:
                     slackIntegration?.connected == true ? onShareToSlack : null,
