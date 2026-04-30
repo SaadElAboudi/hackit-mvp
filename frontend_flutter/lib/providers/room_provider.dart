@@ -152,6 +152,10 @@ class RoomProvider extends ChangeNotifier {
   List<WorkspaceDecision> decisions = [];
   List<WorkspaceTask> tasks = [];
   List<RoomShareHistoryItem> shareHistory = [];
+  DecisionPackResult? decisionPack;
+  DecisionPackAggregate? decisionPackAggregate;
+  bool loadingDecisionPack = false;
+  bool loadingDecisionPackAggregate = false;
   RoomIntegrationStatus? slackIntegration;
   RoomIntegrationStatus? notionIntegration;
   bool loadingNotionPages = false;
@@ -1162,6 +1166,99 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> loadDecisionPack({
+    String mode = 'checklist',
+    bool includeOpenTasks = true,
+    int limit = 10,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    loadingDecisionPack = true;
+    notifyListeners();
+    try {
+      decisionPack = await _svc.getDecisionPack(
+        room.id,
+        mode: mode,
+        includeOpenTasks: includeOpenTasks,
+        limit: limit,
+      );
+      await _svc.trackDecisionPackEvent(
+        room.id,
+        eventType: 'viewed',
+        mode: mode,
+      );
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    } finally {
+      loadingDecisionPack = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> shareDecisionPack({
+    required String target,
+    String mode = 'executive',
+    String note = '',
+  }) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    actionError = null;
+    notifyListeners();
+    try {
+      await _svc.shareDecisionPack(
+        room.id,
+        target: target,
+        mode: mode,
+        note: note,
+      );
+      await _svc.trackDecisionPackEvent(
+        room.id,
+        eventType: 'shared',
+        mode: mode,
+        target: target,
+      );
+      unawaited(AnalyticsManager().logFeatureUsed(
+        feature: 'decision_pack_shared',
+        parameters: {'target': target, 'mode': mode},
+      ));
+      await refreshShareHistory(limit: 12);
+      return true;
+    } catch (e) {
+      unawaited(_svc.trackDecisionPackEvent(
+        room.id,
+        eventType: 'share_failed',
+        mode: mode,
+        target: target,
+      ));
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> refreshDecisionPackAggregate({int sinceDays = 7}) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    loadingDecisionPackAggregate = true;
+    notifyListeners();
+    try {
+      decisionPackAggregate = await _svc.getDecisionPackAggregate(
+        room.id,
+        sinceDays: sinceDays,
+      );
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    } finally {
+      loadingDecisionPackAggregate = false;
+      notifyListeners();
+    }
+  }
+
   // ── Invite link ────────────────────────────────────────────────────────────────
 
   Future<String?> getInviteLink() async {
@@ -1192,10 +1289,14 @@ class RoomProvider extends ChangeNotifier {
     decisions = [];
     tasks = [];
     shareHistory = [];
+    decisionPack = null;
+    decisionPackAggregate = null;
     slackIntegration = null;
     notionIntegration = null;
     loadingNotionPages = false;
     loadingShareHistory = false;
+    loadingDecisionPack = false;
+    loadingDecisionPackAggregate = false;
     loadingIntegrations = false;
     aiThinking = false;
     wsReconnecting = false;
