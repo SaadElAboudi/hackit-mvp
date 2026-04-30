@@ -9,6 +9,7 @@ const { createApp } = await import('../src/index.js');
 const Room = (await import('../src/models/Room.js')).default;
 const WorkspaceDecision = (await import('../src/models/WorkspaceDecision.js')).default;
 const WorkspaceTask = (await import('../src/models/WorkspaceTask.js')).default;
+const RoomDecisionPackEvent = (await import('../src/models/RoomDecisionPackEvent.js')).default;
 
 const originalReadyStateDescriptor = Object.getOwnPropertyDescriptor(mongoose.connection, 'readyState');
 
@@ -84,4 +85,29 @@ await test('POST decision-pack/share returns 412 when target integration is miss
   const app = createApp(); const server = app.listen(0); t.after(() => server.close()); await new Promise((r) => server.once('listening', r)); const port = server.address().port;
   const res = await requestJson({ port, method: 'POST', path: `/api/rooms/${fakeRoomId}/decision-pack/share?mode=checklist`, headers: { 'x-user-id': fakeUserId }, body: { target: 'notion', note: 'x' } });
   assert.equal(res.status, 412);
+});
+
+await test('POST decision-pack/events stores event', async (t) => {
+  forceMongoReady(); t.after(() => restoreMongoReady());
+  const fakeRoomId = '507f191e810c19729de860af'; const fakeUserId = 'user_pack_6';
+  const restoreFindRoom = withStub(Room, 'findById', async () => ({ _id: fakeRoomId, name: 'Ops', members: [{ userId: fakeUserId, role: 'owner' }] }));
+  const restoreCreateEvent = withStub(RoomDecisionPackEvent, 'create', async (payload) => ({ _id: 'ev1', createdAt: new Date(), ...payload }));
+  t.after(() => { restoreFindRoom(); restoreCreateEvent(); });
+  const app = createApp(); const server = app.listen(0); t.after(() => server.close()); await new Promise((r) => server.once('listening', r)); const port = server.address().port;
+  const res = await requestJson({ port, method: 'POST', path: `/api/rooms/${fakeRoomId}/decision-pack/events`, headers: { 'x-user-id': fakeUserId }, body: { eventType: 'viewed', mode: 'executive' } });
+  assert.equal(res.status, 201);
+});
+
+await test('GET decision-pack/aggregate returns counters', async (t) => {
+  forceMongoReady(); t.after(() => restoreMongoReady());
+  const fakeRoomId = '507f191e810c19729de860b0'; const fakeUserId = 'user_pack_7';
+  const restoreFindRoom = withStub(Room, 'findById', async () => ({ _id: fakeRoomId, name: 'Ops', members: [{ userId: fakeUserId, role: 'owner' }] }));
+  const restoreAggregate = withStub(RoomDecisionPackEvent, 'aggregate', async () => ([{ _id: 'viewed', count: 3 }, { _id: 'shared', count: 1 }]));
+  t.after(() => { restoreFindRoom(); restoreAggregate(); });
+  const app = createApp(); const server = app.listen(0); t.after(() => server.close()); await new Promise((r) => server.once('listening', r)); const port = server.address().port;
+  const res = await requestJson({ port, path: `/api/rooms/${fakeRoomId}/decision-pack/aggregate?sinceDays=14`, headers: { 'x-user-id': fakeUserId } });
+  assert.equal(res.status, 200);
+  const json = JSON.parse(res.data);
+  assert.equal(json.aggregate.events.viewed, 3);
+  assert.equal(json.aggregate.events.shared, 1);
 });

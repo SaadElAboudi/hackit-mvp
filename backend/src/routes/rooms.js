@@ -16,6 +16,7 @@ import RoomMessage from '../models/RoomMessage.js';
 import RoomMission from '../models/RoomMission.js';
 import RoomShareHistory from '../models/RoomShareHistory.js';
 import RoomFeedbackEvent from '../models/RoomFeedbackEvent.js';
+import RoomDecisionPackEvent from '../models/RoomDecisionPackEvent.js';
 import WorkspaceBlock from '../models/WorkspaceBlock.js';
 import WorkspaceComment from '../models/WorkspaceComment.js';
 import WorkspaceDecision from '../models/WorkspaceDecision.js';
@@ -65,6 +66,8 @@ import {
     validateCreateWorkspaceTaskPayload,
     validateConvertDecisionToTasksPayload,
     validateDirectivesPayload,
+    validateDecisionPackAggregateQuery,
+    validateDecisionPackEventPayload,
     validateDiscoverNotionPagesPayload,
     validateEmptyBody,
     validateFeedbackAggregateQuery,
@@ -1929,6 +1932,80 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
             await history.save();
             return res.status(502).json({ error: 'Decision Pack export failed', code: history.errorCode });
         }
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/decision-pack/events', validateBody(validateDecisionPackEventPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const event = await RoomDecisionPackEvent.create({
+            roomId: req.params.id,
+            userId: req.userId,
+            eventType: req.validatedBody.eventType,
+            mode: req.validatedBody.mode,
+            target: req.validatedBody.target || '',
+            metadata: req.validatedBody.metadata || null,
+        });
+
+        return res.status(201).json({
+            event: {
+                id: String(event._id),
+                eventType: event.eventType,
+                mode: event.mode,
+                target: event.target,
+                createdAt: event.createdAt,
+            },
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/decision-pack/aggregate', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { sinceDays } = validateDecisionPackAggregateQuery(req.query || {});
+        const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+        const stats = await RoomDecisionPackEvent.aggregate([
+            { $match: { roomId: room._id, createdAt: { $gte: since } } },
+            {
+                $group: {
+                    _id: '$eventType',
+                    count: { $sum: 1 },
+                },
+            },
+        ]);
+
+        const byType = {
+            viewed: 0,
+            shared: 0,
+            share_failed: 0,
+        };
+        stats.forEach((item) => {
+            if (item?._id && Object.hasOwn(byType, item._id)) {
+                byType[item._id] = Number(item.count || 0);
+            }
+        });
+
+        return res.json({
+            aggregate: {
+                sinceDays,
+                since: since.toISOString(),
+                events: byType,
+            },
+        });
     } catch (err) {
         next(err);
     }
