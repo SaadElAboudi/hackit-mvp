@@ -105,4 +105,15 @@ void main() {
     expect(find.textContaining('Decision Pack'), findsWidgets);
     expect(find.textContaining('Test payload'), findsOneWidget);
   });
+
+  testWidgets('shows Decision Pack share actions in context panel',
+      (tester) async {
+    final provider = _FakeRoomProvider();
+
+    await tester.pumpWidget(_wrap(SalonChatScreen(room: _testRoom()), provider));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Decision Pack → Slack'), findsOneWidget);
+    expect(find.text('Decision Pack → Notion'), findsOneWidget);
+  });
 }

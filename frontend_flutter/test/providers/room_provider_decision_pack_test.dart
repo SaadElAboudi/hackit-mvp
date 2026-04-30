@@ -18,6 +18,7 @@ class _FakeRoomService extends RoomService {
     required String mode,
     required String note,
   })? onShareDecisionPack;
+  int shareCalls = 0;
 
   @override
   Future<DecisionPackResult> getDecisionPack(
@@ -58,6 +59,7 @@ class _FakeRoomService extends RoomService {
     String mode = 'executive',
     String note = '',
   }) async {
+    shareCalls += 1;
     final handler = onShareDecisionPack;
     if (handler != null) {
       return handler(roomId: roomId, target: target, mode: mode, note: note);
@@ -71,7 +73,27 @@ class _FakeRoomService extends RoomService {
     String? status,
     int limit = 20,
   }) async {
-    return const [];
+    return [
+      RoomShareHistoryItem(
+        id: 'h1',
+        roomId: roomId,
+        artifactId: '',
+        target: target ?? 'slack',
+        status: 'success',
+        idempotencyKey: '',
+        actorId: 'owner-1',
+        actorName: 'Owner',
+        note: 'decision pack',
+        summary: 'ok',
+        retries: 0,
+        errorCode: '',
+        errorMessage: '',
+        externalId: '',
+        externalUrl: '',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    ];
   }
 }
 
@@ -144,5 +166,17 @@ void main() {
 
     expect(ok, isFalse);
     expect(provider.actionError, contains('share failed'));
+  });
+
+  test('shareDecisionPack success refreshes share history', () async {
+    final service = _FakeRoomService();
+    final provider = RoomProvider(service: service)..currentRoom = _room();
+
+    final ok = await provider.shareDecisionPack(target: 'notion');
+
+    expect(ok, isTrue);
+    expect(service.shareCalls, 1);
+    expect(provider.shareHistory, isNotEmpty);
+    expect(provider.shareHistory.first.target, 'notion');
   });
 }
