@@ -23,6 +23,13 @@ class _FakeRoomProvider extends RoomProvider {
         createdAt: DateTime.now(),
       ),
     ];
+    decisionPackAggregate = DecisionPackAggregate(
+      sinceDays: 14,
+      since: DateTime.now(),
+      viewed: 5,
+      shared: 2,
+      shareFailed: 1,
+    );
     notifyListeners();
   }
 
@@ -56,6 +63,11 @@ class _FakeRoomProvider extends RoomProvider {
     String mode = 'executive',
     String note = '',
   }) async {
+    return true;
+  }
+
+  @override
+  Future<bool> refreshDecisionPackAggregate({int sinceDays = 7}) async {
     return true;
   }
 
@@ -115,5 +127,7 @@ void main() {
 
     expect(find.text('Decision Pack → Slack'), findsOneWidget);
     expect(find.text('Decision Pack → Notion'), findsOneWidget);
+    expect(find.textContaining('Vues: 5'), findsOneWidget);
+    expect(find.textContaining('Partages: 2'), findsOneWidget);
   });
 }
