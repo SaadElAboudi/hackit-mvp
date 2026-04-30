@@ -678,6 +678,35 @@ class RoomService {
     _parse(res);
   }
 
+  Future<void> trackDecisionPackEvent(
+    String roomId, {
+    required String eventType,
+    required String mode,
+    String target = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    await _post('/api/rooms/$roomId/decision-pack/events', {
+      'eventType': eventType,
+      'mode': mode,
+      if (target.trim().isNotEmpty) 'target': target.trim(),
+      if (metadata != null) 'metadata': metadata,
+    });
+  }
+
+  Future<DecisionPackAggregate> getDecisionPackAggregate(
+    String roomId, {
+    int sinceDays = 7,
+  }) async {
+    final uri = Uri.parse('$_base/api/rooms/$roomId/decision-pack/aggregate')
+        .replace(queryParameters: {
+      'sinceDays': '${sinceDays.clamp(1, 90)}',
+    });
+    final res = await _http
+        .get(uri, headers: await _headers())
+        .timeout(const Duration(seconds: 15));
+    return DecisionPackAggregate.fromJson(_parse(res));
+  }
+
   // ── WebSocket (per room) ──────────────────────────────────────────────────────
 
   final Map<String, WebSocketChannel> _channels = {};

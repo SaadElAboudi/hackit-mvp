@@ -153,7 +153,9 @@ class RoomProvider extends ChangeNotifier {
   List<WorkspaceTask> tasks = [];
   List<RoomShareHistoryItem> shareHistory = [];
   DecisionPackResult? decisionPack;
+  DecisionPackAggregate? decisionPackAggregate;
   bool loadingDecisionPack = false;
+  bool loadingDecisionPackAggregate = false;
   RoomIntegrationStatus? slackIntegration;
   RoomIntegrationStatus? notionIntegration;
   bool loadingNotionPages = false;
@@ -1181,6 +1183,11 @@ class RoomProvider extends ChangeNotifier {
         includeOpenTasks: includeOpenTasks,
         limit: limit,
       );
+      await _svc.trackDecisionPackEvent(
+        room.id,
+        eventType: 'viewed',
+        mode: mode,
+      );
       return true;
     } catch (e) {
       actionError = _errorMessage(e);
@@ -1207,6 +1214,12 @@ class RoomProvider extends ChangeNotifier {
         mode: mode,
         note: note,
       );
+      await _svc.trackDecisionPackEvent(
+        room.id,
+        eventType: 'shared',
+        mode: mode,
+        target: target,
+      );
       unawaited(AnalyticsManager().logFeatureUsed(
         feature: 'decision_pack_shared',
         parameters: {'target': target, 'mode': mode},
@@ -1214,9 +1227,35 @@ class RoomProvider extends ChangeNotifier {
       await refreshShareHistory(limit: 12);
       return true;
     } catch (e) {
+      unawaited(_svc.trackDecisionPackEvent(
+        room.id,
+        eventType: 'share_failed',
+        mode: mode,
+        target: target,
+      ));
       actionError = _errorMessage(e);
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<bool> refreshDecisionPackAggregate({int sinceDays = 7}) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    loadingDecisionPackAggregate = true;
+    notifyListeners();
+    try {
+      decisionPackAggregate = await _svc.getDecisionPackAggregate(
+        room.id,
+        sinceDays: sinceDays,
+      );
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    } finally {
+      loadingDecisionPackAggregate = false;
+      notifyListeners();
     }
   }
 
@@ -1251,11 +1290,13 @@ class RoomProvider extends ChangeNotifier {
     tasks = [];
     shareHistory = [];
     decisionPack = null;
+    decisionPackAggregate = null;
     slackIntegration = null;
     notionIntegration = null;
     loadingNotionPages = false;
     loadingShareHistory = false;
     loadingDecisionPack = false;
+    loadingDecisionPackAggregate = false;
     loadingIntegrations = false;
     aiThinking = false;
     wsReconnecting = false;

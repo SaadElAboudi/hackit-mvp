@@ -19,6 +19,7 @@ class _FakeRoomService extends RoomService {
     required String note,
   })? onShareDecisionPack;
   int shareCalls = 0;
+  int trackEventCalls = 0;
 
   @override
   Future<DecisionPackResult> getDecisionPack(
@@ -95,6 +96,31 @@ class _FakeRoomService extends RoomService {
       ),
     ];
   }
+
+  @override
+  Future<void> trackDecisionPackEvent(
+    String roomId, {
+    required String eventType,
+    required String mode,
+    String target = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    trackEventCalls += 1;
+  }
+
+  @override
+  Future<DecisionPackAggregate> getDecisionPackAggregate(
+    String roomId, {
+    int sinceDays = 7,
+  }) async {
+    return DecisionPackAggregate(
+      sinceDays: sinceDays,
+      since: DateTime.now(),
+      viewed: 3,
+      shared: 1,
+      shareFailed: 0,
+    );
+  }
 }
 
 Room _room() {
@@ -129,6 +155,7 @@ void main() {
     expect(provider.decisionPack, isNotNull);
     expect(provider.decisionPack!.pack.mode, 'executive');
     expect(provider.loadingDecisionPack, isFalse);
+    expect(service.trackEventCalls, 1);
   });
 
   test('loadDecisionPack sets actionError on failure', () async {
@@ -178,5 +205,17 @@ void main() {
     expect(service.shareCalls, 1);
     expect(provider.shareHistory, isNotEmpty);
     expect(provider.shareHistory.first.target, 'notion');
+  });
+
+  test('refreshDecisionPackAggregate stores counters', () async {
+    final service = _FakeRoomService();
+    final provider = RoomProvider(service: service)..currentRoom = _room();
+
+    final ok = await provider.refreshDecisionPackAggregate(sinceDays: 14);
+
+    expect(ok, isTrue);
+    expect(provider.decisionPackAggregate, isNotNull);
+    expect(provider.decisionPackAggregate!.viewed, 3);
+    expect(provider.loadingDecisionPackAggregate, isFalse);
   });
 }

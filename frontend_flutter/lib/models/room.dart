@@ -494,6 +494,34 @@ class DecisionPackResult {
       );
 }
 
+class DecisionPackAggregate {
+  final int sinceDays;
+  final DateTime since;
+  final int viewed;
+  final int shared;
+  final int shareFailed;
+
+  const DecisionPackAggregate({
+    required this.sinceDays,
+    required this.since,
+    required this.viewed,
+    required this.shared,
+    required this.shareFailed,
+  });
+
+  factory DecisionPackAggregate.fromJson(Map<String, dynamic> j) {
+    final aggregate = (j['aggregate'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final events = (aggregate['events'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return DecisionPackAggregate(
+      sinceDays: (aggregate['sinceDays'] as num?)?.toInt() ?? 7,
+      since: DateTime.tryParse(aggregate['since']?.toString() ?? '') ?? DateTime.now(),
+      viewed: (events['viewed'] as num?)?.toInt() ?? 0,
+      shared: (events['shared'] as num?)?.toInt() ?? 0,
+      shareFailed: (events['share_failed'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class ExtractedTaskDraft {
   final String title;
   final String description;
