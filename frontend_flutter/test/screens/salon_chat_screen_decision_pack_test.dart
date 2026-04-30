@@ -68,6 +68,14 @@ class _FakeRoomProvider extends RoomProvider {
 
   @override
   Future<bool> refreshDecisionPackAggregate({int sinceDays = 7}) async {
+    decisionPackAggregate = DecisionPackAggregate(
+      sinceDays: sinceDays,
+      since: DateTime.now(),
+      viewed: 10,
+      shared: 4,
+      shareFailed: 1,
+    );
+    notifyListeners();
     return true;
   }
 
@@ -129,5 +137,7 @@ void main() {
     expect(find.text('Decision Pack → Notion'), findsOneWidget);
     expect(find.textContaining('Vues: 5'), findsOneWidget);
     expect(find.textContaining('Partages: 2'), findsOneWidget);
+    expect(find.textContaining('Conv.: 40%'), findsOneWidget);
+    expect(find.text('14j'), findsOneWidget);
   });
 }

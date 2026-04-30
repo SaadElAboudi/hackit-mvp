@@ -1208,10 +1208,10 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
-  Future<void> _refreshDecisionPackAggregate() async {
+  Future<void> _refreshDecisionPackAggregate([int sinceDays = 14]) async {
     final prov = context.read<RoomProvider>();
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await prov.refreshDecisionPackAggregate(sinceDays: 14);
+    final ok = await prov.refreshDecisionPackAggregate(sinceDays: sinceDays);
     if (!mounted || ok) return;
     messenger.showSnackBar(
       SnackBar(
@@ -3694,7 +3694,7 @@ class _ContextPanel extends StatelessWidget {
   final Future<void> Function() onShareDecisionPackToNotion;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
-  final Future<void> Function() onRefreshDecisionPackAggregate;
+  final Future<void> Function(int sinceDays) onRefreshDecisionPackAggregate;
   final void Function(RoomArtifact artifact) onOpenCanvas;
 
   const _ContextPanel({
@@ -4070,7 +4070,9 @@ class _ContextPanel extends StatelessWidget {
           'KPI Decision Pack',
           subtitle: 'Usage sur les 14 derniers jours',
           trailing: TextButton.icon(
-            onPressed: onRefreshDecisionPackAggregate,
+            onPressed: () => onRefreshDecisionPackAggregate(
+              decisionPackAggregate?.sinceDays ?? 14,
+            ),
             icon: const Icon(Icons.query_stats_rounded, size: 16),
             label: const Text('Actualiser'),
           ),
@@ -4087,6 +4089,21 @@ class _ContextPanel extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
+                ChoiceChip(
+                  label: const Text('7j'),
+                  selected: (decisionPackAggregate?.sinceDays ?? 14) == 7,
+                  onSelected: (_) => onRefreshDecisionPackAggregate(7),
+                ),
+                ChoiceChip(
+                  label: const Text('14j'),
+                  selected: (decisionPackAggregate?.sinceDays ?? 14) == 14,
+                  onSelected: (_) => onRefreshDecisionPackAggregate(14),
+                ),
+                ChoiceChip(
+                  label: const Text('30j'),
+                  selected: (decisionPackAggregate?.sinceDays ?? 14) == 30,
+                  onSelected: (_) => onRefreshDecisionPackAggregate(30),
+                ),
                 Chip(
                   avatar: const Icon(Icons.visibility_outlined, size: 16),
                   label: Text('Vues: ${decisionPackAggregate?.viewed ?? 0}'),
@@ -4098,6 +4115,17 @@ class _ContextPanel extends StatelessWidget {
                 Chip(
                   avatar: const Icon(Icons.error_outline, size: 16),
                   label: Text('Echecs: ${decisionPackAggregate?.shareFailed ?? 0}'),
+                ),
+                Builder(
+                  builder: (_) {
+                    final viewed = decisionPackAggregate?.viewed ?? 0;
+                    final shared = decisionPackAggregate?.shared ?? 0;
+                    final rate = viewed <= 0 ? 0 : ((shared / viewed) * 100).round();
+                    return Chip(
+                      avatar: const Icon(Icons.trending_up_rounded, size: 16),
+                      label: Text('Conv.: $rate%'),
+                    );
+                  },
                 ),
               ],
             ),
