@@ -16,6 +16,7 @@ import RoomMessage from '../models/RoomMessage.js';
 import RoomMission from '../models/RoomMission.js';
 import RoomShareHistory from '../models/RoomShareHistory.js';
 import RoomFeedbackEvent from '../models/RoomFeedbackEvent.js';
+import RoomDecisionPackEvent from '../models/RoomDecisionPackEvent.js';
 import WorkspaceBlock from '../models/WorkspaceBlock.js';
 import WorkspaceComment from '../models/WorkspaceComment.js';
 import WorkspaceDecision from '../models/WorkspaceDecision.js';
@@ -65,6 +66,8 @@ import {
     validateCreateWorkspaceTaskPayload,
     validateConvertDecisionToTasksPayload,
     validateDirectivesPayload,
+    validateDecisionPackAggregateQuery,
+    validateDecisionPackEventPayload,
     validateDiscoverNotionPagesPayload,
     validateEmptyBody,
     validateFeedbackAggregateQuery,
@@ -208,6 +211,102 @@ function workspaceMilestoneSummary(milestone) {
     return {
         ...json,
     };
+}
+
+function formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt, mode = 'checklist' }) {
+    const safeRoomName = String(room?.name || 'Channel').trim() || 'Channel';
+    const lines = [];
+    lines.push(`# Decision Pack — ${safeRoomName}`);
+    lines.push('');
+    lines.push(`Generated at: ${generatedAt.toISOString()}`);
+    lines.push('');
+    lines.push(mode === 'executive' ? '## Executive Decisions' : '## Decisions');
+    lines.push('');
+
+    if (!decisions.length) {
+        lines.push('- No decisions available yet.');
+    } else {
+        decisions.forEach((decision, index) => {
+            const decisionId = String(decision?._id || '').trim();
+            const title = String(decision?.title || '').trim() || `Decision ${index + 1}`;
+            const summary = String(decision?.summary || '').trim();
+            lines.push(`### ${index + 1}. ${title}`);
+            if (summary) lines.push(summary);
+            const linkedTasks = tasks.filter(
+                (task) => String(task?.decisionId || '') === decisionId
+            );
+            if (mode === 'executive') {
+                const owners = linkedTasks
+                    .map((task) => String(task?.ownerName || '').trim())
+                    .filter(Boolean);
+                if (owners.length) {
+                    lines.push(`Owners: ${Array.from(new Set(owners)).join(', ')}`);
+                }
+            } else if (!linkedTasks.length) {
+                lines.push('- Tasks: none linked yet.');
+            } else {
+                lines.push('- Tasks:');
+                linkedTasks.forEach((task) => {
+                    const taskTitle = String(task?.title || '').trim() || 'Untitled task';
+                    const ownerName = String(task?.ownerName || '').trim();
+                    const dueDate = task?.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : '';
+                    const suffix = [ownerName ? `owner: ${ownerName}` : '', dueDate ? `due: ${dueDate}` : '']
+                        .filter(Boolean)
+                        .join(', ');
+                    lines.push(`  - ${taskTitle}${suffix ? ` (${suffix})` : ''}`);
+                });
+            }
+            lines.push('');
+        });
+    }
+
+    lines.push(mode === 'executive' ? '## Open Risks / Open Items' : '## Open Tasks (without decision link)');
+    lines.push('');
+    const unlinkedTasks = tasks.filter((task) => !task?.decisionId);
+    if (!unlinkedTasks.length) {
+        lines.push('- None.');
+    } else {
+        unlinkedTasks.forEach((task) => {
+            lines.push(`- ${String(task?.title || 'Untitled task').trim()}`);
+        });
+    }
+    lines.push('');
+    lines.push('## Next Review');
+    lines.push('');
+    lines.push('- Validate owners and deadlines for all critical tasks.');
+    lines.push('- Confirm decision status in the next channel review.');
+    if (mode === 'executive') {
+        lines.push('- Align on expected business impact and decision success criteria.');
+    }
+    return lines.join('\n');
+}
+
+async function loadDecisionPackData(roomId, { limit = 10, includeOpenTasks = true } = {}) {
+    const decisions = await WorkspaceDecision.find({ roomId })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+    const decisionIds = decisions.map((decision) => decision._id);
+
+    const taskFilter = includeOpenTasks
+        ? {
+            roomId,
+            $or: [
+                { decisionId: { $in: decisionIds } },
+                { decisionId: null },
+            ],
+        }
+        : {
+            roomId,
+            decisionId: { $in: decisionIds },
+        };
+
+    const tasks = await WorkspaceTask.find(taskFilter)
+        .sort({ createdAt: -1 })
+        .limit(limit * 5)
+        .lean();
+
+    return { decisions, tasks };
 }
 
 function extractJsonObject(text) {
@@ -1710,6 +1809,202 @@ router.post('/:id/decisions/:decisionId/convert', validateBody(validateConvertDe
         res.status(201).json({
             decision: workspaceDecisionSummary(decision),
             tasks: createdTasks.map((task) => workspaceTaskSummary(task)),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/decision-pack', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const limit = Math.max(1, Math.min(50, Number.parseInt(String(req.query?.limit || '10'), 10) || 10));
+        const mode = String(req.query?.mode || 'checklist').trim().toLowerCase();
+        if (mode !== 'checklist' && mode !== 'executive') {
+            return res.status(400).json({ error: 'Invalid mode. Use checklist or executive.' });
+        }
+        const includeOpenTasks = String(req.query?.includeOpenTasks || 'true')
+            .trim()
+            .toLowerCase() !== 'false';
+        const { decisions, tasks } = await loadDecisionPackData(req.params.id, {
+            limit,
+            includeOpenTasks,
+        });
+
+        const generatedAt = new Date();
+        const markdown = formatDecisionPackMarkdown({
+            room,
+            decisions,
+            tasks,
+            generatedAt,
+            mode,
+        });
+
+        res.json({
+            pack: {
+                generatedAt,
+                roomId: req.params.id,
+                roomName: room.name,
+                decisionCount: decisions.length,
+                taskCount: tasks.length,
+                mode,
+                includeOpenTasks,
+                markdown,
+            },
+            decisions: decisions.map((decision) => workspaceDecisionSummary(decision)),
+            tasks: tasks.map((task) => workspaceTaskSummary(task)),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/decision-pack/share', validateBody(validateSharePayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { target, note, idempotencyKey } = req.validatedBody;
+        const connector = getExportConnector(target);
+        if (!connector) {
+            return res.status(400).json({ error: 'Unsupported target' });
+        }
+        if (!connector.isConfigured(room)) {
+            return res.status(412).json({ error: `${connector.target} integration is not configured` });
+        }
+
+        const mode = String(req.query?.mode || 'executive').trim().toLowerCase();
+        if (mode !== 'checklist' && mode !== 'executive') {
+            return res.status(400).json({ error: 'Invalid mode. Use checklist or executive.' });
+        }
+
+        const { decisions, tasks } = await loadDecisionPackData(req.params.id, {
+            limit: 10,
+            includeOpenTasks: mode === 'checklist',
+        });
+        const summary = formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt: new Date(), mode });
+
+        const history = await RoomShareHistory.create({
+            roomId: room._id,
+            artifactId: null,
+            target: connector.target,
+            status: 'pending',
+            idempotencyKey: idempotencyKey || '',
+            actorId: req.userId,
+            actorName: req.displayName,
+            note: note || 'Decision Pack export',
+            summary: summary.slice(0, 1000),
+        });
+
+        try {
+            const outcome = await executeWithRetry(
+                () => connector.send({ room, summary, note: note || 'Decision Pack export' }),
+                { maxAttempts: 3, baseDelayMs: 200 }
+            );
+            history.status = 'success';
+            history.retries = Math.max(0, Number(outcome.attempts || 1) - 1);
+            history.externalId = outcome.result?.externalId || '';
+            history.externalUrl = outcome.result?.externalUrl || '';
+            history.metadata = outcome.result?.metadata || null;
+            await history.save();
+            return res.status(201).json({
+                share: {
+                    id: String(history._id),
+                    target: history.target,
+                    status: history.status,
+                    externalUrl: history.externalUrl,
+                    mode,
+                },
+            });
+        } catch (err) {
+            history.status = 'failed';
+            history.retries = Number(err?.retries || 0);
+            history.errorCode = String(err?.code || err?.status || 'export_failed').slice(0, 120);
+            history.errorMessage = String(err?.message || 'Export failed').slice(0, 3000);
+            await history.save();
+            return res.status(502).json({ error: 'Decision Pack export failed', code: history.errorCode });
+        }
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post('/:id/decision-pack/events', validateBody(validateDecisionPackEventPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const event = await RoomDecisionPackEvent.create({
+            roomId: req.params.id,
+            userId: req.userId,
+            eventType: req.validatedBody.eventType,
+            mode: req.validatedBody.mode,
+            target: req.validatedBody.target || '',
+            metadata: req.validatedBody.metadata || null,
+        });
+
+        return res.status(201).json({
+            event: {
+                id: String(event._id),
+                eventType: event.eventType,
+                mode: event.mode,
+                target: event.target,
+                createdAt: event.createdAt,
+            },
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/decision-pack/aggregate', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { sinceDays } = validateDecisionPackAggregateQuery(req.query || {});
+        const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+        const stats = await RoomDecisionPackEvent.aggregate([
+            { $match: { roomId: room._id, createdAt: { $gte: since } } },
+            {
+                $group: {
+                    _id: '$eventType',
+                    count: { $sum: 1 },
+                },
+            },
+        ]);
+
+        const byType = {
+            viewed: 0,
+            shared: 0,
+            share_failed: 0,
+        };
+        stats.forEach((item) => {
+            if (item?._id && Object.hasOwn(byType, item._id)) {
+                byType[item._id] = Number(item.count || 0);
+            }
+        });
+
+        return res.json({
+            aggregate: {
+                sinceDays,
+                since: since.toISOString(),
+                events: byType,
+            },
         });
     } catch (err) {
         next(err);

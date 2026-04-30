@@ -848,3 +848,36 @@ export function validateFeedbackAggregateQuery(query) {
     ratingLabel,
   };
 }
+
+export function validateDecisionPackEventPayload(body) {
+  const eventType = String(body?.eventType || '').trim().toLowerCase();
+  if (!['viewed', 'shared', 'share_failed'].includes(eventType)) {
+    throw badRequest('eventType must be one of: viewed, shared, share_failed', {
+      field: 'eventType',
+      received: eventType,
+    });
+  }
+
+  const mode = String(body?.mode || 'checklist').trim().toLowerCase();
+  if (!['checklist', 'executive'].includes(mode)) {
+    throw badRequest('mode must be one of: checklist, executive', {
+      field: 'mode',
+      received: mode,
+    });
+  }
+
+  const target = String(body?.target || '').trim().toLowerCase().slice(0, 40);
+  const metadata = body?.metadata && typeof body.metadata === 'object' ? body.metadata : null;
+  return { eventType, mode, target, metadata };
+}
+
+export function validateDecisionPackAggregateQuery(query) {
+  const sinceDays = query?.sinceDays === undefined ? 7 : Number(query.sinceDays);
+  if (!Number.isFinite(sinceDays) || sinceDays < 1 || sinceDays > 90) {
+    throw badRequest('sinceDays must be between 1 and 90', {
+      field: 'sinceDays',
+      received: query?.sinceDays,
+    });
+  }
+  return { sinceDays: Math.trunc(sinceDays) };
+}

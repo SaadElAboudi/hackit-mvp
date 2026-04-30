@@ -638,6 +638,75 @@ class RoomService {
         .toList();
   }
 
+  Future<DecisionPackResult> getDecisionPack(
+    String roomId, {
+    String mode = 'checklist',
+    bool includeOpenTasks = true,
+    int limit = 10,
+  }) async {
+    final qp = <String, String>{
+      'mode': mode,
+      'includeOpenTasks': includeOpenTasks ? 'true' : 'false',
+      'limit': '${limit.clamp(1, 50)}',
+    };
+    final uri = Uri.parse('$_base/api/rooms/$roomId/decision-pack')
+        .replace(queryParameters: qp);
+    final r = await _http
+        .get(uri, headers: await _headers())
+        .timeout(const Duration(seconds: 20));
+    return DecisionPackResult.fromJson(_parse(r));
+  }
+
+  Future<void> shareDecisionPack(
+    String roomId, {
+    required String target,
+    String mode = 'executive',
+    String note = '',
+  }) async {
+    final uri = Uri.parse('$_base/api/rooms/$roomId/decision-pack/share')
+        .replace(queryParameters: {'mode': mode});
+    final res = await _http
+        .post(
+          uri,
+          headers: await _headers(),
+          body: jsonEncode({
+            'target': target,
+            if (note.trim().isNotEmpty) 'note': note.trim(),
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+    _parse(res);
+  }
+
+  Future<void> trackDecisionPackEvent(
+    String roomId, {
+    required String eventType,
+    required String mode,
+    String target = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    await _post('/api/rooms/$roomId/decision-pack/events', {
+      'eventType': eventType,
+      'mode': mode,
+      if (target.trim().isNotEmpty) 'target': target.trim(),
+      if (metadata != null) 'metadata': metadata,
+    });
+  }
+
+  Future<DecisionPackAggregate> getDecisionPackAggregate(
+    String roomId, {
+    int sinceDays = 7,
+  }) async {
+    final uri = Uri.parse('$_base/api/rooms/$roomId/decision-pack/aggregate')
+        .replace(queryParameters: {
+      'sinceDays': '${sinceDays.clamp(1, 90)}',
+    });
+    final res = await _http
+        .get(uri, headers: await _headers())
+        .timeout(const Duration(seconds: 15));
+    return DecisionPackAggregate.fromJson(_parse(res));
+  }
+
   // ── WebSocket (per room) ──────────────────────────────────────────────────────
 
   final Map<String, WebSocketChannel> _channels = {};
