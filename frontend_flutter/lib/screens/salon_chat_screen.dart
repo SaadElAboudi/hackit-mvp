@@ -3804,6 +3804,22 @@ class _ContextPanel extends StatelessWidget {
     final workArtifacts = artifacts.where((a) => a.kind != 'research').toList();
     final researchArtifacts =
         artifacts.where((a) => a.kind == 'research').toList();
+    String decisionPackInsight() {
+      final viewed = decisionPackAggregate?.viewed ?? 0;
+      final shared = decisionPackAggregate?.shared ?? 0;
+      final failures = decisionPackAggregate?.shareFailed ?? 0;
+      final rate = viewed <= 0 ? 0 : (shared / viewed);
+      if (viewed == 0) {
+        return 'Aucune vue Decision Pack pour la période sélectionnée.';
+      }
+      if (rate < 0.2) {
+        return 'Conversion faible: revoir le contenu des packs (plus actionnable).';
+      }
+      if (failures > 0) {
+        return 'Conversion correcte, mais surveiller les échecs de partage.';
+      }
+      return 'Bonne adoption: maintenir ce format de Decision Pack.';
+    }
 
     Widget sectionTitle(String title, {String? subtitle, Widget? trailing}) {
       return Padding(
@@ -4130,6 +4146,16 @@ class _ContextPanel extends StatelessWidget {
               ],
             ),
           ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(
+            decisionPackInsight(),
+            style: TextStyle(
+              fontSize: 12,
+              color: scheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
         sectionTitle(
           'Taches',
           subtitle: tasks.isEmpty ? 'Aucune tache suivie actuellement.' : null,

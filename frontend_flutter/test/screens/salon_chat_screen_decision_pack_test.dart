@@ -139,5 +139,9 @@ void main() {
     expect(find.textContaining('Partages: 2'), findsOneWidget);
     expect(find.textContaining('Conv.: 40%'), findsOneWidget);
     expect(find.text('14j'), findsOneWidget);
+    expect(
+      find.textContaining('Conversion correcte, mais surveiller les échecs'),
+      findsOneWidget,
+    );
   });
 }
