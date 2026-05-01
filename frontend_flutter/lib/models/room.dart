@@ -510,14 +510,63 @@ class DecisionPackAggregate {
   });
 
   factory DecisionPackAggregate.fromJson(Map<String, dynamic> j) {
-    final aggregate = (j['aggregate'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final events = (aggregate['events'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final aggregate =
+        (j['aggregate'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final events =
+        (aggregate['events'] as Map?)?.cast<String, dynamic>() ?? const {};
     return DecisionPackAggregate(
       sinceDays: (aggregate['sinceDays'] as num?)?.toInt() ?? 7,
-      since: DateTime.tryParse(aggregate['since']?.toString() ?? '') ?? DateTime.now(),
+      since: DateTime.tryParse(aggregate['since']?.toString() ?? '') ??
+          DateTime.now(),
       viewed: (events['viewed'] as num?)?.toInt() ?? 0,
       shared: (events['shared'] as num?)?.toInt() ?? 0,
       shareFailed: (events['share_failed'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class DecisionPackReadiness {
+  final bool ready;
+  final int score;
+  final int totalTasks;
+  final int tasksWithOwners;
+  final int tasksWithDueDates;
+  final int linkedTaskCount;
+  final double ownerCoverage;
+  final double dueDateCoverage;
+  final double linkedTaskCoverage;
+  final List<String> recommendations;
+
+  const DecisionPackReadiness({
+    required this.ready,
+    required this.score,
+    required this.totalTasks,
+    required this.tasksWithOwners,
+    required this.tasksWithDueDates,
+    required this.linkedTaskCount,
+    required this.ownerCoverage,
+    required this.dueDateCoverage,
+    required this.linkedTaskCoverage,
+    required this.recommendations,
+  });
+
+  factory DecisionPackReadiness.fromJson(Map<String, dynamic> j) {
+    final readiness = (j['readiness'] as Map?)?.cast<String, dynamic>() ?? j;
+    return DecisionPackReadiness(
+      ready: readiness['ready'] == true,
+      score: (readiness['score'] as num?)?.toInt() ?? 0,
+      totalTasks: (readiness['totalTasks'] as num?)?.toInt() ?? 0,
+      tasksWithOwners: (readiness['tasksWithOwners'] as num?)?.toInt() ?? 0,
+      tasksWithDueDates: (readiness['tasksWithDueDates'] as num?)?.toInt() ?? 0,
+      linkedTaskCount: (readiness['linkedTaskCount'] as num?)?.toInt() ?? 0,
+      ownerCoverage: (readiness['ownerCoverage'] as num?)?.toDouble() ?? 0,
+      dueDateCoverage: (readiness['dueDateCoverage'] as num?)?.toDouble() ?? 0,
+      linkedTaskCoverage:
+          (readiness['linkedTaskCoverage'] as num?)?.toDouble() ?? 0,
+      recommendations: (readiness['recommendations'] as List? ?? [])
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList(),
     );
   }
 }

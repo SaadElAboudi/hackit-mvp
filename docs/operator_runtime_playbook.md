@@ -94,6 +94,13 @@ cd backend
 API_BASE=$TARGET_URL ROOM_ID=<roomId> X_USER_ID=<memberUserId> DAYS=7 npm run kpi:feedback
 ```
 
+Decision Pack KPI baseline:
+
+```bash
+cd backend
+API_BASE=$TARGET_URL ROOM_ID=<roomId> X_USER_ID=<memberUserId> DAYS=14 node scripts/decisionPackKpiBaseline.js
+```
+
 ## Dashboard Links
 
 - Observability overview: `<add-dashboard-link>`
@@ -118,3 +125,17 @@ API_BASE=$TARGET_URL ROOM_ID=<roomId> X_USER_ID=<memberUserId> DAYS=7 npm run kp
 2. Alerting condition remains stable for at least 2 windows.
 3. Smoke checks pass for impacted flow.
 4. Incident summary posted with root cause and follow-ups.
+
+## Decision Pack KPI Review (weekly)
+
+Review this KPI set weekly in product + ops sync:
+
+- `viewed` (adoption volume)
+- `shared` (execution handoff volume)
+- `share_failed` (integration reliability)
+- `conversion%` = `shared / viewed`
+
+Suggested guardrails:
+
+- conversion `< 20%` => review pack quality and call-to-action UX
+- share_failed `> 0` for 2 consecutive weeks => connector reliability hardening ticket

@@ -54,22 +54,33 @@ class NeumorphicActionButton extends StatelessWidget {
               ),
             ],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 16, color: scheme.primary),
-                const SizedBox(width: 6),
-              ],
-              Text(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final text = Text(
                 label,
+                maxLines: 1,
+                overflow: constraints.hasBoundedWidth
+                    ? TextOverflow.ellipsis
+                    : TextOverflow.visible,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: scheme.onSurface,
                 ),
-              ),
-            ],
+              );
+              return Row(
+                mainAxisSize: constraints.hasBoundedWidth
+                    ? MainAxisSize.max
+                    : MainAxisSize.min,
+                children: [
+                  if (icon != null) ...[
+                    Icon(icon, size: 16, color: scheme.primary),
+                    const SizedBox(width: 6),
+                  ],
+                  constraints.hasBoundedWidth ? Flexible(child: text) : text,
+                ],
+              );
+            },
           ),
         ),
       ),

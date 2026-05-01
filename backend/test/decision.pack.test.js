@@ -77,6 +77,26 @@ await test('GET decision-pack can disable open tasks', async (t) => {
   assert.equal(json.pack.includeOpenTasks, false);
 });
 
+await test('GET decision-pack/readiness returns score and recommendations', async (t) => {
+  forceMongoReady(); t.after(() => restoreMongoReady());
+  const fakeRoomId = '507f191e810c19729de860b1'; const fakeUserId = 'user_pack_8';
+  const restoreFindRoom = withStub(Room, 'findById', async () => ({ _id: fakeRoomId, name: 'Ops', members: [{ userId: fakeUserId, role: 'owner' }] }));
+  const restoreFindDecisions = withStub(WorkspaceDecision, 'find', () => buildChain([{ _id: 'd1', roomId: fakeRoomId, title: 'Rollout', summary: '' }]));
+  const restoreFindTasks = withStub(WorkspaceTask, 'find', () => buildChain([
+    { _id: 't1', roomId: fakeRoomId, decisionId: 'd1', title: 'Task linked', ownerName: 'Lina', dueDate: new Date() },
+    { _id: 't2', roomId: fakeRoomId, decisionId: null, title: 'Task open' },
+  ]));
+  t.after(() => { restoreFindRoom(); restoreFindDecisions(); restoreFindTasks(); });
+  const app = createApp(); const server = app.listen(0); t.after(() => server.close()); await new Promise((r) => server.once('listening', r)); const port = server.address().port;
+  const res = await requestJson({ port, path: `/api/rooms/${fakeRoomId}/decision-pack/readiness`, headers: { 'x-user-id': fakeUserId } });
+  assert.equal(res.status, 200);
+  const json = JSON.parse(res.data);
+  assert.equal(json.readiness.totalTasks, 2);
+  assert.equal(json.readiness.tasksWithOwners, 1);
+  assert.ok(json.readiness.score > 0);
+  assert.ok(json.readiness.recommendations.some((item) => /owners/i.test(item)));
+});
+
 await test('POST decision-pack/share returns 412 when target integration is missing', async (t) => {
   forceMongoReady(); t.after(() => restoreMongoReady());
   const fakeRoomId = '507f191e810c19729de860ae'; const fakeUserId = 'user_pack_5';

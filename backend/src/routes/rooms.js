@@ -281,6 +281,56 @@ function formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt, mode 
     return lines.join('\n');
 }
 
+function evaluateDecisionPackReadiness({ decisions = [], tasks = [] }) {
+    const totalTasks = tasks.length;
+    const tasksWithOwners = tasks.filter((task) => String(task?.ownerName || task?.ownerId || '').trim()).length;
+    const tasksWithDueDates = tasks.filter((task) => Boolean(task?.dueDate)).length;
+    const linkedTaskCount = tasks.filter((task) => String(task?.decisionId || '').trim()).length;
+    const ownerCoverage = totalTasks > 0 ? tasksWithOwners / totalTasks : 0;
+    const dueDateCoverage = totalTasks > 0 ? tasksWithDueDates / totalTasks : 0;
+    const linkedTaskCoverage = totalTasks > 0 ? linkedTaskCount / totalTasks : 0;
+    const recommendations = [];
+
+    if (!decisions.length) {
+        recommendations.push('Add at least one explicit decision before sharing.');
+    }
+    if (totalTasks === 0) {
+        recommendations.push('Create follow-up tasks so the Decision Pack has execution detail.');
+    }
+    if (totalTasks > 0 && ownerCoverage < 0.8) {
+        recommendations.push('Assign owners to the remaining open tasks.');
+    }
+    if (totalTasks > 0 && dueDateCoverage < 0.6) {
+        recommendations.push('Add due dates for the most important tasks.');
+    }
+    if (totalTasks > 0 && linkedTaskCoverage < 0.5) {
+        recommendations.push('Link tasks back to decisions where possible.');
+    }
+
+    const score = Math.round(
+        (
+            (decisions.length > 0 ? 0.25 : 0) +
+            (totalTasks > 0 ? 0.15 : 0) +
+            (ownerCoverage * 0.3) +
+            (dueDateCoverage * 0.2) +
+            (linkedTaskCoverage * 0.1)
+        ) * 100
+    );
+
+    return {
+        ready: score >= 70 && recommendations.length <= 2,
+        score,
+        totalTasks,
+        tasksWithOwners,
+        tasksWithDueDates,
+        linkedTaskCount,
+        ownerCoverage,
+        dueDateCoverage,
+        linkedTaskCoverage,
+        recommendations,
+    };
+}
+
 async function loadDecisionPackData(roomId, { limit = 10, includeOpenTasks = true } = {}) {
     const decisions = await WorkspaceDecision.find({ roomId })
         .sort({ createdAt: -1 })
@@ -1864,6 +1914,27 @@ router.get('/:id/decision-pack', async (req, res, next) => {
     }
 });
 
+router.get('/:id/decision-pack/readiness', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { decisions, tasks } = await loadDecisionPackData(req.params.id, {
+            limit: 10,
+            includeOpenTasks: true,
+        });
+
+        res.json({
+            readiness: evaluateDecisionPackReadiness({ decisions, tasks }),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
 router.post('/:id/decision-pack/share', validateBody(validateSharePayload), async (req, res, next) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);
@@ -1890,6 +1961,7 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
             limit: 10,
             includeOpenTasks: mode === 'checklist',
         });
+        const readiness = evaluateDecisionPackReadiness({ decisions, tasks });
         const summary = formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt: new Date(), mode });
 
         const history = await RoomShareHistory.create({
@@ -1923,6 +1995,7 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
                     externalUrl: history.externalUrl,
                     mode,
                 },
+                readiness,
             });
         } catch (err) {
             history.status = 'failed';
@@ -1930,7 +2003,7 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
             history.errorCode = String(err?.code || err?.status || 'export_failed').slice(0, 120);
             history.errorMessage = String(err?.message || 'Export failed').slice(0, 3000);
             await history.save();
-            return res.status(502).json({ error: 'Decision Pack export failed', code: history.errorCode });
+            return res.status(502).json({ error: 'Decision Pack export failed', code: history.errorCode, readiness });
         }
     } catch (err) {
         next(err);

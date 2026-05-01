@@ -154,8 +154,10 @@ class RoomProvider extends ChangeNotifier {
   List<RoomShareHistoryItem> shareHistory = [];
   DecisionPackResult? decisionPack;
   DecisionPackAggregate? decisionPackAggregate;
+  DecisionPackReadiness? decisionPackReadiness;
   bool loadingDecisionPack = false;
   bool loadingDecisionPackAggregate = false;
+  bool loadingDecisionPackReadiness = false;
   RoomIntegrationStatus? slackIntegration;
   RoomIntegrationStatus? notionIntegration;
   bool loadingNotionPages = false;
@@ -1239,6 +1241,24 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> refreshDecisionPackReadiness() async {
+    final room = currentRoom;
+    if (room == null) return false;
+    loadingDecisionPackReadiness = true;
+    actionError = null;
+    notifyListeners();
+    try {
+      decisionPackReadiness = await _svc.getDecisionPackReadiness(room.id);
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    } finally {
+      loadingDecisionPackReadiness = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> refreshDecisionPackAggregate({int sinceDays = 7}) async {
     final room = currentRoom;
     if (room == null) return false;
@@ -1291,6 +1311,7 @@ class RoomProvider extends ChangeNotifier {
     shareHistory = [];
     decisionPack = null;
     decisionPackAggregate = null;
+    decisionPackReadiness = null;
     slackIntegration = null;
     notionIntegration = null;
     loadingNotionPages = false;

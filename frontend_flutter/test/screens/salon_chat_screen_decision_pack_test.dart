@@ -7,12 +7,14 @@ import 'package:hackit_mvp_flutter/providers/room_provider.dart';
 import 'package:hackit_mvp_flutter/screens/salon_chat_screen.dart';
 
 class _FakeRoomProvider extends RoomProvider {
+  int decisionPackShareCalls = 0;
+
   @override
   Future<void> openRoom(Room room) async {
     currentRoom = room;
     loadingMessages = false;
     messages = const [];
-    decisions = const [
+    decisions = [
       WorkspaceDecision(
         id: 'd1',
         title: 'Launch pilot',
@@ -29,6 +31,24 @@ class _FakeRoomProvider extends RoomProvider {
       viewed: 5,
       shared: 2,
       shareFailed: 1,
+    );
+    slackIntegration = RoomIntegrationStatus(
+      provider: 'slack',
+      enabled: true,
+      connected: true,
+      connectedBy: 'owner-1',
+      connectedAt: DateTime.now(),
+      channelId: 'C123',
+      parentPageId: '',
+    );
+    notionIntegration = RoomIntegrationStatus(
+      provider: 'notion',
+      enabled: true,
+      connected: true,
+      connectedBy: 'owner-1',
+      connectedAt: DateTime.now(),
+      channelId: '',
+      parentPageId: 'page-1',
     );
     notifyListeners();
   }
@@ -63,6 +83,25 @@ class _FakeRoomProvider extends RoomProvider {
     String mode = 'executive',
     String note = '',
   }) async {
+    decisionPackShareCalls += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> refreshDecisionPackReadiness() async {
+    decisionPackReadiness = const DecisionPackReadiness(
+      ready: true,
+      score: 88,
+      totalTasks: 2,
+      tasksWithOwners: 2,
+      tasksWithDueDates: 2,
+      linkedTaskCount: 1,
+      ownerCoverage: 1,
+      dueDateCoverage: 1,
+      linkedTaskCoverage: 0.5,
+      recommendations: [],
+    );
+    notifyListeners();
     return true;
   }
 
@@ -114,9 +153,12 @@ Widget _wrap(Widget child, RoomProvider provider) {
 void main() {
   testWidgets('opens Decision Pack dialog from context panel button',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final provider = _FakeRoomProvider();
 
-    await tester.pumpWidget(_wrap(SalonChatScreen(room: _testRoom()), provider));
+    await tester
+        .pumpWidget(_wrap(SalonChatScreen(room: _testRoom()), provider));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Pack checklist'));
@@ -128,21 +170,77 @@ void main() {
 
   testWidgets('shows Decision Pack share actions in context panel',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final provider = _FakeRoomProvider();
 
-    await tester.pumpWidget(_wrap(SalonChatScreen(room: _testRoom()), provider));
+    await tester
+        .pumpWidget(_wrap(SalonChatScreen(room: _testRoom()), provider));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.textContaining('Vues: 5'),
+      350,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Vues: 5'), findsOneWidget);
+    expect(
+      find.textContaining('Partages: 2'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Conv.: 40%'),
+      findsOneWidget,
+    );
+    expect(find.text('14j'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'Conversion correcte, mais surveiller les échecs',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Repartager vers Notion'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Decision Pack → Slack'),
+      500,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Decision Pack → Slack'), findsOneWidget);
     expect(find.text('Decision Pack → Notion'), findsOneWidget);
-    expect(find.textContaining('Vues: 5'), findsOneWidget);
-    expect(find.textContaining('Partages: 2'), findsOneWidget);
-    expect(find.textContaining('Conv.: 40%'), findsOneWidget);
-    expect(find.text('14j'), findsOneWidget);
-    expect(
-      find.textContaining('Conversion correcte, mais surveiller les échecs'),
-      findsOneWidget,
+  });
+
+  testWidgets('checks readiness before Decision Pack share', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final provider = _FakeRoomProvider();
+
+    await tester
+        .pumpWidget(_wrap(SalonChatScreen(room: _testRoom()), provider));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Decision Pack → Slack'),
+      500,
+      scrollable: find.byType(Scrollable).last,
     );
-    expect(find.text('Repartager vers Notion'), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Decision Pack → Slack'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Decision Pack pret'), findsOneWidget);
+    expect(find.textContaining('Score readiness 88/100'), findsOneWidget);
+
+    await tester.tap(find.text('Partager').last);
+    await tester.pumpAndSettle();
+
+    expect(provider.decisionPackShareCalls, 1);
+    expect(find.textContaining('Decision Pack partage vers Slack'),
+        findsOneWidget);
   });
 }

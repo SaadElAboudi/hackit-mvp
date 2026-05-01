@@ -20,6 +20,8 @@ class _FakeRoomService extends RoomService {
   })? onShareDecisionPack;
   int shareCalls = 0;
   int trackEventCalls = 0;
+  int readinessCalls = 0;
+  String lastShareTarget = '';
 
   @override
   Future<DecisionPackResult> getDecisionPack(
@@ -61,6 +63,7 @@ class _FakeRoomService extends RoomService {
     String note = '',
   }) async {
     shareCalls += 1;
+    lastShareTarget = target;
     final handler = onShareDecisionPack;
     if (handler != null) {
       return handler(roomId: roomId, target: target, mode: mode, note: note);
@@ -77,12 +80,8 @@ class _FakeRoomService extends RoomService {
     return [
       RoomShareHistoryItem(
         id: 'h1',
-        roomId: roomId,
-        artifactId: '',
-        target: target ?? 'slack',
+        target: target ?? lastShareTarget,
         status: 'success',
-        idempotencyKey: '',
-        actorId: 'owner-1',
         actorName: 'Owner',
         note: 'decision pack',
         summary: 'ok',
@@ -92,7 +91,6 @@ class _FakeRoomService extends RoomService {
         externalId: '',
         externalUrl: '',
         createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
       ),
     ];
   }
@@ -106,6 +104,23 @@ class _FakeRoomService extends RoomService {
     Map<String, dynamic>? metadata,
   }) async {
     trackEventCalls += 1;
+  }
+
+  @override
+  Future<DecisionPackReadiness> getDecisionPackReadiness(String roomId) async {
+    readinessCalls += 1;
+    return const DecisionPackReadiness(
+      ready: false,
+      score: 62,
+      totalTasks: 2,
+      tasksWithOwners: 1,
+      tasksWithDueDates: 1,
+      linkedTaskCount: 1,
+      ownerCoverage: 0.5,
+      dueDateCoverage: 0.5,
+      linkedTaskCoverage: 0.5,
+      recommendations: ['Assign owners to the remaining open tasks.'],
+    );
   }
 
   @override
@@ -205,6 +220,19 @@ void main() {
     expect(service.shareCalls, 1);
     expect(provider.shareHistory, isNotEmpty);
     expect(provider.shareHistory.first.target, 'notion');
+  });
+
+  test('refreshDecisionPackReadiness stores quality gate', () async {
+    final service = _FakeRoomService();
+    final provider = RoomProvider(service: service)..currentRoom = _room();
+
+    final ok = await provider.refreshDecisionPackReadiness();
+
+    expect(ok, isTrue);
+    expect(service.readinessCalls, 1);
+    expect(provider.decisionPackReadiness?.score, 62);
+    expect(provider.decisionPackReadiness?.ready, isFalse);
+    expect(provider.loadingDecisionPackReadiness, isFalse);
   });
 
   test('refreshDecisionPackAggregate stores counters', () async {

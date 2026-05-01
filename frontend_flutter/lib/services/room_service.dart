@@ -678,6 +678,14 @@ class RoomService {
     _parse(res);
   }
 
+  Future<DecisionPackReadiness> getDecisionPackReadiness(String roomId) async {
+    final uri = Uri.parse('$_base/api/rooms/$roomId/decision-pack/readiness');
+    final res = await _http
+        .get(uri, headers: await _headers())
+        .timeout(const Duration(seconds: 15));
+    return DecisionPackReadiness.fromJson(_parse(res));
+  }
+
   Future<void> trackDecisionPackEvent(
     String roomId, {
     required String eventType,

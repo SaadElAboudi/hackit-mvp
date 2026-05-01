@@ -1164,7 +1164,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     if (!mounted) return;
     if (!ok || prov.decisionPack == null) {
       messenger.showSnackBar(
-        SnackBar(content: Text(prov.actionError ?? 'Decision Pack indisponible')),
+        SnackBar(
+            content: Text(prov.actionError ?? 'Decision Pack indisponible')),
       );
       return;
     }
@@ -1188,6 +1189,104 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
+  Future<bool> _confirmDecisionPackReadiness(
+    DecisionPackReadiness readiness,
+    String label,
+  ) async {
+    final scheme = Theme.of(context).colorScheme;
+    final ready = readiness.ready;
+    final title = ready ? 'Decision Pack pret' : 'Decision Pack a verifier';
+    final recommendations = readiness.recommendations;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    ready
+                        ? Icons.verified_outlined
+                        : Icons.report_problem_outlined,
+                    color: ready ? scheme.primary : scheme.error,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Score readiness ${readiness.score}/100 avant partage vers $label.',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                    avatar: const Icon(Icons.person_outline, size: 16),
+                    label: Text(
+                      'Owners ${readiness.tasksWithOwners}/${readiness.totalTasks}',
+                    ),
+                  ),
+                  Chip(
+                    avatar: const Icon(Icons.event_outlined, size: 16),
+                    label: Text(
+                      'Dates ${readiness.tasksWithDueDates}/${readiness.totalTasks}',
+                    ),
+                  ),
+                  Chip(
+                    avatar: const Icon(Icons.link_outlined, size: 16),
+                    label: Text(
+                      'Liees ${readiness.linkedTaskCount}/${readiness.totalTasks}',
+                    ),
+                  ),
+                ],
+              ),
+              if (recommendations.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...recommendations.take(3).map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.arrow_right_rounded,
+                              size: 18,
+                              color: scheme.onSurface.withValues(alpha: 0.65),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(child: Text(item)),
+                          ],
+                        ),
+                      ),
+                    ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(ready ? 'Partager' : 'Partager quand meme'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
   Future<void> _shareDecisionPack({
     required String target,
     required String label,
@@ -1195,6 +1294,23 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   }) async {
     final prov = context.read<RoomProvider>();
     final messenger = ScaffoldMessenger.of(context);
+    final readinessOk = await prov.refreshDecisionPackReadiness();
+    if (!mounted) return;
+    if (!readinessOk || prov.decisionPackReadiness == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            prov.actionError ?? 'Readiness Decision Pack indisponible',
+          ),
+        ),
+      );
+      return;
+    }
+    final confirmed = await _confirmDecisionPackReadiness(
+      prov.decisionPackReadiness!,
+      label,
+    );
+    if (!mounted || !confirmed) return;
     final ok = await prov.shareDecisionPack(target: target, mode: mode);
     if (!mounted) return;
     messenger.showSnackBar(
@@ -3821,7 +3937,8 @@ class _ContextPanel extends StatelessWidget {
       return 'Bonne adoption: maintenir ce format de Decision Pack.';
     }
 
-    ({String label, Future<void> Function() action})? decisionPackRecommendation() {
+    ({String label, Future<void> Function() action})?
+        decisionPackRecommendation() {
       final viewed = decisionPackAggregate?.viewed ?? 0;
       final shared = decisionPackAggregate?.shared ?? 0;
       final failures = decisionPackAggregate?.shareFailed ?? 0;
@@ -3878,7 +3995,15 @@ class _ContextPanel extends StatelessWidget {
                 ],
               ),
             ),
-            if (trailing != null) trailing,
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: trailing,
+                ),
+              ),
+            ],
           ],
         ),
       );
@@ -4152,17 +4277,20 @@ class _ContextPanel extends StatelessWidget {
                 ),
                 Chip(
                   avatar: const Icon(Icons.share_outlined, size: 16),
-                  label: Text('Partages: ${decisionPackAggregate?.shared ?? 0}'),
+                  label:
+                      Text('Partages: ${decisionPackAggregate?.shared ?? 0}'),
                 ),
                 Chip(
                   avatar: const Icon(Icons.error_outline, size: 16),
-                  label: Text('Echecs: ${decisionPackAggregate?.shareFailed ?? 0}'),
+                  label: Text(
+                      'Echecs: ${decisionPackAggregate?.shareFailed ?? 0}'),
                 ),
                 Builder(
                   builder: (_) {
                     final viewed = decisionPackAggregate?.viewed ?? 0;
                     final shared = decisionPackAggregate?.shared ?? 0;
-                    final rate = viewed <= 0 ? 0 : ((shared / viewed) * 100).round();
+                    final rate =
+                        viewed <= 0 ? 0 : ((shared / viewed) * 100).round();
                     return Chip(
                       avatar: const Icon(Icons.trending_up_rounded, size: 16),
                       label: Text('Conv.: $rate%'),
