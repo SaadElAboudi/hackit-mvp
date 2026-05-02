@@ -57,7 +57,7 @@ Goal: close remaining quality/ops gaps on already shipped capabilities.
 
 Goal: increase user trust and close the quality loop.
 
-1. [ ] Explicit feedback loop (pertinent/moyen/hors-sujet + reason)
+1. [x] Explicit feedback loop (pertinent/moyen/hors-sujet + reason)
 2. [x] Trust & explainability blocks (why-this-plan, assumptions, limits, confidence)
 3. [ ] Product KPI instrumentation dashboard (TTV, save rate, regenerate rate, feedback score, export rate)
 
@@ -226,6 +226,82 @@ Sprint goal: close Phase A operational sign-off and start Phase B product loop.
 - Export connectors expansion (`BL-011`)
 - Explainability blocks (`BL-006`)
 - Search intelligence track (`BL-012` to `BL-017`)
+
+## Sprint 2-3 Product Evolution Plan (Feature-First)
+
+Objective: prioritize product evolution with direct KPI impact and short feedback loops.
+
+### Sprint 2 (2 weeks)
+
+Scope cap: max 3 tickets
+
+1. `BL-007` Product KPI dashboard (v1)
+- Primary KPI: activation rate, useful-answer rate, export rate
+- Expected effect: +10% faster prioritization cycle (data-driven decisions)
+- Time-to-impact: `<2 weeks`
+- Deliverables:
+	- Daily metrics view: `TTV`, `save rate`, `regenerate rate`, `feedback score`, `export rate`
+	- Filter by date range and room/template
+	- Baseline snapshot linked in this backlog
+
+2. `BL-008` Execution export (v1: Notion + CSV)
+- Primary KPI: export rate
+- Expected effect: `+15% export rate`
+- Time-to-impact: `2-6 weeks`
+- Deliverables:
+	- One-click export from decision pack
+	- Export history status + retry surface
+	- Endpoint and UI tests for success/failure/retry
+
+3. `BL-009` Output modes in decision pack (exec/checklist)
+- Primary KPI: useful-answer rate
+- Expected effect: `+10% useful-answer rate`
+- Time-to-impact: `<2 weeks`
+- Deliverables:
+	- Mode selector in UI
+	- Stable API contract by mode
+	- Snapshot tests for both render modes
+
+Sprint 2 exit criteria:
+1. KPI dashboard v1 is used in weekly product review.
+2. Notion/CSV export completion rate is measurable.
+3. At least one active room uses both output modes.
+
+### Sprint 3 (2 weeks)
+
+Scope cap: max 3 tickets
+
+1. `BL-010` Domain templates v2 (2 vertical packs first)
+- Primary KPI: activation rate
+- Expected effect: `+12% activation rate`
+- Time-to-impact: `2-6 weeks`
+- Deliverables:
+	- Launch first 2 packs: Product + Marketing
+	- Template chooser copy + outcome examples
+	- Quality benchmark checklist per pack
+
+2. `BL-012` Transcript fetch + caching layer (v1)
+- Primary KPI: useful-answer rate
+- Expected effect: `-20% timeout/retry on transcript-based flows`
+- Time-to-impact: `2-6 weeks`
+- Deliverables:
+	- Fetch pipeline with bounded cache TTL
+	- Fallback behavior when transcript unavailable
+	- Latency and failure telemetry
+
+3. `BL-013` Summaries with citations + timestamps (v1)
+- Primary KPI: D7 retention
+- Expected effect: `+8% D7 retention`
+- Time-to-impact: `2-6 weeks`
+- Deliverables:
+	- Citation blocks in summary outputs
+	- Timestamp deep-links in UI
+	- Relevance checks in test fixtures
+
+Sprint 3 exit criteria:
+1. Two vertical packs available in production.
+2. Citation/timestamp summaries enabled for transcript-backed outputs.
+3. Weekly KPI trend includes D7 and useful-answer movement.
 
 ## Legacy / Archive Items
 
