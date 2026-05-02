@@ -671,14 +671,14 @@ class RoomService {
     String mode = 'executive',
     String note = '',
   }) async {
-    final uri = Uri.parse('$_base/api/rooms/$roomId/decision-pack/share')
-        .replace(queryParameters: {'mode': mode});
+    final uri = Uri.parse('$_base/api/rooms/$roomId/decision-pack/share');
     final res = await _http
         .post(
           uri,
           headers: await _headers(),
           body: jsonEncode({
             'target': target,
+            'mode': mode,
             if (note.trim().isNotEmpty) 'note': note.trim(),
           }),
         )

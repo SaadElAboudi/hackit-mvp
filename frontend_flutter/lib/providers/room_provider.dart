@@ -180,6 +180,7 @@ class RoomProvider extends ChangeNotifier {
   List<WorkspaceTask> tasks = [];
   List<RoomShareHistoryItem> shareHistory = [];
   DecisionPackResult? decisionPack;
+  String decisionPackMode = 'checklist';
   DecisionPackAggregate? decisionPackAggregate;
   DecisionPackReadiness? decisionPackReadiness;
   DecisionPackShareResult? lastDecisionPackShare;
@@ -1228,6 +1229,16 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> setDecisionPackMode(String mode) async {
+    assert(mode == 'checklist' || mode == 'executive');
+    decisionPackMode = mode;
+    notifyListeners();
+    if (currentRoom != null) {
+      return loadDecisionPack(mode: mode);
+    }
+    return true;
+  }
+
   Future<bool> shareDecisionPack({
     required String target,
     String mode = 'executive',
@@ -1339,6 +1350,7 @@ class RoomProvider extends ChangeNotifier {
     tasks = [];
     shareHistory = [];
     decisionPack = null;
+    decisionPackMode = 'checklist';
     decisionPackAggregate = null;
     decisionPackReadiness = null;
     lastDecisionPackShare = null;

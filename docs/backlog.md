@@ -89,9 +89,9 @@ Goal: improve depth, relevance, and discovery quality.
 | BL-004 | Artifact review UX polish | [ ] | P1 | A | Medium | M | Reduce friction in compare/review flows |
 | BL-005 | Explicit feedback loop on AI relevance | [x] | P0 | B | High | M | Backend/UI/instrumentation v1 shipped with tests + KPI baseline evidence |
 | BL-006 | Trust & explainability sections in outputs | [x] | P0 | B | High | M | Completed with backend + frontend trust payload/rendering tests |
-| BL-007 | Product KPI instrumentation dashboard | [ ] | P1 | B | High | M | Enables KPI-driven prioritization |
-| BL-008 | Execution export (Notion/Trello/Asana/CSV) | [ ] | P0 | C | High | M/L | Turns insight into action |
-| BL-009 | Output modes (one-pager vs checklist) | [ ] | P1 | C | Medium | M | Persona-fit packaging |
+| BL-007 | Product KPI instrumentation dashboard | [x] | P1 | B | High | M | Enables KPI-driven prioritization |
+| BL-008 | Execution export (Notion/Trello/Asana/CSV) | [x] | P0 | C | High | M/L | Turns insight into action |
+| BL-009 | Output modes (one-pager vs checklist) | [x] | P1 | C | Medium | M | Persona-fit packaging |
 | BL-010 | Domain templates v2 (vertical packs) | [ ] | P1 | C | Medium | M | Quality by domain |
 | BL-011 | Additional connectors (Drive/Jira/Asana) | [ ] | P2 | C | Medium | M | Only if priority justifies |
 | BL-012 | Transcript fetch + caching layer | [ ] | P1 | D | High | M | Dependency for deep citation quality |

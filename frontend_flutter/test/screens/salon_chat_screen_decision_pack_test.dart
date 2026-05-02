@@ -59,6 +59,9 @@ class _FakeRoomProvider extends RoomProvider {
     bool includeOpenTasks = true,
     int limit = 10,
   }) async {
+    final markdown = mode == 'executive'
+        ? '# Decision Pack\n\n## Executive Decisions\n\nOwners: Alice'
+        : '# Decision Pack\n\n## Decisions\n\n- Tasks: none linked yet.';
     decisionPack = DecisionPackResult(
       pack: DecisionPackPayload(
         generatedAt: DateTime.now(),
@@ -68,13 +71,19 @@ class _FakeRoomProvider extends RoomProvider {
         taskCount: 0,
         mode: mode,
         includeOpenTasks: includeOpenTasks,
-        markdown: '# Decision Pack\n\nTest payload',
+        markdown: markdown,
       ),
       decisions: const [],
       tasks: const [],
     );
+    decisionPackMode = mode;
     notifyListeners();
     return true;
+  }
+
+  @override
+  Future<bool> setDecisionPackMode(String mode) async {
+    return loadDecisionPack(mode: mode);
   }
 
   @override
@@ -160,7 +169,7 @@ Widget _wrap(Widget child, RoomProvider provider) {
 }
 
 void main() {
-  testWidgets('opens Decision Pack dialog from context panel button',
+  testWidgets('mode selector switches to executive and shows exec content',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -170,11 +179,40 @@ void main() {
         .pumpWidget(_wrap(SalonChatScreen(room: _testRoom()), provider));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Pack checklist'));
+    // Default is 'checklist'; tap Executive to change
+    await tester.tap(find.text('Executive'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Decision Pack'), findsWidgets);
-    expect(find.textContaining('Test payload'), findsOneWidget);
+    expect(find.textContaining('Executive Decisions'), findsOneWidget);
+    expect(find.textContaining('## Decisions\n'), findsNothing);
+  });
+
+  testWidgets('mode selector switches back to checklist and shows task list',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final provider = _FakeRoomProvider();
+
+    await tester
+        .pumpWidget(_wrap(SalonChatScreen(room: _testRoom()), provider));
+    await tester.pumpAndSettle();
+
+    // First switch to Executive
+    await tester.tap(find.text('Executive'));
+    await tester.pumpAndSettle();
+
+    // Close exec dialog
+    await tester.tap(find.text('Fermer'));
+    await tester.pumpAndSettle();
+
+    // Switch back to Checklist (fires because Executive was selected)
+    await tester.tap(find.text('Checklist'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Decision Pack'), findsWidgets);
+    expect(find.textContaining('## Decisions'), findsOneWidget);
+    expect(find.textContaining('Executive Decisions'), findsNothing);
   });
 
   testWidgets('shows Decision Pack share actions in context panel',

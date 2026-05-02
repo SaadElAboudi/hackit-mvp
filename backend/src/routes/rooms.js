@@ -2171,7 +2171,7 @@ router.post('/:id/decision-pack/share', validateBody(validateDecisionPackSharePa
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
-        const { target, note, idempotencyKey } = req.validatedBody;
+        const { target, mode, note, idempotencyKey } = req.validatedBody;
         const connector = target === 'csv' ? null : getExportConnector(target);
         if (target !== 'csv') {
             if (!connector) {
@@ -2180,11 +2180,6 @@ router.post('/:id/decision-pack/share', validateBody(validateDecisionPackSharePa
             if (!connector.isConfigured(room)) {
                 return res.status(412).json({ error: `${connector.target} integration is not configured` });
             }
-        }
-
-        const mode = String(req.query?.mode || 'executive').trim().toLowerCase();
-        if (mode !== 'checklist' && mode !== 'executive') {
-            return res.status(400).json({ error: 'Invalid mode. Use checklist or executive.' });
         }
 
         const { decisions, tasks } = await loadDecisionPackData(req.params.id, {

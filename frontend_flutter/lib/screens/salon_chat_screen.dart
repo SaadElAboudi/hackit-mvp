@@ -1158,10 +1158,19 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     );
   }
 
-  Future<void> _openDecisionPack({String mode = 'checklist'}) async {
+  Future<void> _pickDecisionPackMode(String mode) async {
+    final prov = context.read<RoomProvider>();
+    await prov.setDecisionPackMode(mode);
+    if (!mounted) return;
+    if (prov.decisionPack == null) return;
+    await _showDecisionPackDialog(prov.decisionPack!);
+  }
+
+  Future<void> _openDecisionPack({String? mode}) async {
     final prov = context.read<RoomProvider>();
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await prov.loadDecisionPack(mode: mode);
+    final effectiveMode = mode ?? prov.decisionPackMode;
+    final ok = await prov.loadDecisionPack(mode: effectiveMode);
     if (!mounted) return;
     if (!ok || prov.decisionPack == null) {
       messenger.showSnackBar(
@@ -1170,14 +1179,18 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
       );
       return;
     }
+    await _showDecisionPackDialog(prov.decisionPack!);
+  }
+
+  Future<void> _showDecisionPackDialog(DecisionPackResult pack) async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Decision Pack (${prov.decisionPack!.pack.mode})'),
+        title: Text('Decision Pack (${pack.pack.mode})'),
         content: SizedBox(
           width: 680,
           child: SingleChildScrollView(
-            child: SelectableText(prov.decisionPack!.pack.markdown),
+            child: SelectableText(pack.pack.markdown),
           ),
         ),
         actions: [
@@ -1774,15 +1787,15 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           _shareToIntegration(target: 'slack', label: 'Slack'),
       onShareToNotion: () =>
           _shareToIntegration(target: 'notion', label: 'Notion'),
-      onOpenDecisionPackChecklist: () => _openDecisionPack(mode: 'checklist'),
-      onOpenDecisionPackExecutive: () => _openDecisionPack(mode: 'executive'),
+      selectedDecisionPackMode: prov.decisionPackMode,
+      onDecisionPackModeChange: _pickDecisionPackMode,
       onShareDecisionPackToSlack: () =>
           _shareDecisionPack(target: 'slack', label: 'Slack'),
       onShareDecisionPackToNotion: () =>
           _shareDecisionPack(target: 'notion', label: 'Notion'),
       onShareDecisionPackToCsv: () =>
           _shareDecisionPack(target: 'csv', label: 'CSV'),
-        onRetryShareHistory: _retryShareHistoryItem,
+      onRetryShareHistory: _retryShareHistoryItem,
       onRefreshIntegrations: prov.refreshIntegrationStatus,
       onRefreshShareHistory: () => prov.refreshShareHistory(),
       onRefreshDecisionPackAggregate: _refreshDecisionPackAggregate,
@@ -3898,8 +3911,8 @@ class _ContextPanel extends StatelessWidget {
   final Future<void> Function() onDisconnectNotionIntegration;
   final Future<void> Function() onShareToSlack;
   final Future<void> Function() onShareToNotion;
-  final Future<void> Function() onOpenDecisionPackChecklist;
-  final Future<void> Function() onOpenDecisionPackExecutive;
+  final String selectedDecisionPackMode;
+  final Future<void> Function(String mode) onDecisionPackModeChange;
   final Future<void> Function() onShareDecisionPackToSlack;
   final Future<void> Function() onShareDecisionPackToNotion;
   final Future<void> Function() onShareDecisionPackToCsv;
@@ -3938,8 +3951,8 @@ class _ContextPanel extends StatelessWidget {
     required this.onDisconnectNotionIntegration,
     required this.onShareToSlack,
     required this.onShareToNotion,
-    required this.onOpenDecisionPackChecklist,
-    required this.onOpenDecisionPackExecutive,
+    required this.selectedDecisionPackMode,
+    required this.onDecisionPackModeChange,
     required this.onShareDecisionPackToSlack,
     required this.onShareDecisionPackToNotion,
     required this.onShareDecisionPackToCsv,
@@ -4044,13 +4057,13 @@ class _ContextPanel extends StatelessWidget {
       if (viewed == 0) {
         return (
           label: 'Générer un premier pack',
-          action: onOpenDecisionPackChecklist,
+          action: () => onDecisionPackModeChange('checklist'),
         );
       }
       if (rate < 0.2) {
         return (
           label: 'Tester le mode executive',
-          action: onOpenDecisionPackExecutive,
+          action: () => onDecisionPackModeChange('executive'),
         );
       }
       if (failures > 0) {
@@ -4295,18 +4308,17 @@ class _ContextPanel extends StatelessWidget {
           subtitle: decisions.isEmpty
               ? 'Aucune decision structuree pour le moment.'
               : null,
-          trailing: Wrap(
-            spacing: 6,
-            children: [
-              TextButton(
-                onPressed: onOpenDecisionPackChecklist,
-                child: const Text('Pack checklist'),
-              ),
-              TextButton(
-                onPressed: onOpenDecisionPackExecutive,
-                child: const Text('Pack executive'),
-              ),
+          trailing: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'checklist', label: Text('Checklist')),
+              ButtonSegment(value: 'executive', label: Text('Executive')),
             ],
+            selected: {selectedDecisionPackMode},
+            onSelectionChanged: (val) => onDecisionPackModeChange(val.first),
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
         ),
         ...decisions.take(4).map(
@@ -4643,11 +4655,11 @@ class _ContextPanel extends StatelessWidget {
               (item) => ListTile(
                 dense: true,
                 leading: Icon(
-              item.target == 'slack'
-                ? Icons.tag_rounded
-                : item.target == 'notion'
-                  ? Icons.note_alt_outlined
-                  : Icons.table_chart_outlined,
+                  item.target == 'slack'
+                      ? Icons.tag_rounded
+                      : item.target == 'notion'
+                          ? Icons.note_alt_outlined
+                          : Icons.table_chart_outlined,
                   size: 18,
                   color: item.isSuccess
                       ? Colors.green

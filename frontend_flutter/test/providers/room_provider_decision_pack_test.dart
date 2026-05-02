@@ -22,6 +22,7 @@ class _FakeRoomService extends RoomService {
   int trackEventCalls = 0;
   int readinessCalls = 0;
   int productKpiCalls = 0;
+  int getDecisionPackCalls = 0;
   String lastShareTarget = '';
 
   @override
@@ -31,6 +32,7 @@ class _FakeRoomService extends RoomService {
     bool includeOpenTasks = true,
     int limit = 10,
   }) async {
+    getDecisionPackCalls += 1;
     final handler = onGetDecisionPack;
     if (handler != null) {
       return handler(
@@ -294,5 +296,29 @@ void main() {
     expect(provider.productKpiDashboard!.sinceDays, 7);
     expect(provider.productKpiDashboard!.metrics.exportRate, 40);
     expect(provider.loadingProductKpiDashboard, isFalse);
+  });
+
+  test('setDecisionPackMode persists mode and reloads pack', () async {
+    final service = _FakeRoomService();
+    final provider = RoomProvider(service: service)..currentRoom = _room();
+
+    expect(provider.decisionPackMode, 'checklist');
+
+    final ok = await provider.setDecisionPackMode('executive');
+
+    expect(ok, isTrue);
+    expect(provider.decisionPackMode, 'executive');
+    expect(service.getDecisionPackCalls, 1);
+    expect(provider.decisionPack?.pack.mode, 'executive');
+  });
+
+  test('closeRoom resets decisionPackMode to checklist', () async {
+    final service = _FakeRoomService();
+    final provider = RoomProvider(service: service)..currentRoom = _room();
+    provider.decisionPackMode = 'executive';
+
+    await provider.closeRoom();
+
+    expect(provider.decisionPackMode, 'checklist');
   });
 }

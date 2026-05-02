@@ -305,10 +305,19 @@ export function validateDecisionPackSharePayload(body) {
     });
   }
 
+  const mode = String(body?.mode || 'executive').trim().toLowerCase();
+  if (!['checklist', 'executive'].includes(mode)) {
+    throw badRequest('mode must be one of: checklist, executive', {
+      field: 'mode',
+      received: mode,
+    });
+  }
+
   const note = String(body?.note || '').trim().slice(0, 300);
   const idempotencyKey = String(body?.idempotencyKey || '').trim().slice(0, 120);
   return {
     target,
+    mode,
     note,
     idempotencyKey,
   };

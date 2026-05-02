@@ -145,7 +145,7 @@ await test('POST decision-pack/events stores event', async (t) => {
   assert.equal(res.status, 201);
 });
 
-await test('GET decision-pack/aggregate returns counters', async (t) => {
+await test('GET decision-pack aggregate returns counters', async (t) => {
   forceMongoReady(); t.after(() => restoreMongoReady());
   const fakeRoomId = '507f191e810c19729de860b0'; const fakeUserId = 'user_pack_7';
   const restoreFindRoom = withStub(Room, 'findById', async () => ({ _id: fakeRoomId, name: 'Ops', members: [{ userId: fakeUserId, role: 'owner' }] }));
@@ -157,4 +157,33 @@ await test('GET decision-pack/aggregate returns counters', async (t) => {
   const json = JSON.parse(res.data);
   assert.equal(json.aggregate.events.viewed, 3);
   assert.equal(json.aggregate.events.shared, 1);
+});
+
+await test('GET decision-pack checklist mode renders task list', async (t) => {
+  forceMongoReady(); t.after(() => restoreMongoReady());
+  const fakeRoomId = '507f191e810c19729de860b2'; const fakeUserId = 'user_pack_9';
+  const restoreFindRoom = withStub(Room, 'findById', async () => ({ _id: fakeRoomId, name: 'Growth Team', members: [{ userId: fakeUserId, role: 'owner' }] }));
+  const restoreFindDecisions = withStub(WorkspaceDecision, 'find', () => buildChain([{ _id: 'd1', roomId: fakeRoomId, title: 'Launch pilot', summary: 'Start small.' }]));
+  const restoreFindTasks = withStub(WorkspaceTask, 'find', () => buildChain([{ _id: 't1', roomId: fakeRoomId, decisionId: 'd1', title: 'Prepare outreach list', ownerName: 'Lina' }]));
+  t.after(() => { restoreFindRoom(); restoreFindDecisions(); restoreFindTasks(); });
+  const app = createApp(); const server = app.listen(0); t.after(() => server.close()); await new Promise((r) => server.once('listening', r)); const port = server.address().port;
+  const res = await requestJson({ port, path: `/api/rooms/${fakeRoomId}/decision-pack?mode=checklist`, headers: { 'x-user-id': fakeUserId, 'x-display-name': 'Lina' } });
+  assert.equal(res.status, 200);
+  const json = JSON.parse(res.data);
+  assert.equal(json.pack.mode, 'checklist');
+  assert.match(json.pack.markdown, /## Decisions\n/);
+  assert.match(json.pack.markdown, /Prepare outreach list/);
+  assert.doesNotMatch(json.pack.markdown, /Executive Decisions/);
+});
+
+await test('POST decision-pack/share accepts mode in body and rejects invalid mode', async (t) => {
+  forceMongoReady(); t.after(() => restoreMongoReady());
+  const fakeRoomId = '507f191e810c19729de860b3'; const fakeUserId = 'user_pack_10';
+  const restoreFindRoom = withStub(Room, 'findById', async () => ({ _id: fakeRoomId, name: 'Ops', members: [{ userId: fakeUserId, role: 'owner' }] }));
+  t.after(() => restoreFindRoom());
+  const app = createApp(); const server = app.listen(0); t.after(() => server.close()); await new Promise((r) => server.once('listening', r)); const port = server.address().port;
+  const invalidRes = await requestJson({ port, method: 'POST', path: `/api/rooms/${fakeRoomId}/decision-pack/share`, headers: { 'x-user-id': fakeUserId }, body: { target: 'csv', mode: 'invalid' } });
+  assert.equal(invalidRes.status, 400);
+  const invalidJson = JSON.parse(invalidRes.data);
+  assert.match(invalidJson.error, /mode/i);
 });
