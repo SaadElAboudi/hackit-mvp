@@ -12,7 +12,7 @@ class _FakeRoomService extends RoomService {
     required int limit,
   })? onGetDecisionPack;
 
-  Future<void> Function({
+  Future<DecisionPackShareResult> Function({
     required String roomId,
     required String target,
     required String mode,
@@ -57,7 +57,7 @@ class _FakeRoomService extends RoomService {
   }
 
   @override
-  Future<void> shareDecisionPack(
+  Future<DecisionPackShareResult> shareDecisionPack(
     String roomId, {
     required String target,
     String mode = 'executive',
@@ -69,6 +69,15 @@ class _FakeRoomService extends RoomService {
     if (handler != null) {
       return handler(roomId: roomId, target: target, mode: mode, note: note);
     }
+    return DecisionPackShareResult(
+      id: 'share-1',
+      target: target,
+      status: 'success',
+      mode: mode,
+      externalUrl: '',
+      csvFileName: target == 'csv' ? 'decision-pack.csv' : '',
+      csvContent: target == 'csv' ? 'col1,col2\nvalue1,value2' : '',
+    );
   }
 
   @override

@@ -182,6 +182,7 @@ class RoomProvider extends ChangeNotifier {
   DecisionPackResult? decisionPack;
   DecisionPackAggregate? decisionPackAggregate;
   DecisionPackReadiness? decisionPackReadiness;
+  DecisionPackShareResult? lastDecisionPackShare;
   bool loadingDecisionPack = false;
   bool loadingDecisionPackAggregate = false;
   bool loadingDecisionPackReadiness = false;
@@ -1235,9 +1236,10 @@ class RoomProvider extends ChangeNotifier {
     final room = currentRoom;
     if (room == null) return false;
     actionError = null;
+    lastDecisionPackShare = null;
     notifyListeners();
     try {
-      await _svc.shareDecisionPack(
+      lastDecisionPackShare = await _svc.shareDecisionPack(
         room.id,
         target: target,
         mode: mode,
@@ -1339,6 +1341,7 @@ class RoomProvider extends ChangeNotifier {
     decisionPack = null;
     decisionPackAggregate = null;
     decisionPackReadiness = null;
+    lastDecisionPackShare = null;
     slackIntegration = null;
     notionIntegration = null;
     loadingNotionPages = false;

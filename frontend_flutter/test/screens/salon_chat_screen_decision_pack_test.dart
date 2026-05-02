@@ -84,6 +84,15 @@ class _FakeRoomProvider extends RoomProvider {
     String note = '',
   }) async {
     decisionPackShareCalls += 1;
+    lastDecisionPackShare = DecisionPackShareResult(
+      id: 'share-${decisionPackShareCalls}',
+      target: target,
+      status: 'success',
+      mode: mode,
+      externalUrl: '',
+      csvFileName: target == 'csv' ? 'decision-pack.csv' : '',
+      csvContent: target == 'csv' ? 'a,b\n1,2' : '',
+    );
     return true;
   }
 
@@ -212,6 +221,7 @@ void main() {
 
     expect(find.text('Decision Pack → Slack'), findsOneWidget);
     expect(find.text('Decision Pack → Notion'), findsOneWidget);
+    expect(find.text('Decision Pack → CSV'), findsOneWidget);
   });
 
   testWidgets('checks readiness before Decision Pack share', (tester) async {

@@ -525,6 +525,43 @@ class DecisionPackAggregate {
   }
 }
 
+class DecisionPackShareResult {
+  final String id;
+  final String target;
+  final String status;
+  final String mode;
+  final String externalUrl;
+  final String csvFileName;
+  final String csvContent;
+
+  const DecisionPackShareResult({
+    required this.id,
+    required this.target,
+    required this.status,
+    required this.mode,
+    required this.externalUrl,
+    required this.csvFileName,
+    required this.csvContent,
+  });
+
+  bool get isCsv => target == 'csv';
+  bool get hasCsvContent => csvContent.trim().isNotEmpty;
+
+  factory DecisionPackShareResult.fromJson(Map<String, dynamic> j) {
+    final share = (j['share'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final csv = (j['csv'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return DecisionPackShareResult(
+      id: share['id']?.toString() ?? '',
+      target: share['target']?.toString() ?? '',
+      status: share['status']?.toString() ?? '',
+      mode: share['mode']?.toString() ?? 'executive',
+      externalUrl: share['externalUrl']?.toString() ?? '',
+      csvFileName: csv['fileName']?.toString() ?? '',
+      csvContent: csv['content']?.toString() ?? '',
+    );
+  }
+}
+
 class DecisionPackReadiness {
   final bool ready;
   final int score;

@@ -665,7 +665,7 @@ class RoomService {
     return DecisionPackResult.fromJson(_parse(r));
   }
 
-  Future<void> shareDecisionPack(
+  Future<DecisionPackShareResult> shareDecisionPack(
     String roomId, {
     required String target,
     String mode = 'executive',
@@ -683,7 +683,7 @@ class RoomService {
           }),
         )
         .timeout(const Duration(seconds: 20));
-    _parse(res);
+    return DecisionPackShareResult.fromJson(_parse(res));
   }
 
   Future<DecisionPackReadiness> getDecisionPackReadiness(String roomId) async {

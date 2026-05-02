@@ -65,6 +65,7 @@ import {
     validateCreateWorkspacePagePayload,
     validateCreateWorkspaceTaskPayload,
     validateConvertDecisionToTasksPayload,
+    validateDecisionPackSharePayload,
     validateDirectivesPayload,
     validateDecisionPackAggregateQuery,
     validateDecisionPackEventPayload,
@@ -280,6 +281,74 @@ function formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt, mode 
         lines.push('- Align on expected business impact and decision success criteria.');
     }
     return lines.join('\n');
+}
+
+function csvEscape(value) {
+    const text = String(value ?? '').replace(/\r?\n/g, ' ').trim();
+    return `"${text.replace(/"/g, '""')}"`;
+}
+
+function formatDecisionPackCsv({ room, decisions, tasks, generatedAt }) {
+    const safeRoomName = String(room?.name || 'Channel').trim() || 'Channel';
+    const decisionById = new Map(
+        decisions.map((decision) => [String(decision?._id || ''), String(decision?.title || '').trim()])
+    );
+
+    const rows = [
+        [
+            'generated_at',
+            'room_id',
+            'room_name',
+            'section',
+            'decision_id',
+            'decision_title',
+            'task_id',
+            'task_title',
+            'task_status',
+            'owner_name',
+            'due_date',
+            'source_type',
+        ],
+    ];
+
+    decisions.forEach((decision) => {
+        rows.push([
+            generatedAt.toISOString(),
+            String(room?._id || room?.id || ''),
+            safeRoomName,
+            'decision',
+            String(decision?._id || ''),
+            String(decision?.title || '').trim(),
+            '',
+            '',
+            '',
+            '',
+            '',
+            String(decision?.sourceType || '').trim(),
+        ]);
+    });
+
+    tasks.forEach((task) => {
+        const decisionId = String(task?.decisionId || '');
+        rows.push([
+            generatedAt.toISOString(),
+            String(room?._id || room?.id || ''),
+            safeRoomName,
+            decisionId ? 'task_linked' : 'task_open',
+            decisionId,
+            decisionById.get(decisionId) || '',
+            String(task?._id || ''),
+            String(task?.title || '').trim(),
+            String(task?.status || '').trim(),
+            String(task?.ownerName || '').trim(),
+            task?.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : '',
+            '',
+        ]);
+    });
+
+    return rows
+        .map((row) => row.map((cell) => csvEscape(cell)).join(','))
+        .join('\n');
 }
 
 function evaluateDecisionPackReadiness({ decisions = [], tasks = [] }) {
@@ -2094,7 +2163,7 @@ router.get('/:id/decision-pack/readiness', async (req, res, next) => {
     }
 });
 
-router.post('/:id/decision-pack/share', validateBody(validateSharePayload), async (req, res, next) => {
+router.post('/:id/decision-pack/share', validateBody(validateDecisionPackSharePayload), async (req, res, next) => {
     try {
         const room = await loadRoomOr404(req.params.id, res);
         if (!room) return;
@@ -2103,12 +2172,14 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
         }
 
         const { target, note, idempotencyKey } = req.validatedBody;
-        const connector = getExportConnector(target);
-        if (!connector) {
-            return res.status(400).json({ error: 'Unsupported target' });
-        }
-        if (!connector.isConfigured(room)) {
-            return res.status(412).json({ error: `${connector.target} integration is not configured` });
+        const connector = target === 'csv' ? null : getExportConnector(target);
+        if (target !== 'csv') {
+            if (!connector) {
+                return res.status(400).json({ error: 'Unsupported target' });
+            }
+            if (!connector.isConfigured(room)) {
+                return res.status(412).json({ error: `${connector.target} integration is not configured` });
+            }
         }
 
         const mode = String(req.query?.mode || 'executive').trim().toLowerCase();
@@ -2121,12 +2192,22 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
             includeOpenTasks: mode === 'checklist',
         });
         const readiness = evaluateDecisionPackReadiness({ decisions, tasks });
-        const summary = formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt: new Date(), mode });
+        const generatedAt = new Date();
+        const summary = formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt, mode });
+        const csvContent = formatDecisionPackCsv({
+            room,
+            decisions,
+            tasks,
+            generatedAt,
+        });
+        const csvFileName = `decision-pack-${String(room._id || req.params.id)}-${generatedAt
+            .toISOString()
+            .slice(0, 10)}.csv`;
 
         const history = await RoomShareHistory.create({
             roomId: room._id,
             artifactId: null,
-            target: connector.target,
+            target: target === 'csv' ? 'csv' : connector.target,
             status: 'pending',
             idempotencyKey: idempotencyKey || '',
             actorId: req.userId,
@@ -2134,6 +2215,30 @@ router.post('/:id/decision-pack/share', validateBody(validateSharePayload), asyn
             note: note || 'Decision Pack export',
             summary: summary.slice(0, 1000),
         });
+
+        if (target === 'csv') {
+            history.status = 'success';
+            history.metadata = {
+                format: 'csv',
+                fileName: csvFileName,
+                rowCount: Math.max(0, decisions.length + tasks.length),
+            };
+            await history.save();
+            return res.status(201).json({
+                share: {
+                    id: String(history._id),
+                    target: history.target,
+                    status: history.status,
+                    externalUrl: history.externalUrl,
+                    mode,
+                },
+                csv: {
+                    fileName: csvFileName,
+                    content: csvContent,
+                },
+                readiness,
+            });
+        }
 
         try {
             const outcome = await executeWithRetry(

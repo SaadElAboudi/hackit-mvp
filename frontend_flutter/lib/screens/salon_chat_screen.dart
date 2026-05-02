@@ -1313,6 +1313,33 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     if (!mounted || !confirmed) return;
     final ok = await prov.shareDecisionPack(target: target, mode: mode);
     if (!mounted) return;
+    final csvShare = prov.lastDecisionPackShare;
+    if (ok && target == 'csv' && csvShare != null && csvShare.hasCsvContent) {
+      final fileName = csvShare.csvFileName.isNotEmpty
+          ? csvShare.csvFileName
+          : 'decision-pack.csv';
+      if (kIsWeb) {
+        triggerCsvDownload(csvShare.csvContent, fileName);
+      } else {
+        await Clipboard.setData(ClipboardData(text: csvShare.csvContent));
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            kIsWeb
+                ? 'CSV telecharge: $fileName'
+                : 'CSV copie dans le presse-papiers',
+          ),
+          action: !kIsWeb
+              ? SnackBarAction(
+                  label: 'Voir',
+                  onPressed: () => _showDecisionPackCsvDialog(csvShare),
+                )
+              : null,
+        ),
+      );
+      return;
+    }
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -1320,6 +1347,43 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
               ? 'Decision Pack partage vers $label'
               : (prov.actionError ?? 'Partage Decision Pack impossible'),
         ),
+      ),
+    );
+  }
+
+  Future<void> _showDecisionPackCsvDialog(DecisionPackShareResult share) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          share.csvFileName.isNotEmpty
+              ? 'Export CSV (${share.csvFileName})'
+              : 'Export CSV',
+        ),
+        content: SizedBox(
+          width: 680,
+          child: SingleChildScrollView(
+            child: SelectableText(share.csvContent),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Fermer'),
+          ),
+          FilledButton.tonal(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: share.csvContent));
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('CSV copie dans le presse-papiers')),
+              );
+            },
+            child: const Text('Copier'),
+          ),
+        ],
       ),
     );
   }
@@ -1689,6 +1753,8 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           _shareDecisionPack(target: 'slack', label: 'Slack'),
       onShareDecisionPackToNotion: () =>
           _shareDecisionPack(target: 'notion', label: 'Notion'),
+      onShareDecisionPackToCsv: () =>
+          _shareDecisionPack(target: 'csv', label: 'CSV'),
       onRefreshIntegrations: prov.refreshIntegrationStatus,
       onRefreshShareHistory: () => prov.refreshShareHistory(),
       onRefreshDecisionPackAggregate: _refreshDecisionPackAggregate,
@@ -3808,6 +3874,7 @@ class _ContextPanel extends StatelessWidget {
   final Future<void> Function() onOpenDecisionPackExecutive;
   final Future<void> Function() onShareDecisionPackToSlack;
   final Future<void> Function() onShareDecisionPackToNotion;
+  final Future<void> Function() onShareDecisionPackToCsv;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
   final Future<void> Function(int sinceDays) onRefreshDecisionPackAggregate;
@@ -3846,6 +3913,7 @@ class _ContextPanel extends StatelessWidget {
     required this.onOpenDecisionPackExecutive,
     required this.onShareDecisionPackToSlack,
     required this.onShareDecisionPackToNotion,
+    required this.onShareDecisionPackToCsv,
     required this.onRefreshIntegrations,
     required this.onRefreshShareHistory,
     required this.onRefreshDecisionPackAggregate,
@@ -4486,6 +4554,11 @@ class _ContextPanel extends StatelessWidget {
                 icon: const Icon(Icons.fact_check_outlined, size: 16),
                 label: const Text('Decision Pack → Notion'),
               ),
+              FilledButton.icon(
+                onPressed: onShareDecisionPackToCsv,
+                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                label: const Text('Decision Pack → CSV'),
+              ),
               FilledButton.tonalIcon(
                 onPressed:
                     slackIntegration?.connected == true ? onShareToSlack : null,
@@ -4516,7 +4589,7 @@ class _ContextPanel extends StatelessWidget {
         sectionTitle(
           'Historique de partage',
           subtitle: shareHistory.isEmpty
-              ? 'Aucun export vers Slack/Notion pour ce channel.'
+            ? 'Aucun export vers Slack/Notion/CSV pour ce channel.'
               : null,
         ),
         if (loadingShareHistory)

@@ -16,7 +16,7 @@ const RoomShareHistorySchema = new mongoose.Schema(
         },
         target: {
             type: String,
-            enum: ['slack', 'notion'],
+            enum: ['slack', 'notion', 'csv'],
             required: true,
             index: true,
         },

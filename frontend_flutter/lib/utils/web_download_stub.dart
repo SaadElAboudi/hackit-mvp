@@ -3,3 +3,7 @@
 void triggerMarkdownDownload(String content, String fileName) {
   // No-op on non-web platforms
 }
+
+void triggerCsvDownload(String content, String fileName) {
+  // No-op on non-web platforms
+}

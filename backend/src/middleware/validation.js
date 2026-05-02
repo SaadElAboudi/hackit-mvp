@@ -274,8 +274,8 @@ export function validateShareHistoryQuery(query) {
     ? Math.min(100, Math.max(1, Math.floor(limitRaw)))
     : 20;
 
-  if (target && !['slack', 'notion'].includes(target)) {
-    throw badRequest('target must be one of: slack, notion', {
+  if (target && !['slack', 'notion', 'csv'].includes(target)) {
+    throw badRequest('target must be one of: slack, notion, csv', {
       field: 'target',
       received: target,
     });
@@ -293,6 +293,24 @@ export function validateShareHistoryQuery(query) {
     status,
     artifactId,
     limit,
+  };
+}
+
+export function validateDecisionPackSharePayload(body) {
+  const target = String(body?.target || '').trim().toLowerCase();
+  if (!['slack', 'notion', 'csv'].includes(target)) {
+    throw badRequest('target must be one of: slack, notion, csv', {
+      field: 'target',
+      received: target,
+    });
+  }
+
+  const note = String(body?.note || '').trim().slice(0, 300);
+  const idempotencyKey = String(body?.idempotencyKey || '').trim().slice(0, 120);
+  return {
+    target,
+    note,
+    idempotencyKey,
   };
 }
 
