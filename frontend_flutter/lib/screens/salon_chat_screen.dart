@@ -1141,10 +1141,11 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
   Future<void> _shareToIntegration({
     required String target,
     required String label,
+    String note = '',
   }) async {
     final prov = context.read<RoomProvider>();
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await prov.shareToIntegration(target: target);
+    final ok = await prov.shareToIntegration(target: target, note: note);
     if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(
@@ -1399,6 +1400,32 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           prov.actionError ?? 'Impossible de charger les KPI Decision Pack',
         ),
       ),
+    );
+  }
+
+  Future<void> _retryShareHistoryItem(RoomShareHistoryItem item) async {
+    final target = item.target.toLowerCase();
+    final label = target == 'slack'
+        ? 'Slack'
+        : target == 'notion'
+            ? 'Notion'
+            : 'CSV';
+    final note = item.note.trim();
+    final looksDecisionPack =
+        target == 'csv' || note.toLowerCase().contains('decision pack');
+
+    if (looksDecisionPack) {
+      await _shareDecisionPack(
+        target: target,
+        label: label,
+      );
+      return;
+    }
+
+    await _shareToIntegration(
+      target: target,
+      label: label,
+      note: note,
     );
   }
 
@@ -1755,6 +1782,7 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
           _shareDecisionPack(target: 'notion', label: 'Notion'),
       onShareDecisionPackToCsv: () =>
           _shareDecisionPack(target: 'csv', label: 'CSV'),
+        onRetryShareHistory: _retryShareHistoryItem,
       onRefreshIntegrations: prov.refreshIntegrationStatus,
       onRefreshShareHistory: () => prov.refreshShareHistory(),
       onRefreshDecisionPackAggregate: _refreshDecisionPackAggregate,
@@ -3875,6 +3903,7 @@ class _ContextPanel extends StatelessWidget {
   final Future<void> Function() onShareDecisionPackToSlack;
   final Future<void> Function() onShareDecisionPackToNotion;
   final Future<void> Function() onShareDecisionPackToCsv;
+  final Future<void> Function(RoomShareHistoryItem item) onRetryShareHistory;
   final Future<void> Function() onRefreshIntegrations;
   final Future<void> Function() onRefreshShareHistory;
   final Future<void> Function(int sinceDays) onRefreshDecisionPackAggregate;
@@ -3914,6 +3943,7 @@ class _ContextPanel extends StatelessWidget {
     required this.onShareDecisionPackToSlack,
     required this.onShareDecisionPackToNotion,
     required this.onShareDecisionPackToCsv,
+    required this.onRetryShareHistory,
     required this.onRefreshIntegrations,
     required this.onRefreshShareHistory,
     required this.onRefreshDecisionPackAggregate,
@@ -4589,7 +4619,7 @@ class _ContextPanel extends StatelessWidget {
         sectionTitle(
           'Historique de partage',
           subtitle: shareHistory.isEmpty
-            ? 'Aucun export vers Slack/Notion/CSV pour ce channel.'
+              ? 'Aucun export vers Slack/Notion/CSV pour ce channel.'
               : null,
         ),
         if (loadingShareHistory)
@@ -4613,9 +4643,11 @@ class _ContextPanel extends StatelessWidget {
               (item) => ListTile(
                 dense: true,
                 leading: Icon(
-                  item.target == 'slack'
-                      ? Icons.tag_rounded
-                      : Icons.note_alt_outlined,
+              item.target == 'slack'
+                ? Icons.tag_rounded
+                : item.target == 'notion'
+                  ? Icons.note_alt_outlined
+                  : Icons.table_chart_outlined,
                   size: 18,
                   color: item.isSuccess
                       ? Colors.green
@@ -4635,13 +4667,23 @@ class _ContextPanel extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                trailing: item.retries > 0
-                    ? Chip(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (item.retries > 0)
+                      Chip(
                         label: Text('retry ${item.retries}'),
                         visualDensity: VisualDensity.compact,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      )
-                    : null,
+                      ),
+                    if (item.isFailed)
+                      IconButton(
+                        tooltip: 'Reessayer',
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        onPressed: () => onRetryShareHistory(item),
+                      ),
+                  ],
+                ),
               ),
             ),
         Padding(
@@ -4774,7 +4816,9 @@ class _ContextPanel extends StatelessWidget {
                     leading: Icon(
                       item.target == 'slack'
                           ? Icons.tag_rounded
-                          : Icons.note_alt_outlined,
+                          : item.target == 'notion'
+                              ? Icons.note_alt_outlined
+                              : Icons.table_chart_outlined,
                       color: item.isSuccess ? Colors.green : scheme.tertiary,
                     ),
                     title: Text(
@@ -4789,12 +4833,23 @@ class _ContextPanel extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    trailing: Text(
-                      _timeAgo(item.createdAt),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: scheme.onSurface.withValues(alpha: 0.55),
-                      ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _timeAgo(item.createdAt),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: scheme.onSurface.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        if (item.isFailed)
+                          IconButton(
+                            tooltip: 'Reessayer',
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            onPressed: () => onRetryShareHistory(item),
+                          ),
+                      ],
                     ),
                   );
                 },
