@@ -881,3 +881,20 @@ export function validateDecisionPackAggregateQuery(query) {
   }
   return { sinceDays: Math.trunc(sinceDays) };
 }
+
+export function validateKpiDashboardQuery(query) {
+  const raw = query?.sinceDays;
+  if (raw === undefined || raw === null || raw === '') {
+    return { sinceDays: 30 };
+  }
+
+  const sinceDays = Number(raw);
+  if (!Number.isFinite(sinceDays) || ![7, 30, 90].includes(Math.trunc(sinceDays))) {
+    throw badRequest('sinceDays must be one of 7, 30, 90', {
+      field: 'sinceDays',
+      received: raw,
+    });
+  }
+
+  return { sinceDays: Math.trunc(sinceDays) };
+}

@@ -186,6 +186,14 @@ class RoomService {
     return DomainTemplateStatsResponse.fromJson(r);
   }
 
+  Future<ProductKpiDashboard> fetchProductKpiDashboard({
+    int sinceDays = 30,
+  }) async {
+    final normalizedDays = [7, 30, 90].contains(sinceDays) ? sinceDays : 30;
+    final r = await _get('/api/rooms/kpi/dashboard?sinceDays=$normalizedDays');
+    return ProductKpiDashboard.fromJson(r);
+  }
+
   Future<Room> createRoom({
     required String name,
     String type = 'group',

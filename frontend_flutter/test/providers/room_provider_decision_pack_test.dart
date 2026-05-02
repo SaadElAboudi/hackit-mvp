@@ -21,6 +21,7 @@ class _FakeRoomService extends RoomService {
   int shareCalls = 0;
   int trackEventCalls = 0;
   int readinessCalls = 0;
+  int productKpiCalls = 0;
   String lastShareTarget = '';
 
   @override
@@ -136,6 +137,32 @@ class _FakeRoomService extends RoomService {
       shareFailed: 0,
     );
   }
+
+  @override
+  Future<ProductKpiDashboard> fetchProductKpiDashboard({
+    int sinceDays = 30,
+  }) async {
+    productKpiCalls += 1;
+    return ProductKpiDashboard(
+      sinceDays: sinceDays,
+      since: DateTime.now(),
+      totals: const ProductKpiTotals(
+        roomsTotal: 3,
+        roomsActive: 2,
+        aiMessages: 10,
+        feedbackEvents: 4,
+        decisionPackEvents: 6,
+      ),
+      metrics: const ProductKpiMetrics(
+        activationRate: 66.7,
+        usefulAnswerRate: 50,
+        feedbackScore: 0.25,
+        regenerateRate: 50,
+        exportRate: 40,
+        ttvMedianMs: null,
+      ),
+    );
+  }
 }
 
 Room _room() {
@@ -245,5 +272,18 @@ void main() {
     expect(provider.decisionPackAggregate, isNotNull);
     expect(provider.decisionPackAggregate!.viewed, 3);
     expect(provider.loadingDecisionPackAggregate, isFalse);
+  });
+
+  test('loadProductKpiDashboard stores dashboard payload', () async {
+    final service = _FakeRoomService();
+    final provider = RoomProvider(service: service);
+
+    await provider.loadProductKpiDashboard(sinceDays: 7);
+
+    expect(service.productKpiCalls, 1);
+    expect(provider.productKpiDashboard, isNotNull);
+    expect(provider.productKpiDashboard!.sinceDays, 7);
+    expect(provider.productKpiDashboard!.metrics.exportRate, 40);
+    expect(provider.loadingProductKpiDashboard, isFalse);
   });
 }

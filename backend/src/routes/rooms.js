@@ -71,6 +71,7 @@ import {
     validateDiscoverNotionPagesPayload,
     validateEmptyBody,
     validateFeedbackAggregateQuery,
+    validateKpiDashboardQuery,
     validateResolveCommentPayload,
     validateResolveWorkspaceCommentPayload,
     validateExtractWorkspaceDecisionsPayload,
@@ -973,6 +974,164 @@ router.get('/templates/stats', async (req, res) => {
     } catch (err) {
         console.error('[rooms] template stats error:', err);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/rooms/kpi/dashboard
+ * Returns product KPI dashboard metrics for rooms visible to the current user.
+ */
+router.get('/kpi/dashboard', async (req, res, next) => {
+    try {
+        const { sinceDays } = validateKpiDashboardQuery(req.query || {});
+        const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+
+        const visibleRooms = await Room.find(
+            { 'members.userId': req.userId },
+            { _id: 1 }
+        ).lean();
+        const roomIds = visibleRooms
+            .map((room) => room?._id)
+            .filter(Boolean);
+
+        if (!roomIds.length) {
+            return res.json({
+                dashboard: {
+                    sinceDays,
+                    since: since.toISOString(),
+                    totals: {
+                        roomsTotal: 0,
+                        roomsActive: 0,
+                        aiMessages: 0,
+                        feedbackEvents: 0,
+                        decisionPackEvents: 0,
+                    },
+                    metrics: {
+                        activationRate: 0,
+                        usefulAnswerRate: 0,
+                        feedbackScore: 0,
+                        regenerateRate: 0,
+                        exportRate: 0,
+                        ttvMedianMs: null,
+                    },
+                    feedback: {
+                        pertinent: 0,
+                        moyen: 0,
+                        hors_sujet: 0,
+                        total: 0,
+                    },
+                    decisionPack: {
+                        viewed: 0,
+                        shared: 0,
+                        share_failed: 0,
+                    },
+                    notes: {
+                        regenerateRate:
+                            'Proxy based on feedback labels (moyen + hors_sujet) / total feedback.',
+                        ttvMedianMs:
+                            'Not available yet: requires dedicated TTV event instrumentation.',
+                    },
+                },
+            });
+        }
+
+        const roomFilter = { roomId: { $in: roomIds }, createdAt: { $gte: since } };
+
+        const [activeRoomsRaw, aiMessages, feedbackEvents, decisionStats] = await Promise.all([
+            RoomMessage.aggregate([
+                {
+                    $match: roomFilter,
+                },
+                {
+                    $group: {
+                        _id: '$roomId',
+                    },
+                },
+            ]),
+            RoomMessage.countDocuments({ ...roomFilter, isAI: true }),
+            RoomFeedbackEvent.find(roomFilter, { ratingLabel: 1 }).lean(),
+            RoomDecisionPackEvent.aggregate([
+                {
+                    $match: roomFilter,
+                },
+                {
+                    $group: {
+                        _id: '$eventType',
+                        count: { $sum: 1 },
+                    },
+                },
+            ]),
+        ]);
+
+        const activeRooms = activeRoomsRaw.length;
+
+        const feedback = {
+            pertinent: 0,
+            moyen: 0,
+            hors_sujet: 0,
+            total: 0,
+        };
+        feedbackEvents.forEach((event) => {
+            const label = String(event?.ratingLabel || '').trim();
+            if (Object.hasOwn(feedback, label)) {
+                feedback[label] += 1;
+                feedback.total += 1;
+            }
+        });
+
+        const decisionPack = {
+            viewed: 0,
+            shared: 0,
+            share_failed: 0,
+        };
+        decisionStats.forEach((item) => {
+            if (item?._id && Object.hasOwn(decisionPack, item._id)) {
+                decisionPack[item._id] = Number(item.count || 0);
+            }
+        });
+
+        const feedbackScore = feedback.total
+            ? Math.round(((feedback.pertinent - feedback.hors_sujet) / feedback.total) * 100) / 100
+            : 0;
+        const regenerateRate = feedback.total
+            ? toPercent(feedback.moyen + feedback.hors_sujet, feedback.total)
+            : 0;
+        const exportRate = decisionPack.viewed
+            ? toPercent(decisionPack.shared, decisionPack.viewed)
+            : 0;
+
+        return res.json({
+            dashboard: {
+                sinceDays,
+                since: since.toISOString(),
+                totals: {
+                    roomsTotal: roomIds.length,
+                    roomsActive: activeRooms,
+                    aiMessages,
+                    feedbackEvents: feedback.total,
+                    decisionPackEvents:
+                        decisionPack.viewed + decisionPack.shared + decisionPack.share_failed,
+                },
+                metrics: {
+                    activationRate: toPercent(activeRooms, roomIds.length),
+                    usefulAnswerRate: toPercent(feedback.pertinent, feedback.total),
+                    feedbackScore,
+                    regenerateRate,
+                    exportRate,
+                    ttvMedianMs: null,
+                },
+                feedback,
+                decisionPack,
+                notes: {
+                    regenerateRate:
+                        'Proxy based on feedback labels (moyen + hors_sujet) / total feedback.',
+                    ttvMedianMs:
+                        'Not available yet: requires dedicated TTV event instrumentation.',
+                },
+            },
+        });
+    } catch (err) {
+        return next(err);
     }
 });
 

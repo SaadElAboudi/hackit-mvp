@@ -571,6 +571,85 @@ class DecisionPackReadiness {
   }
 }
 
+class ProductKpiTotals {
+  final int roomsTotal;
+  final int roomsActive;
+  final int aiMessages;
+  final int feedbackEvents;
+  final int decisionPackEvents;
+
+  const ProductKpiTotals({
+    required this.roomsTotal,
+    required this.roomsActive,
+    required this.aiMessages,
+    required this.feedbackEvents,
+    required this.decisionPackEvents,
+  });
+
+  factory ProductKpiTotals.fromJson(Map<String, dynamic> j) => ProductKpiTotals(
+        roomsTotal: (j['roomsTotal'] as num?)?.toInt() ?? 0,
+        roomsActive: (j['roomsActive'] as num?)?.toInt() ?? 0,
+        aiMessages: (j['aiMessages'] as num?)?.toInt() ?? 0,
+        feedbackEvents: (j['feedbackEvents'] as num?)?.toInt() ?? 0,
+        decisionPackEvents: (j['decisionPackEvents'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class ProductKpiMetrics {
+  final double activationRate;
+  final double usefulAnswerRate;
+  final double feedbackScore;
+  final double regenerateRate;
+  final double exportRate;
+  final int? ttvMedianMs;
+
+  const ProductKpiMetrics({
+    required this.activationRate,
+    required this.usefulAnswerRate,
+    required this.feedbackScore,
+    required this.regenerateRate,
+    required this.exportRate,
+    required this.ttvMedianMs,
+  });
+
+  factory ProductKpiMetrics.fromJson(Map<String, dynamic> j) =>
+      ProductKpiMetrics(
+        activationRate: (j['activationRate'] as num?)?.toDouble() ?? 0,
+        usefulAnswerRate: (j['usefulAnswerRate'] as num?)?.toDouble() ?? 0,
+        feedbackScore: (j['feedbackScore'] as num?)?.toDouble() ?? 0,
+        regenerateRate: (j['regenerateRate'] as num?)?.toDouble() ?? 0,
+        exportRate: (j['exportRate'] as num?)?.toDouble() ?? 0,
+        ttvMedianMs: (j['ttvMedianMs'] as num?)?.toInt(),
+      );
+}
+
+class ProductKpiDashboard {
+  final int sinceDays;
+  final DateTime since;
+  final ProductKpiTotals totals;
+  final ProductKpiMetrics metrics;
+
+  const ProductKpiDashboard({
+    required this.sinceDays,
+    required this.since,
+    required this.totals,
+    required this.metrics,
+  });
+
+  factory ProductKpiDashboard.fromJson(Map<String, dynamic> j) {
+    final dashboard = (j['dashboard'] as Map?)?.cast<String, dynamic>() ?? j;
+    return ProductKpiDashboard(
+      sinceDays: (dashboard['sinceDays'] as num?)?.toInt() ?? 30,
+      since: DateTime.tryParse(dashboard['since']?.toString() ?? '') ??
+          DateTime.now(),
+      totals: ProductKpiTotals.fromJson(
+          (dashboard['totals'] as Map?)?.cast<String, dynamic>() ?? const {}),
+      metrics: ProductKpiMetrics.fromJson(
+          (dashboard['metrics'] as Map?)?.cast<String, dynamic>() ?? const {}),
+    );
+  }
+}
+
 class ExtractedTaskDraft {
   final String title;
   final String description;

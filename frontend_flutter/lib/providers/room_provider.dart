@@ -45,6 +45,9 @@ class RoomProvider extends ChangeNotifier {
   int templateStatsSinceDays = 30;
   String templateStatsGroupBy = 'template';
   bool loadingTemplateStats = false;
+  ProductKpiDashboard? productKpiDashboard;
+  int productKpiSinceDays = 30;
+  bool loadingProductKpiDashboard = false;
 
   Future<void> loadTemplates() async {
     if (templates.isNotEmpty) return; // already cached
@@ -83,6 +86,30 @@ class RoomProvider extends ChangeNotifier {
       // Non-blocking for channels list view.
     } finally {
       loadingTemplateStats = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadProductKpiDashboard({
+    bool force = false,
+    int? sinceDays,
+  }) async {
+    if (loadingProductKpiDashboard) return;
+    if (sinceDays != null) {
+      productKpiSinceDays = [7, 30, 90].contains(sinceDays) ? sinceDays : 30;
+    }
+    if (!force && productKpiDashboard != null) return;
+
+    loadingProductKpiDashboard = true;
+    notifyListeners();
+    try {
+      productKpiDashboard = await _svc.fetchProductKpiDashboard(
+        sinceDays: productKpiSinceDays,
+      );
+    } catch (_) {
+      // Non-blocking in list view.
+    } finally {
+      loadingProductKpiDashboard = false;
       notifyListeners();
     }
   }
