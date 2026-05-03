@@ -13,6 +13,9 @@ class _FakeRoomProvider extends RoomProvider {
   String? lastTemplateId;
   String? lastTemplateVersion;
   String? lastName;
+  String? lastMissionPrompt;
+  int openRoomCalls = 0;
+  int createMissionCalls = 0;
   int createCalls = 0;
 
   @override
@@ -102,8 +105,8 @@ class _FakeRoomProvider extends RoomProvider {
       d7RetentionRate: 25,
     );
 
-    templateStats = [productStats, marketingStats];
-    templateInsights = DomainTemplateInsights(
+    templateStats = const [productStats, marketingStats];
+    templateInsights = const DomainTemplateInsights(
       topByFeedback: productStats,
       topByD7Retention: productStats,
       underperformingTemplates: [marketingStats],
@@ -123,7 +126,40 @@ class _FakeRoomProvider extends RoomProvider {
     lastName = name;
     lastTemplateId = templateId;
     lastTemplateVersion = templateVersion;
-    return null;
+    final now = DateTime.now();
+    return Room(
+      id: 'room-recommended-1',
+      name: name,
+      type: 'group',
+      purpose: 'test',
+      templateId: templateId ?? '',
+      templateVersion: templateVersion ?? '',
+      visibility: 'invite_only',
+      ownerId: 'owner-1',
+      members: const [
+        RoomMember(userId: 'owner-1', displayName: 'Owner', role: 'owner'),
+      ],
+      aiDirectives: '',
+      pinnedArtifactId: null,
+      lastActivityAt: now,
+      updatedAt: now,
+    );
+  }
+
+  @override
+  Future<void> openRoom(Room room) async {
+    openRoomCalls += 1;
+    currentRoom = room;
+    loadingMessages = false;
+    messages = const [];
+    notifyListeners();
+  }
+
+  @override
+  Future<bool> createMission(String prompt, {String agentType = 'auto'}) async {
+    createMissionCalls += 1;
+    lastMissionPrompt = prompt;
+    return true;
   }
 }
 
@@ -152,6 +188,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(provider.createCalls, 1);
+    expect(provider.openRoomCalls, greaterThanOrEqualTo(1));
+    expect(provider.createMissionCalls, 1);
+    expect(provider.lastMissionPrompt, isNotEmpty);
     expect(provider.lastTemplateId, 'product');
     expect(provider.lastTemplateVersion, isNull);
     expect(provider.lastName, isNotEmpty);

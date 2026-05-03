@@ -17,6 +17,15 @@ class SalonsScreen extends StatefulWidget {
 class _SalonsScreenState extends State<SalonsScreen> {
   bool _inviteHandled = false;
 
+  String _starterMissionPromptForTemplate(DomainTemplate? template) {
+    final prompts = template?.starterPrompts ?? const <String>[];
+    for (final prompt in prompts) {
+      final trimmed = prompt.trim();
+      if (trimmed.isNotEmpty) return trimmed;
+    }
+    return 'Propose un plan d action priorise en 3 etapes pour lancer ce channel efficacement.';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -108,10 +117,19 @@ class _SalonsScreenState extends State<SalonsScreen> {
       return;
     }
 
+    final missionPrompt = _starterMissionPromptForTemplate(template);
+    bool missionSeeded = false;
+    await prov.openRoom(room);
+    if (context.mounted) {
+      missionSeeded = await prov.createMission(missionPrompt);
+    }
+    if (!context.mounted) return;
+
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
-            'Channel recommande cree avec ${template?.emoji ?? '🧠'} ${template?.name ?? 'modele IA'}.'),
+        content: Text(missionSeeded
+            ? 'Channel recommande cree avec ${template?.emoji ?? '🧠'} ${template?.name ?? 'modele IA'} + mission de demarrage.'
+            : 'Channel recommande cree avec ${template?.emoji ?? '🧠'} ${template?.name ?? 'modele IA'}.'),
       ),
     );
     _openRoom(context, room);
