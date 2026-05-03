@@ -20,6 +20,9 @@ class _FakeRoomProvider extends RoomProvider {
   int convertCalls = 0;
   int extractCalls = 0;
   bool extractPersist = false;
+  int updateDecisionCalls = 0;
+  String? lastDecisionStatus;
+  String? lastDecisionOwner;
 
   _FakeRoomProvider({
     this.fakeDecisions = const [],
@@ -84,6 +87,42 @@ class _FakeRoomProvider extends RoomProvider {
       tasks: [],
       missionId: null,
     );
+  }
+
+  @override
+  Future<WorkspaceDecision?> updateDecision(
+    WorkspaceDecision decision, {
+    String? title,
+    String? summary,
+    String? status,
+    String? ownerId,
+    String? ownerName,
+    DateTime? dueDate,
+    bool clearDueDate = false,
+  }) async {
+    updateDecisionCalls++;
+    lastDecisionStatus = status;
+    lastDecisionOwner = ownerName;
+    final updated = WorkspaceDecision(
+      id: decision.id,
+      title: title ?? decision.title,
+      summary: summary ?? decision.summary,
+      sourceType: decision.sourceType,
+      sourceId: decision.sourceId,
+      createdByName: decision.createdByName,
+      createdAt: decision.createdAt,
+      status: status ?? decision.status,
+      ownerId: ownerId ?? decision.ownerId,
+      ownerName: ownerName ?? decision.ownerName,
+      dueDate: clearDueDate ? null : (dueDate ?? decision.dueDate),
+      approvedAt: decision.approvedAt,
+    );
+    final idx = decisions.indexWhere((d) => d.id == decision.id);
+    if (idx >= 0) {
+      decisions[idx] = updated;
+    }
+    notifyListeners();
+    return updated;
   }
 }
 
@@ -254,4 +293,36 @@ void main() {
       expect(provider.lastTaskDrafts!.first['title'], 'Preparer presentation');
     },
   );
+
+  testWidgets('decision workflow dialog updates status and owner',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final decision = _decision();
+    final provider = _FakeRoomProvider(fakeDecisions: [decision]);
+
+    await tester.pumpWidget(_wrap(provider));
+    await tester.pumpAndSettle();
+
+    // Expand decisions panel and open edit workflow action
+    await tester.tap(find.textContaining('1 decision'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Editer workflow').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Workflow de decision'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nom du proprietaire de la decision'),
+      'Alice',
+    );
+
+    await tester.tap(find.text('Sauvegarder'));
+    await tester.pumpAndSettle();
+
+    expect(provider.updateDecisionCalls, 1);
+    expect(provider.lastDecisionStatus, 'draft');
+    expect(provider.lastDecisionOwner, 'Alice');
+  });
 }

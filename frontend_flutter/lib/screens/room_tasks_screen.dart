@@ -312,6 +312,164 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
     ownerCtrl.dispose();
   }
 
+  Future<void> _showDecisionWorkflowDialog(WorkspaceDecision decision) async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ownerCtrl = TextEditingController(text: decision.ownerName);
+    String status = decision.status;
+    DateTime? dueDate = decision.dueDate;
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Workflow de decision'),
+          content: SizedBox(
+            width: 500,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    decision.title,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: status,
+                    items: _decisionStatusOptions
+                        .map(
+                          (option) => DropdownMenuItem<String>(
+                            value: option.status,
+                            child: Row(
+                              children: [
+                                Icon(option.icon, size: 16),
+                                const SizedBox(width: 8),
+                                Text(option.label),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: saving
+                        ? null
+                        : (value) {
+                            if (value == null) return;
+                            status = value;
+                          },
+                    decoration: const InputDecoration(
+                      labelText: 'Statut',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: ownerCtrl,
+                    enabled: !saving,
+                    decoration: const InputDecoration(
+                      labelText: 'Responsable',
+                      hintText: 'Nom du proprietaire de la decision',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: saving
+                        ? null
+                        : () async {
+                            final picked = await showDatePicker(
+                              context: ctx,
+                              initialDate: dueDate ?? DateTime.now(),
+                              firstDate: DateTime.now().subtract(
+                                const Duration(days: 365),
+                              ),
+                              lastDate: DateTime.now().add(
+                                const Duration(days: 730),
+                              ),
+                            );
+                            if (picked == null || !ctx.mounted) return;
+                            setState(() => dueDate = picked);
+                          },
+                    borderRadius: BorderRadius.circular(8),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Echeance',
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              dueDate == null
+                                  ? 'Aucune date'
+                                  : _formatDate(dueDate!),
+                            ),
+                          ),
+                          if (dueDate != null)
+                            IconButton(
+                              onPressed: saving
+                                  ? null
+                                  : () => setState(() => dueDate = null),
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              tooltip: 'Retirer la date',
+                            )
+                          else
+                            const Icon(Icons.event_rounded, size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      setState(() => saving = true);
+                      final updated = await prov.updateDecision(
+                        decision,
+                        status: status,
+                        ownerName: ownerCtrl.text.trim(),
+                        dueDate: dueDate,
+                        clearDueDate: dueDate == null,
+                      );
+                      if (!mounted || !ctx.mounted) return;
+                      if (updated == null) {
+                        setState(() => saving = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              prov.actionError ??
+                                  'Impossible de mettre a jour la decision',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.of(ctx).pop();
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Decision mise a jour'),
+                        ),
+                      );
+                    },
+              child: Text(saving ? 'Sauvegarde...' : 'Sauvegarder'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Shows a dialog listing every recorded decision and lets the user pick one
   /// then define 1-3 tasks to generate from it. Calls convertDecisionToTasks().
   Future<void> _showConvertDecisionDialog() async {
@@ -970,6 +1128,7 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
                   decisions: prov.decisions,
                   tasks: prov.tasks,
                   onConvert: _showConvertDecisionDialog,
+                  onEditDecision: _showDecisionWorkflowDialog,
                 ),
               Expanded(child: board),
             ],
@@ -984,11 +1143,13 @@ class _DecisionsPanel extends StatefulWidget {
   final List<WorkspaceDecision> decisions;
   final List<WorkspaceTask> tasks;
   final VoidCallback onConvert;
+  final ValueChanged<WorkspaceDecision> onEditDecision;
 
   const _DecisionsPanel({
     required this.decisions,
     required this.tasks,
     required this.onConvert,
+    required this.onEditDecision,
   });
 
   @override
@@ -1091,6 +1252,7 @@ class _DecisionsPanelState extends State<_DecisionsPanel> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
                               child: Column(
@@ -1114,16 +1276,58 @@ class _DecisionsPanelState extends State<_DecisionsPanel> {
                                             .withValues(alpha: 0.6),
                                       ),
                                     ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      _DecisionMetaChip(
+                                        label: _decisionStatusLabel(d.status),
+                                        icon: _decisionStatusIcon(d.status),
+                                        color: _decisionStatusColor(
+                                          d.status,
+                                          scheme,
+                                        ),
+                                      ),
+                                      if (d.ownerName.isNotEmpty)
+                                        _DecisionMetaChip(
+                                          label: d.ownerName,
+                                          icon: Icons.person_outline_rounded,
+                                          color: scheme.primary,
+                                        ),
+                                      if (d.dueDate != null)
+                                        _DecisionMetaChip(
+                                          label: _formatDate(d.dueDate!),
+                                          icon: Icons.event_outlined,
+                                          color: scheme.secondary,
+                                        ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Chip(
-                              label: Text(
-                                  '$taskCount tache${taskCount != 1 ? "s" : ""}'),
-                              visualDensity: VisualDensity.compact,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Chip(
+                                  label: Text(
+                                    '$taskCount tache${taskCount != 1 ? "s" : ""}',
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                const SizedBox(height: 4),
+                                IconButton(
+                                  tooltip: 'Editer workflow',
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 18,
+                                  ),
+                                  onPressed: () => widget.onEditDecision(d),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -1472,6 +1676,44 @@ class _TaskMetaChip extends StatelessWidget {
   }
 }
 
+class _DecisionMetaChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _DecisionMetaChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TaskMetricCard extends StatelessWidget {
   final String label;
   final String value;
@@ -1621,6 +1863,18 @@ class _TaskStatusOption {
   });
 }
 
+class _DecisionStatusOption {
+  final String status;
+  final String label;
+  final IconData icon;
+
+  const _DecisionStatusOption({
+    required this.status,
+    required this.label,
+    required this.icon,
+  });
+}
+
 const List<_TaskStatusOption> _taskStatusOptions = [
   _TaskStatusOption(
     status: 'todo',
@@ -1644,6 +1898,29 @@ const List<_TaskStatusOption> _taskStatusOptions = [
   ),
 ];
 
+const List<_DecisionStatusOption> _decisionStatusOptions = [
+  _DecisionStatusOption(
+    status: 'draft',
+    label: 'Brouillon',
+    icon: Icons.edit_note_rounded,
+  ),
+  _DecisionStatusOption(
+    status: 'review',
+    label: 'En revue',
+    icon: Icons.rate_review_outlined,
+  ),
+  _DecisionStatusOption(
+    status: 'approved',
+    label: 'Approuvee',
+    icon: Icons.verified_rounded,
+  ),
+  _DecisionStatusOption(
+    status: 'implemented',
+    label: 'Implantee',
+    icon: Icons.task_alt_rounded,
+  ),
+];
+
 int _compareTasks(WorkspaceTask left, WorkspaceTask right) {
   final leftDue = left.dueDate;
   final rightDue = right.dueDate;
@@ -1662,4 +1939,46 @@ int _compareTasks(WorkspaceTask left, WorkspaceTask right) {
 
 String _formatDate(DateTime date) {
   return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+}
+
+String _decisionStatusLabel(String status) {
+  switch (status) {
+    case 'review':
+      return 'En revue';
+    case 'approved':
+      return 'Approuvee';
+    case 'implemented':
+      return 'Implantee';
+    case 'draft':
+    default:
+      return 'Brouillon';
+  }
+}
+
+IconData _decisionStatusIcon(String status) {
+  switch (status) {
+    case 'review':
+      return Icons.rate_review_outlined;
+    case 'approved':
+      return Icons.verified_rounded;
+    case 'implemented':
+      return Icons.task_alt_rounded;
+    case 'draft':
+    default:
+      return Icons.edit_note_rounded;
+  }
+}
+
+Color _decisionStatusColor(String status, ColorScheme scheme) {
+  switch (status) {
+    case 'review':
+      return scheme.tertiary;
+    case 'approved':
+      return const Color(0xFF2E8B57);
+    case 'implemented':
+      return scheme.primary;
+    case 'draft':
+    default:
+      return scheme.outline;
+  }
 }

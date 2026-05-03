@@ -353,6 +353,32 @@ class RoomService {
     return WorkspaceDecision.fromJson(r['decision'] as Map<String, dynamic>);
   }
 
+  Future<WorkspaceDecision> updateDecision(
+    String roomId,
+    String decisionId, {
+    String? title,
+    String? summary,
+    String? status,
+    String? ownerId,
+    String? ownerName,
+    DateTime? dueDate,
+    bool clearDueDate = false,
+  }) async {
+    final body = <String, dynamic>{
+      if (title != null) 'title': title,
+      if (summary != null) 'summary': summary,
+      if (status != null) 'status': status,
+      if (ownerId != null) 'ownerId': ownerId,
+      if (ownerName != null) 'ownerName': ownerName,
+      if (clearDueDate)
+        'dueDate': null
+      else if (dueDate != null)
+        'dueDate': dueDate.toIso8601String(),
+    };
+    final r = await _patch('/api/rooms/$roomId/decisions/$decisionId', body);
+    return WorkspaceDecision.fromJson(r['decision'] as Map<String, dynamic>);
+  }
+
   Future<List<WorkspaceTask>> listTasks(String roomId) async {
     final r = await _get('/api/rooms/$roomId/tasks');
     return (r['tasks'] as List? ?? [])

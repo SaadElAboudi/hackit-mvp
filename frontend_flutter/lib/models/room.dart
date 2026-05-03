@@ -371,6 +371,11 @@ class WorkspaceDecision {
   final String sourceId;
   final String createdByName;
   final DateTime createdAt;
+  final String status;
+  final String ownerId;
+  final String ownerName;
+  final DateTime? dueDate;
+  final DateTime? approvedAt;
 
   const WorkspaceDecision({
     required this.id,
@@ -380,6 +385,11 @@ class WorkspaceDecision {
     required this.sourceId,
     required this.createdByName,
     required this.createdAt,
+    this.status = 'draft',
+    this.ownerId = '',
+    this.ownerName = '',
+    this.dueDate,
+    this.approvedAt,
   });
 
   factory WorkspaceDecision.fromJson(Map<String, dynamic> j) =>
@@ -392,6 +402,11 @@ class WorkspaceDecision {
         createdByName: j['createdByName']?.toString() ?? 'Anonyme',
         createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
             DateTime.now(),
+          status: j['status']?.toString() ?? 'draft',
+          ownerId: j['ownerId']?.toString() ?? '',
+          ownerName: j['ownerName']?.toString() ?? '',
+          dueDate: DateTime.tryParse(j['dueDate']?.toString() ?? ''),
+          approvedAt: DateTime.tryParse(j['approvedAt']?.toString() ?? ''),
       );
 }
 

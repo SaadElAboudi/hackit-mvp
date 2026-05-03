@@ -124,6 +124,60 @@ await test('PATCH workspace task invalid status returns BAD_REQUEST envelope', a
     assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
 });
 
+await test('PATCH workspace decision invalid status returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeDecisionId = '507f191e810c19729de860eb';
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/decisions/${fakeDecisionId}`,
+        method: 'PATCH',
+        body: { status: 'paused' },
+        headers: { 'x-user-id': 'user_workspace_11' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /status/i);
+    assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+});
+
+await test('PATCH workspace decision invalid dueDate returns BAD_REQUEST envelope', async (t) => {
+    forceMongoReady();
+    t.after(() => restoreMongoReady());
+
+    const app = createApp();
+    const { server, port } = await startServer(app);
+    t.after(() => server.close());
+
+    const fakeRoomId = '507f191e810c19729de860ea';
+    const fakeDecisionId = '507f191e810c19729de860eb';
+
+    const res = await requestJson({
+        port,
+        path: `/api/rooms/${fakeRoomId}/decisions/${fakeDecisionId}`,
+        method: 'PATCH',
+        body: { dueDate: 'not-a-date' },
+        headers: { 'x-user-id': 'user_workspace_12' },
+    });
+
+    assert.equal(res.status, 400);
+    const json = JSON.parse(res.data);
+    assert.equal(json.ok, false);
+    assert.equal(json.code, 'BAD_REQUEST');
+    assert.match(String(json.message || ''), /dueDate/i);
+    assert.ok(typeof json.requestId === 'string' && json.requestId.length > 0);
+});
+
 await test('POST workspace decisions extract invalid recentLimit returns BAD_REQUEST envelope', async (t) => {
     forceMongoReady();
     t.after(() => restoreMongoReady());

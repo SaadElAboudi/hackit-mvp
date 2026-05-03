@@ -84,6 +84,7 @@ import {
     validateSendMessagePayload,
     validateUpdateWorkspaceBlockPayload,
     validateUpdateWorkspacePagePayload,
+    validateUpdateWorkspaceDecisionPayload,
     validateUpdateWorkspaceTaskPayload,
 } from '../middleware/validation.js';
 import DOMAIN_TEMPLATES, {
@@ -2017,8 +2018,13 @@ router.post('/:id/decisions', validateBody(validateCreateWorkspaceDecisionPayloa
             sourceId,
             title,
             summary,
+            status: 'draft',
+            ownerId: req.userId,
+            ownerName: req.displayName,
             createdBy: req.userId,
             createdByName: req.displayName,
+            lastUpdatedBy: req.userId,
+            lastUpdatedByName: req.displayName,
         });
 
         room.lastActivityAt = new Date();
@@ -2037,6 +2043,53 @@ router.post('/:id/decisions', validateBody(validateCreateWorkspaceDecisionPayloa
         }, req.requestId || null);
 
         res.status(201).json({ decision: workspaceDecisionSummary(decision) });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.patch('/:id/decisions/:decisionId', validateBody(validateUpdateWorkspaceDecisionPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const decision = await WorkspaceDecision.findOne({
+            _id: req.params.decisionId,
+            roomId: req.params.id,
+        });
+        if (!decision) {
+            return res.status(404).json({ error: 'Decision not found' });
+        }
+
+        const patch = req.validatedBody;
+        if (patch.title !== undefined) decision.title = patch.title;
+        if (patch.summary !== undefined) decision.summary = patch.summary;
+        if (patch.status !== undefined) {
+            decision.status = patch.status;
+            if (patch.status === 'approved') {
+                decision.approvedAt = new Date();
+                decision.approvedBy = req.userId;
+                decision.approvedByName = req.displayName;
+            } else {
+                decision.approvedAt = null;
+                decision.approvedBy = '';
+                decision.approvedByName = '';
+            }
+        }
+        if (patch.ownerId !== undefined) decision.ownerId = patch.ownerId;
+        if (patch.ownerName !== undefined) decision.ownerName = patch.ownerName;
+        if (patch.dueDate !== undefined) decision.dueDate = patch.dueDate;
+        decision.lastUpdatedBy = req.userId;
+        decision.lastUpdatedByName = req.displayName;
+        await decision.save();
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        res.json({ decision: workspaceDecisionSummary(decision) });
     } catch (err) {
         next(err);
     }

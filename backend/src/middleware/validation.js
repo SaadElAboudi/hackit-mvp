@@ -513,6 +513,54 @@ export function validateCreateWorkspaceDecisionPayload(body) {
   };
 }
 
+export function validateUpdateWorkspaceDecisionPayload(body) {
+  const next = {};
+  if (body?.title !== undefined) {
+    const title = String(body.title || '').trim();
+    if (!title) {
+      throw badRequest('title must not be empty', { field: 'title' });
+    }
+    next.title = title.slice(0, 180);
+  }
+  if (body?.summary !== undefined) {
+    next.summary = String(body.summary || '').trim().slice(0, 2000);
+  }
+  if (body?.status !== undefined) {
+    const status = String(body.status || '').trim();
+    const validStatuses = ['draft', 'review', 'approved', 'implemented'];
+    if (!validStatuses.includes(status)) {
+      throw badRequest(`status must be one of: ${validStatuses.join(', ')}`, {
+        field: 'status',
+        received: status,
+      });
+    }
+    next.status = status;
+  }
+  if (body?.ownerId !== undefined) {
+    next.ownerId = String(body.ownerId || '').trim().slice(0, 120);
+  }
+  if (body?.ownerName !== undefined) {
+    next.ownerName = String(body.ownerName || '').trim().slice(0, 120);
+  }
+  if (body?.dueDate !== undefined) {
+    if (!body.dueDate) {
+      next.dueDate = null;
+    } else {
+      const parsed = new Date(String(body.dueDate));
+      if (Number.isNaN(parsed.getTime())) {
+        throw badRequest('dueDate must be a valid date', { field: 'dueDate' });
+      }
+      next.dueDate = parsed;
+    }
+  }
+  if (!Object.keys(next).length) {
+    throw badRequest('at least one field must be provided', {
+      field: 'body',
+    });
+  }
+  return next;
+}
+
 export function validateCreateWorkspaceTaskPayload(body) {
   const title = String(body?.title || '').trim();
   if (!title) {
