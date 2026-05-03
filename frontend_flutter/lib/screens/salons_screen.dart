@@ -23,9 +23,98 @@ class _SalonsScreenState extends State<SalonsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final prov = context.read<RoomProvider>();
       prov.loadRooms();
+      prov.loadTemplates();
       prov.loadTemplateStats();
       _handleInviteLinkIfPresent(prov);
     });
+  }
+
+  String? _recommendedTemplateId(RoomProvider prov) {
+    if (prov.templates.isEmpty) return null;
+    final insights = prov.templateInsights;
+    if (insights == null) return null;
+
+    final available = prov.templates.map((t) => t.id).toSet();
+    final underperforming = insights.underperformingTemplates
+        .map((s) => s.templateId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final topFeedback = insights.topByFeedback?.templateId;
+    if (topFeedback != null &&
+        topFeedback.isNotEmpty &&
+        available.contains(topFeedback) &&
+        !underperforming.contains(topFeedback)) {
+      return topFeedback;
+    }
+
+    final topD7 = insights.topByD7Retention?.templateId;
+    if (topD7 != null &&
+        topD7.isNotEmpty &&
+        available.contains(topD7) &&
+        !underperforming.contains(topD7)) {
+      return topD7;
+    }
+    return null;
+  }
+
+  Future<void> _createRecommendedChannel(BuildContext context) async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    if (prov.templates.isEmpty) {
+      await prov.loadTemplates();
+    }
+    if (prov.templateStats.isEmpty) {
+      await prov.loadTemplateStats(force: true);
+    }
+
+    final recommendedId = _recommendedTemplateId(prov);
+    if (!context.mounted) return;
+    if (recommendedId == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Pas encore assez de donnees: choisissez un modele manuellement.'),
+        ),
+      );
+      _showCreateDialog(context);
+      return;
+    }
+
+    DomainTemplate? template;
+    for (final item in prov.templates) {
+      if (item.id == recommendedId) {
+        template = item;
+        break;
+      }
+    }
+    final baseName =
+        template?.name.isNotEmpty == true ? template!.name : 'Channel IA';
+    final generatedName =
+        '$baseName ${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().day.toString().padLeft(2, '0')}';
+
+    final room = await prov.createRoom(
+      name: generatedName,
+      displayName: _displayName(),
+      templateId: recommendedId,
+      templateVersion: null,
+    );
+    if (!context.mounted) return;
+    if (room == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+            content: Text('Creation du channel recommande impossible.')),
+      );
+      return;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+            'Channel recommande cree avec ${template?.emoji ?? '🧠'} ${template?.name ?? 'modele IA'}.'),
+      ),
+    );
+    _openRoom(context, room);
   }
 
   Future<void> _handleInviteLinkIfPresent(RoomProvider prov) async {
@@ -77,6 +166,16 @@ class _SalonsScreenState extends State<SalonsScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final prov = context.watch<RoomProvider>();
+    final recommendedTemplateId = _recommendedTemplateId(prov);
+    DomainTemplate? recommendedTemplate;
+    if (recommendedTemplateId != null) {
+      for (final t in prov.templates) {
+        if (t.id == recommendedTemplateId) {
+          recommendedTemplate = t;
+          break;
+        }
+      }
+    }
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -118,6 +217,43 @@ class _SalonsScreenState extends State<SalonsScreen> {
               ),
             ),
           ),
+
+          if (recommendedTemplate != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: scheme.primary.withValues(alpha: 0.08),
+                  border:
+                      Border.all(color: scheme.primary.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Text(recommendedTemplate.emoji,
+                        style: const TextStyle(fontSize: 20)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Modele recommande: ${recommendedTemplate.name}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () => _createRecommendedChannel(context),
+                      icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                      label: const Text('Creer channel recommande'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           if (prov.loadingTemplateStats || prov.templateStats.isNotEmpty)
             Padding(
@@ -406,7 +542,7 @@ class _TemplateStatsCard extends StatelessWidget {
               )
             else
               SizedBox(
-                height: 84,
+                height: 112,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: ranked.length,
@@ -421,66 +557,68 @@ class _TemplateStatsCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: scheme.outlineVariant),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${s.emoji} ${s.name}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${s.emoji} ${s.name}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
                             ),
-                          ),
-                          if (groupBy == 'version' &&
-                              s.templateVersion.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(
-                                s.templateVersion,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color:
-                                      scheme.onSurface.withValues(alpha: 0.55),
+                            if (groupBy == 'version' &&
+                                s.templateVersion.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  s.templateVersion,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: scheme.onSurface
+                                        .withValues(alpha: 0.55),
+                                  ),
                                 ),
                               ),
-                            ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${s.roomsCreated} rooms • ${s.messagesSent} msgs',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: scheme.onSurface.withValues(alpha: 0.65),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Score ${s.feedbackAverage.toStringAsFixed(2)} • D7 ${s.d7RetentionRate.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: scheme.onSurface.withValues(alpha: 0.65),
-                            ),
-                          ),
-                          if (s.isLowSample)
+                            const SizedBox(height: 6),
                             Text(
-                              'Faible echantillon',
+                              '${s.roomsCreated} rooms • ${s.messagesSent} msgs',
                               style: TextStyle(
-                                fontSize: 10,
-                                color: scheme.error,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            )
-                          else if (s.winner)
-                            Text(
-                              '🏆 Gagnant',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: scheme.primary,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                                color: scheme.onSurface.withValues(alpha: 0.65),
                               ),
                             ),
-                        ],
+                            const SizedBox(height: 2),
+                            Text(
+                              'Score ${s.feedbackAverage.toStringAsFixed(2)} • D7 ${s.d7RetentionRate.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: scheme.onSurface.withValues(alpha: 0.65),
+                              ),
+                            ),
+                            if (s.isLowSample)
+                              Text(
+                                'Faible echantillon',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: scheme.error,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              )
+                            else if (s.winner)
+                              Text(
+                                '🏆 Gagnant',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     );
                   },
