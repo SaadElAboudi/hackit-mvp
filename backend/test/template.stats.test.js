@@ -109,6 +109,9 @@ await test('GET /api/rooms/templates exposes versionWeights for rollout visibili
     assert.ok(marketing);
     assert.equal(marketing.version, 'v1');
     assert.deepEqual(marketing.versionWeights, { v1: 80, v2: 20 });
+    assert.ok(Array.isArray(marketing.starterPrompts));
+    assert.ok(marketing.starterPrompts.length >= 2);
+    assert.ok(marketing.starterPrompts.some((item) => /KPI|funnel|messaging/i.test(String(item))));
 });
 
 await test('POST /api/rooms persists templateId and applies directives', async (t) => {

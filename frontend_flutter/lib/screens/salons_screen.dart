@@ -610,6 +610,71 @@ class _CreateRoomDialog extends StatefulWidget {
 class _CreateRoomDialogState extends State<_CreateRoomDialog> {
   String? _selectedTemplateId;
   String? _selectedTemplateVersion;
+  bool _forceNoTemplate = false;
+
+  String? _recommendedTemplateId(List<DomainTemplate> templates) {
+    if (templates.isEmpty) return null;
+    final insights = widget.prov.templateInsights;
+    if (insights == null) return null;
+
+    final available = templates.map((t) => t.id).toSet();
+    final blocked = insights.underperformingTemplates
+        .map((s) => s.templateId)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    final feedback = insights.topByFeedback?.templateId;
+    if (feedback != null &&
+        feedback.isNotEmpty &&
+        available.contains(feedback) &&
+        !blocked.contains(feedback)) {
+      return feedback;
+    }
+
+    final d7 = insights.topByD7Retention?.templateId;
+    if (d7 != null &&
+        d7.isNotEmpty &&
+        available.contains(d7) &&
+        !blocked.contains(d7)) {
+      return d7;
+    }
+    return null;
+  }
+
+  DomainTemplateStats? _statsForTemplate(String templateId) {
+    if (templateId.isEmpty) return null;
+    final matching = widget.prov.templateStats
+        .where((s) => s.templateId == templateId)
+        .toList();
+    if (matching.isEmpty) return null;
+    matching.sort((a, b) {
+      if (a.isLowSample != b.isLowSample) {
+        return a.isLowSample ? 1 : -1;
+      }
+      if (b.roomsCreated != a.roomsCreated) {
+        return b.roomsCreated.compareTo(a.roomsCreated);
+      }
+      return b.d7RetentionRate.compareTo(a.d7RetentionRate);
+    });
+    return matching.first;
+  }
+
+  String? _reasonForTemplate(String templateId) {
+    if (templateId.isEmpty) return null;
+    final insights = widget.prov.templateInsights;
+    if (insights == null) return null;
+    if (insights.topByFeedback?.templateId == templateId) {
+      return 'Top feedback';
+    }
+    if (insights.topByD7Retention?.templateId == templateId) {
+      return 'Top retention D7';
+    }
+    if (insights.underperformingTemplates
+        .any((s) => s.templateId == templateId)) {
+      return 'Sous performance';
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -617,15 +682,47 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
       listenable: widget.prov,
       builder: (ctx, _) {
         final scheme = Theme.of(ctx).colorScheme;
-        final templates = widget.prov.templates;
+        final templates = [...widget.prov.templates];
         final loading = widget.prov.loadingTemplates;
+        final recommendedTemplateId = _recommendedTemplateId(templates);
+
+        templates.sort((a, b) {
+          final aRecommended = a.id == recommendedTemplateId;
+          final bRecommended = b.id == recommendedTemplateId;
+          if (aRecommended != bRecommended) return aRecommended ? -1 : 1;
+
+          final aReason = _reasonForTemplate(a.id);
+          final bReason = _reasonForTemplate(b.id);
+          const priority = {
+            'Top feedback': 0,
+            'Top retention D7': 1,
+            'Sous performance': 3,
+          };
+          final aRank = priority[aReason] ?? 2;
+          final bRank = priority[bReason] ?? 2;
+          if (aRank != bRank) return aRank.compareTo(bRank);
+          return a.name.compareTo(b.name);
+        });
+
+        final effectiveTemplateId = _forceNoTemplate
+            ? null
+            : (_selectedTemplateId ?? recommendedTemplateId);
         DomainTemplate? selectedTemplate;
         for (final t in templates) {
-          if (t.id == _selectedTemplateId) {
+          if (t.id == effectiveTemplateId) {
             selectedTemplate = t;
             break;
           }
         }
+        final selectedTemplateName = selectedTemplate?.name ?? '';
+
+        final selectedStats = selectedTemplate == null
+            ? null
+            : _statsForTemplate(selectedTemplate.id);
+        final selectedReason = selectedTemplate == null
+            ? null
+            : _reasonForTemplate(selectedTemplate.id);
+
         final selectedWeights = (selectedTemplate?.versionWeights.entries
                 .where((e) => e.value > 0)
                 .toList() ??
@@ -671,6 +768,27 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                       color: scheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
+                  if (recommendedTemplateId != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        color: scheme.primary.withValues(alpha: 0.1),
+                      ),
+                      child: Text(
+                        'Recommandation auto activee: meilleur modele selon feedback et retention.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   SizedBox(
                     height: 80,
@@ -680,12 +798,13 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (ctx, i) {
                         if (i == 0) {
-                          final selected = _selectedTemplateId == null;
+                          final selected = effectiveTemplateId == null;
                           return GestureDetector(
                             onTap: () {
                               setState(() {
                                 _selectedTemplateId = null;
                                 _selectedTemplateVersion = null;
+                                _forceNoTemplate = true;
                               });
                             },
                             child: AnimatedContainer(
@@ -735,11 +854,13 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                         }
 
                         final t = templates[i - 1];
-                        final selected = _selectedTemplateId == t.id;
+                        final selected = effectiveTemplateId == t.id;
+                        final reason = _reasonForTemplate(t.id);
                         return GestureDetector(
                           onTap: () {
                             setState(() {
                               _selectedTemplateId = selected ? null : t.id;
+                              _forceNoTemplate = selected;
                               if (selected) {
                                 _selectedTemplateVersion = null;
                               }
@@ -786,6 +907,20 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                if (reason != null &&
+                                    reason != 'Sous performance')
+                                  Text(
+                                    reason == 'Top feedback'
+                                        ? 'Top 👍'
+                                        : 'Top D7',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: selected
+                                          ? scheme.onPrimaryContainer
+                                          : scheme.primary,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -838,6 +973,101 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                                       scheme.onSurface.withValues(alpha: 0.7),
                                 ),
                               ),
+                              if (selectedReason != null) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: selectedReason == 'Sous performance'
+                                        ? scheme.error.withValues(alpha: 0.1)
+                                        : scheme.primary.withValues(alpha: 0.1),
+                                  ),
+                                  child: Text(
+                                    selectedReason == 'Sous performance'
+                                        ? 'Attention: ce modele est actuellement sous la moyenne.'
+                                        : 'Pourquoi recommande: $selectedReason',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color:
+                                          selectedReason == 'Sous performance'
+                                              ? scheme.error
+                                              : scheme.primary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (selectedStats != null) ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    _MetricChip(
+                                      label: 'Feedback',
+                                      value:
+                                          '${selectedStats.feedbackAverage >= 0 ? '+' : ''}${selectedStats.feedbackAverage.toStringAsFixed(2)}',
+                                    ),
+                                    _MetricChip(
+                                      label: 'Retention D7',
+                                      value:
+                                          '${selectedStats.d7RetentionRate.toStringAsFixed(1)}%',
+                                    ),
+                                    _MetricChip(
+                                      label: 'Rooms',
+                                      value: '${selectedStats.roomsCreated}',
+                                    ),
+                                  ],
+                                ),
+                              ],
+                              if (selectedTemplate
+                                  .starterPrompts.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Prompts de depart',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color:
+                                        scheme.onSurface.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    for (final prompt in selectedTemplate
+                                        .starterPrompts
+                                        .take(3))
+                                      ActionChip(
+                                        label: Text(
+                                          prompt,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        onPressed: () {
+                                          widget.nameCtrl.text =
+                                              selectedTemplateName;
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Prompt pret: "$prompt"',
+                                              ),
+                                              duration:
+                                                  const Duration(seconds: 2),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ],
                               if (hasMultiVersion) ...[
                                 const SizedBox(height: 8),
                                 Text(
@@ -945,7 +1175,7 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
                 if (name.isEmpty) return;
                 await widget.onSubmit(
                   name,
-                  _selectedTemplateId,
+                  effectiveTemplateId,
                   _selectedTemplateVersion,
                 );
               },
@@ -954,6 +1184,34 @@ class _CreateRoomDialogState extends State<_CreateRoomDialog> {
           ],
         );
       },
+    );
+  }
+}
+
+class _MetricChip extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _MetricChip({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Text(
+        '$label: $value',
+        style: TextStyle(
+          fontSize: 11,
+          color: scheme.onSurface.withValues(alpha: 0.85),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

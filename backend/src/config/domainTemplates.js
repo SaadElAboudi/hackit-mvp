@@ -21,6 +21,11 @@ const DOMAIN_TEMPLATES = [
         emoji: '📣',
         description: 'Campagnes, messaging, acquisition et growth.',
         purpose: 'Collaboration marketing — campagnes, contenu, acquisition.',
+        starterPrompts: [
+            'Construis un plan marketing 30 jours avec 3 experiments prioritaires et KPI de succes.',
+            'Propose un messaging framework (persona, pain points, USP, preuves) pour notre offre.',
+            'Definis un funnel acquisition complet avec hypotheses CAC/LTV et seuil de rentabilite.',
+        ],
         aiDirectivesByVersion: {
             v1:
                 "Tu es un expert marketing et growth. Adapte tes réponses aux enjeux de positionnement, acquisition, rétention et messaging. " +
@@ -47,6 +52,11 @@ const DOMAIN_TEMPLATES = [
         emoji: '🚀',
         description: 'Roadmap, user stories, priorisation et discovery.',
         purpose: 'Collaboration produit — roadmap, discovery, delivery.',
+        starterPrompts: [
+            'Prepare une roadmap trimestrielle priorisee avec impact/effort et dependances clefs.',
+            'Transforme ce besoin en user stories pretes pour sprint (avec criteres d acceptation).',
+            'Propose un plan discovery 2 semaines pour valider le risque principal avant dev.',
+        ],
         aiDirectivesByVersion: {
             v1:
                 "Tu es un expert Product Management. Utilise un vocabulaire produit précis (OKR, KPI, user story, job-to-be-done, roadmap, sprint, MVP, MoSCoW). " +
@@ -68,6 +78,11 @@ const DOMAIN_TEMPLATES = [
         emoji: '⚙️',
         description: 'Processus, efficacité, coordination et scale.',
         purpose: 'Collaboration opérationnelle — process, efficacité, coordination.',
+        starterPrompts: [
+            'Fais un diagnostic cause racine de ce probleme ops et propose un plan correctif 14 jours.',
+            'Construis un RACI clair pour ce projet avec risques d execution et mitigations.',
+            'Ecris une SOP concise + checklist de controle qualite pour cette operation recurrente.',
+        ],
         aiDirectivesByVersion: {
             v1:
                 "Tu es un expert en excellence opérationnelle et gestion de processus. Utilise un vocabulaire ops précis (SLA, SOP, RACI, OKR, KPI, lead time, throughput, bottleneck). " +
@@ -89,6 +104,11 @@ const DOMAIN_TEMPLATES = [
         emoji: '💼',
         description: 'Pipeline, prospection, closing et negociation.',
         purpose: 'Collaboration commerciale — pipeline, prospection, deals.',
+        starterPrompts: [
+            'Etablis un plan pipeline 30 jours pour passer de MQL a SQL avec taux cibles.',
+            'Prepare un script de discovery call B2B base MEDDIC pour cet ICP.',
+            'Liste les objections probables et reponses de closing avec next step datee.',
+        ],
         aiDirectivesByVersion: {
             v1:
                 "Tu es un expert commercial B2B. Utilise un vocabulaire sales précis (ICP, MQL, SQL, ARR, MRR, churn, NRR, pipeline, closing, champion, stakeholder mapping). " +
@@ -110,6 +130,11 @@ const DOMAIN_TEMPLATES = [
         emoji: '🏛️',
         description: 'Livrables clients, brief, recommandations stratégiques.',
         purpose: 'Collaboration conseil — briefs, stratégie, livrables clients.',
+        starterPrompts: [
+            'Redige un one-pager executif client avec recommandations et plan d action 90 jours.',
+            'Construis 3 scenarios strategiques (conservateur, equilibre, ambitieux) avec trade-offs.',
+            'Prepare une structure de comite de pilotage: decisions attendues, risques, KPI.',
+        ],
         aiDirectivesByVersion: {
             v1:
                 "Tu es un expert conseil / agence. Tes réponses doivent être prêtes à être partagées avec un client : structurées, professionnelles et actionnables. " +

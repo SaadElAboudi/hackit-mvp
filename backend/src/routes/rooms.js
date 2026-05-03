@@ -737,7 +737,7 @@ router.get('/', async (req, res) => {
 router.get('/templates', (_req, res) => {
     res.json({
         templates: DOMAIN_TEMPLATES.map(
-            ({ id, version, versionWeights, name, emoji, description, purpose }) => ({
+            ({ id, version, versionWeights, name, emoji, description, purpose, starterPrompts }) => ({
                 id,
                 version,
                 versionWeights,
@@ -745,6 +745,7 @@ router.get('/templates', (_req, res) => {
                 emoji,
                 description,
                 purpose,
+                starterPrompts: Array.isArray(starterPrompts) ? starterPrompts : [],
             })
         ),
     });

@@ -997,6 +997,7 @@ class DomainTemplate {
   final String emoji;
   final String description;
   final String purpose;
+  final List<String> starterPrompts;
 
   const DomainTemplate({
     required this.id,
@@ -1006,6 +1007,7 @@ class DomainTemplate {
     required this.emoji,
     required this.description,
     required this.purpose,
+    required this.starterPrompts,
   });
 
   factory DomainTemplate.fromJson(Map<String, dynamic> j) => DomainTemplate(
@@ -1022,6 +1024,10 @@ class DomainTemplate {
         emoji: j['emoji']?.toString() ?? '',
         description: j['description']?.toString() ?? '',
         purpose: j['purpose']?.toString() ?? '',
+        starterPrompts: (j['starterPrompts'] as List? ?? const [])
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList(),
       );
 }
 
