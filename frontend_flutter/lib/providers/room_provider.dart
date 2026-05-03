@@ -945,6 +945,58 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  /// Convert a decision into tasks (calls POST /:id/decisions/:decisionId/convert).
+  /// Returns the created tasks, appended to [tasks]. Returns null on error.
+  Future<List<WorkspaceTask>?> convertDecisionToTasks(
+    WorkspaceDecision decision, {
+    required List<Map<String, dynamic>> taskDrafts,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      final created = await _svc.convertDecisionToTasks(
+        room.id,
+        decision.id,
+        tasks: taskDrafts,
+      );
+      tasks = [...tasks, ...created];
+      notifyListeners();
+      return created;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// AI-extract decisions + tasks from recent chat history, optionally persisting them.
+  Future<DecisionExtractionResult?> extractDecisionsFromChat({
+    bool persist = false,
+    int recentLimit = 30,
+  }) async {
+    final room = currentRoom;
+    if (room == null) return null;
+    actionError = null;
+    try {
+      final result = await _svc.extractDecisionsFromChat(
+        room.id,
+        persist: persist,
+        recentLimit: recentLimit,
+      );
+      if (persist) {
+        decisions = await _svc.listDecisions(room.id);
+        tasks = await _svc.listTasks(room.id);
+        notifyListeners();
+      }
+      return result;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<WorkspaceTask?> updateTask(
     WorkspaceTask task, {
     String? title,

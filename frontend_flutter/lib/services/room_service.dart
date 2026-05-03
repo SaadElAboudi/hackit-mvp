@@ -421,6 +421,43 @@ class RoomService {
     return DecisionExtractionResult.fromJson(r);
   }
 
+  /// AI-extract decisions + tasks directly from recent chat messages.
+  /// [persist] = false → preview only; true → saves to DB.
+  Future<DecisionExtractionResult> extractDecisionsFromChat(
+    String roomId, {
+    bool persist = false,
+    int recentLimit = 30,
+    int maxDecisions = 8,
+    int maxTasksPerDecision = 4,
+  }) async {
+    final r = await _post(
+      '/api/rooms/$roomId/decisions/extract',
+      {
+        'persist': persist,
+        'recentLimit': recentLimit,
+        'maxDecisions': maxDecisions,
+        'maxTasksPerDecision': maxTasksPerDecision,
+      },
+    );
+    return DecisionExtractionResult.fromJson(r);
+  }
+
+  /// Convert a single decision into concrete tasks via
+  /// POST /api/rooms/:id/decisions/:decisionId/convert
+  Future<List<WorkspaceTask>> convertDecisionToTasks(
+    String roomId,
+    String decisionId, {
+    required List<Map<String, dynamic>> tasks,
+  }) async {
+    final r = await _post(
+      '/api/rooms/$roomId/decisions/$decisionId/convert',
+      {'tasks': tasks},
+    );
+    return (r['tasks'] as List? ?? [])
+        .map((j) => WorkspaceTask.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<void> postMission(String roomId, String prompt,
       {String agentType = 'auto'}) async {
     await _post('/api/rooms/$roomId/missions', {

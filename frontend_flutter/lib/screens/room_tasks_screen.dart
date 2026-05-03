@@ -312,6 +312,471 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
     ownerCtrl.dispose();
   }
 
+  /// Shows a dialog listing every recorded decision and lets the user pick one
+  /// then define 1-3 tasks to generate from it. Calls convertDecisionToTasks().
+  Future<void> _showConvertDecisionDialog() async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final decisions = prov.decisions;
+
+    if (decisions.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Aucune decision enregistree. Creez d\'abord une decision ou utilisez l\'extraction IA.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Step 1 – pick a decision
+    WorkspaceDecision? picked;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Choisir une decision'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: decisions.map((d) {
+                  final selected = picked?.id == d.id;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Material(
+                      color: selected
+                          ? Theme.of(ctx).colorScheme.primaryContainer
+                          : Theme.of(ctx).colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(14),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => setState(() => picked = d),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                selected
+                                    ? Icons.check_circle_rounded
+                                    : Icons.radio_button_unchecked_rounded,
+                                color: Theme.of(ctx).colorScheme.primary,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      d.title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    if (d.summary.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        d.summary,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(ctx)
+                                              .colorScheme
+                                              .onSurface
+                                              .withValues(alpha: 0.65),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: picked == null ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Suivant'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (picked == null || !mounted) return;
+    final decision = picked!;
+
+    // Step 2 – define tasks for the chosen decision
+    final taskTitleCtrls = [TextEditingController()];
+    bool saving = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          void addRow() {
+            if (taskTitleCtrls.length < 6) {
+              setState(() => taskTitleCtrls.add(TextEditingController()));
+            }
+          }
+
+          return AlertDialog(
+            title: Text(
+              'Taches pour : ${decision.title}',
+              overflow: TextOverflow.ellipsis,
+            ),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Definissez les taches a cree pour cette decision (max 6)',
+                      style: TextStyle(
+                        color: Theme.of(ctx)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.7),
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ...taskTitleCtrls.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final ctrl = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: ctrl,
+                                enabled: !saving,
+                                decoration: InputDecoration(
+                                  labelText: 'Tache ${i + 1}',
+                                  hintText: 'Ex: Rediger le brief',
+                                  border: const OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            if (taskTitleCtrls.length > 1) ...[
+                              const SizedBox(width: 8),
+                              IconButton(
+                                onPressed: saving
+                                    ? null
+                                    : () => setState(
+                                          () => taskTitleCtrls.removeAt(i),
+                                        ),
+                                icon: const Icon(Icons.remove_circle_outline),
+                                tooltip: 'Supprimer',
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }),
+                    if (taskTitleCtrls.length < 6)
+                      TextButton.icon(
+                        onPressed: saving ? null : addRow,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Ajouter une tache'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final titles = taskTitleCtrls
+                            .map((c) => c.text.trim())
+                            .where((t) => t.isNotEmpty)
+                            .toList();
+                        if (titles.isEmpty) {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Ajoutez au moins une tache',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        setState(() => saving = true);
+                        final created = await prov.convertDecisionToTasks(
+                          decision,
+                          taskDrafts: titles
+                              .map((t) => <String, dynamic>{'title': t})
+                              .toList(),
+                        );
+                        if (!mounted || !ctx.mounted) return;
+                        if (created == null) {
+                          setState(() => saving = false);
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                prov.actionError ??
+                                    'Impossible de convertir la decision',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        Navigator.of(ctx).pop();
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${created.length} tache${created.length > 1 ? 's creees' : ' creee'} a partir de la decision',
+                            ),
+                          ),
+                        );
+                      },
+                child: Text(saving ? 'Creation...' : 'Creer les taches'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    // Note: taskTitleCtrls controllers go out of scope here and are GC'd.
+    // We intentionally don't dispose them manually: after Navigator.pop(),
+    // a post-frame rebuild of the dismissed StatefulBuilder would trigger
+    // "used after dispose" in debug mode.
+  }
+
+  /// AI-extracts decisions + tasks from chat history, shows a preview,
+  /// then optionally persists everything.
+  Future<void> _showExtractFromChatDialog() async {
+    final prov = context.read<RoomProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    bool loading = true;
+    bool saving = false;
+    DecisionExtractionResult? preview;
+    String? loadError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          // Kick off preview load once
+          if (loading && preview == null && loadError == null) {
+            prov.extractDecisionsFromChat(persist: false).then((result) {
+              if (!ctx.mounted) return;
+              setState(() {
+                loading = false;
+                preview = result;
+                if (result == null) loadError = prov.actionError ?? 'Erreur';
+              });
+            });
+          }
+
+          final scheme = Theme.of(ctx).colorScheme;
+
+          return AlertDialog(
+            title: const Text('Extraction IA — decisions et taches'),
+            content: SizedBox(
+              width: 560,
+              child: loading
+                  ? const SizedBox(
+                      height: 120,
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : loadError != null
+                      ? Text(
+                          'Erreur : $loadError',
+                          style: TextStyle(color: scheme.error),
+                        )
+                      : preview == null || (preview!.extracted.isEmpty)
+                          ? const Text(
+                              'Aucune decision detectee dans les messages recents.',
+                            )
+                          : SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${preview!.extracted.length} decision${preview!.extracted.length > 1 ? "s" : ""} detectee${preview!.extracted.length > 1 ? "s" : ""}',
+                                    style: TextStyle(
+                                      color: scheme.primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ...preview!.extracted.map((d) {
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: scheme.surfaceContainerLow,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: scheme.primary
+                                              .withValues(alpha: 0.18),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.folder_outlined,
+                                                size: 16,
+                                                color: scheme.primary,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  d.title,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          if (d.summary.isNotEmpty) ...[
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              d.summary,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: scheme.onSurface
+                                                    .withValues(alpha: 0.7),
+                                              ),
+                                            ),
+                                          ],
+                                          if (d.tasks.isNotEmpty) ...[
+                                            const SizedBox(height: 10),
+                                            ...d.tasks.map(
+                                              (t) => Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 4,
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      Icons
+                                                          .radio_button_unchecked_rounded,
+                                                      size: 14,
+                                                      color: scheme.onSurface
+                                                          .withValues(
+                                                        alpha: 0.5,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Text(
+                                                        t.title,
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          color: scheme
+                                                              .onSurface
+                                                              .withValues(
+                                                            alpha: 0.85,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+            ),
+            actions: [
+              TextButton(
+                onPressed:
+                    (saving || loading) ? null : () => Navigator.of(ctx).pop(),
+                child: const Text('Annuler'),
+              ),
+              if (!loading &&
+                  loadError == null &&
+                  (preview?.extracted.isNotEmpty ?? false))
+                FilledButton.icon(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setState(() => saving = true);
+                          final result = await prov.extractDecisionsFromChat(
+                            persist: true,
+                          );
+                          if (!mounted || !ctx.mounted) return;
+                          Navigator.of(ctx).pop();
+                          if (result == null) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  prov.actionError ??
+                                      'Erreur lors de la sauvegarde',
+                                ),
+                              ),
+                            );
+                          } else {
+                            final n = result.decisions.length;
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '$n decision${n > 1 ? "s" : ""} et taches sauvegardees',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                  icon: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_alt_rounded, size: 18),
+                  label: Text(saving ? 'Sauvegarde...' : 'Sauvegarder tout'),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   int _countByStatus(List<WorkspaceTask> tasks, String status) {
     return tasks.where((task) => task.status == status).length;
   }
@@ -375,6 +840,16 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
       appBar: AppBar(
         title: Text('Board taches · ${widget.roomName}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome_rounded),
+            tooltip: 'Extraire decisions et taches par IA',
+            onPressed: _showExtractFromChatDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.account_tree_outlined),
+            tooltip: 'Convertir une decision en taches',
+            onPressed: _showConvertDecisionDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.folder_outlined),
             tooltip: 'Creer une decision',
@@ -490,10 +965,176 @@ class _RoomTasksScreenState extends State<RoomTasksScreen> {
                   ],
                 ),
               ),
+              if (prov.decisions.isNotEmpty)
+                _DecisionsPanel(
+                  decisions: prov.decisions,
+                  tasks: prov.tasks,
+                  onConvert: _showConvertDecisionDialog,
+                ),
               Expanded(child: board),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _DecisionsPanel extends StatefulWidget {
+  final List<WorkspaceDecision> decisions;
+  final List<WorkspaceTask> tasks;
+  final VoidCallback onConvert;
+
+  const _DecisionsPanel({
+    required this.decisions,
+    required this.tasks,
+    required this.onConvert,
+  });
+
+  @override
+  State<_DecisionsPanel> createState() => _DecisionsPanelState();
+}
+
+class _DecisionsPanelState extends State<_DecisionsPanel> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final decisionCount = widget.decisions.length;
+    final linkedTaskCount =
+        widget.tasks.where((t) => t.decisionId.isNotEmpty).length;
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeInOut,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        decoration: BoxDecoration(
+          color: scheme.secondaryContainer.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: scheme.secondary.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.folder_outlined,
+                      size: 18,
+                      color: scheme.secondary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '$decisionCount decision${decisionCount > 1 ? "s" : ""}'
+                        '  •  $linkedTaskCount tache${linkedTaskCount > 1 ? "s" : ""} liee${linkedTaskCount > 1 ? "s" : ""}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: scheme.onSecondaryContainer,
+                        ),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: widget.onConvert,
+                      icon: const Icon(Icons.account_tree_outlined, size: 16),
+                      label: const Text('Convertir'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      _expanded
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      color: scheme.onSecondaryContainer.withValues(alpha: 0.6),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Expanded list
+            if (_expanded) ...[
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Column(
+                  children: widget.decisions.map((d) {
+                    final taskCount =
+                        widget.tasks.where((t) => t.decisionId == d.id).length;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: scheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    d.title,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (d.summary.isNotEmpty)
+                                    Text(
+                                      d.summary,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: scheme.onSurface
+                                            .withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Chip(
+                              label: Text(
+                                  '$taskCount tache${taskCount != 1 ? "s" : ""}'),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
