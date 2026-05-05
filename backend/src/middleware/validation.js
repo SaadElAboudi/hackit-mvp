@@ -1059,3 +1059,39 @@ export function validateReminderSnoozePayload(body) {
 
   return { snoozeMinutes: Math.trunc(snoozeMinutes) };
 }
+
+const VALID_SOURCE_TYPES = ['workspace_task', 'workspace_decision', 'room_message'];
+
+export function validateConvertInboxItemPayload(body) {
+  const sourceType = String(body?.sourceType || '').trim();
+  if (!VALID_SOURCE_TYPES.includes(sourceType)) {
+    throw badRequest(
+      `sourceType must be one of: ${VALID_SOURCE_TYPES.join(', ')}`,
+      { field: 'sourceType', received: sourceType }
+    );
+  }
+
+  const title = String(body?.title || '').trim();
+  if (!title) {
+    throw badRequest('title is required', { field: 'title' });
+  }
+
+  const dueDateRaw = String(body?.dueDate || '').trim();
+  let dueDate = null;
+  if (dueDateRaw) {
+    const parsed = new Date(dueDateRaw);
+    if (Number.isNaN(parsed.getTime())) {
+      throw badRequest('dueDate must be a valid ISO date string', { field: 'dueDate' });
+    }
+    dueDate = parsed;
+  }
+
+  return {
+    sourceType,
+    title: title.slice(0, 180),
+    description: String(body?.description || '').trim().slice(0, 2000),
+    ownerId: String(body?.ownerId || '').trim().slice(0, 120),
+    ownerName: String(body?.ownerName || '').trim().slice(0, 120),
+    dueDate,
+  };
+}

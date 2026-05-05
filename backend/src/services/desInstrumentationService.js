@@ -44,6 +44,10 @@ const eventSchemas = {
         version: EVENT_SCHEMA_VERSION,
         fields: ['userId', 'roomId', 'reminderId', 'snoozeMinutes', 'timestamp'],
     },
+    inbox_item_converted: {
+        version: EVENT_SCHEMA_VERSION,
+        fields: ['userId', 'roomId', 'sourceType', 'sourceId', 'taskId', 'timestamp'],
+    },
 };
 
 /**

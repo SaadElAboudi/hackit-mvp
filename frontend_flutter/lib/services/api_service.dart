@@ -540,6 +540,45 @@ class ApiService {
     return body;
   }
 
+  Future<Map<String, dynamic>> convertInboxItem(
+    String roomId,
+    String itemId, {
+    required String sourceType,
+    required String title,
+    String description = '',
+    String ownerId = '',
+    String ownerName = '',
+    String? dueDate,
+  }) async {
+    final uri =
+        Uri.parse('$baseUrl/api/rooms/$roomId/inbox/$itemId/convert-to-task');
+    final headers = await _myDayHeaders();
+    headers['Content-Type'] = 'application/json';
+
+    final payload = <String, dynamic>{
+      'sourceType': sourceType,
+      'title': title,
+      if (description.isNotEmpty) 'description': description,
+      if (ownerId.isNotEmpty) 'ownerId': ownerId,
+      if (ownerName.isNotEmpty) 'ownerName': ownerName,
+      if (dueDate != null && dueDate.isNotEmpty) 'dueDate': dueDate,
+    };
+
+    final response = await _client
+        .post(uri, headers: headers, body: jsonEncode(payload))
+        .timeout(const Duration(seconds: 10));
+
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw ApiException(
+        body['error'] ?? 'Failed to convert item to task',
+        statusCode: response.statusCode,
+      );
+    }
+
+    return body;
+  }
+
   Map<String, dynamic> _parseResponse(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);

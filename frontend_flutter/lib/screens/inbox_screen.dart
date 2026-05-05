@@ -118,6 +118,179 @@ class _InboxScreenState extends State<InboxScreen> {
     }
   }
 
+  Future<void> _showConvertModal(
+      BuildContext context, Map<String, dynamic> item) async {
+    final titleCtrl =
+        TextEditingController(text: (item['title'] ?? '').toString());
+    final descCtrl =
+        TextEditingController(text: (item['description'] ?? '').toString());
+    final ownerCtrl =
+        TextEditingController(text: (item['ownerName'] ?? '').toString());
+    DateTime? pickedDate;
+    final rawDue = item['dueDate'];
+    if (rawDue != null && rawDue.toString().isNotEmpty) {
+      pickedDate = DateTime.tryParse(rawDue.toString());
+    }
+    final dateNotifier = ValueNotifier<DateTime?>(pickedDate);
+    bool isSubmitting = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.task_alt, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Convert to Task',
+                      style: Theme.of(ctx).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Title *',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ownerCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Owner name',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ValueListenableBuilder<DateTime?>(
+                  valueListenable: dateNotifier,
+                  builder: (_, date, __) => OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(date == null
+                        ? 'Set due date (optional)'
+                        : '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}'),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: date ?? DateTime.now(),
+                        firstDate: DateTime.now(),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 365 * 2)),
+                      );
+                      if (picked != null) {
+                        dateNotifier.value = picked;
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            final title = titleCtrl.text.trim();
+                            if (title.isEmpty) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(
+                                    content: Text('Title is required')),
+                              );
+                              return;
+                            }
+                            setModalState(() => isSubmitting = true);
+                            try {
+                              final prov = context.read<RoomProvider>();
+                              final roomId = prov.currentRoom?.id ?? '';
+                              final api = ApiService(http.Client());
+                              await api.convertInboxItem(
+                                roomId,
+                                item['itemId'].toString(),
+                                sourceType:
+                                    (item['sourceType'] ?? 'room_message')
+                                        .toString(),
+                                title: title,
+                                description: descCtrl.text.trim(),
+                                ownerName: ownerCtrl.text.trim(),
+                                dueDate: dateNotifier.value?.toIso8601String(),
+                              );
+                              if (!context.mounted) return;
+                              Navigator.of(ctx).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('Task created successfully')),
+                              );
+                              // Remove the item from local list if it was a
+                              // message/decision (task is already there)
+                              final src = (item['sourceType'] ?? '').toString();
+                              if (src != 'workspace_task') {
+                                setState(() {
+                                  _items.removeWhere(
+                                      (i) => i['itemId'] == item['itemId']);
+                                });
+                              }
+                            } catch (e) {
+                              setModalState(() => isSubmitting = false);
+                              if (!ctx.mounted) return;
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                    content: Text('Error: $e'),
+                                    backgroundColor: Colors.red),
+                              );
+                            }
+                          },
+                    child: isSubmitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Create Task'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
+
+    titleCtrl.dispose();
+    descCtrl.dispose();
+    ownerCtrl.dispose();
+    dateNotifier.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -196,44 +369,67 @@ class _InboxScreenState extends State<InboxScreen> {
                                     return Padding(
                                       padding: const EdgeInsets.all(12),
                                       child: OutlinedButton(
-                                        onPressed: () => _loadInbox(reset: false),
+                                        onPressed: () =>
+                                            _loadInbox(reset: false),
                                         child: const Text('Load more'),
                                       ),
                                     );
                                   }
 
                                   final item = _items[index];
-                                  final sla = (item['sla'] ?? 'none').toString();
+                                  final sla =
+                                      (item['sla'] ?? 'none').toString();
                                   final color = _slaColor(sla);
 
                                   return ListTile(
                                     leading: Icon(
-                                      _typeIcon((item['type'] ?? '').toString()),
+                                      _typeIcon(
+                                          (item['type'] ?? '').toString()),
                                       color: color,
                                     ),
-                                    title: Text((item['title'] ?? '').toString()),
+                                    title:
+                                        Text((item['title'] ?? '').toString()),
                                     subtitle: Text(
                                       [
                                         (item['description'] ?? '').toString(),
-                                        if ((item['channel'] ?? '').toString().isNotEmpty)
+                                        if ((item['channel'] ?? '')
+                                            .toString()
+                                            .isNotEmpty)
                                           '#${item['channel']}'
-                                      ].where((e) => e.trim().isNotEmpty).join(' • '),
+                                      ]
+                                          .where((e) => e.trim().isNotEmpty)
+                                          .join(' • '),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                    trailing: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: color.withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        sla,
-                                        style: TextStyle(color: color),
-                                      ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                color.withValues(alpha: 0.12),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            sla,
+                                            style: TextStyle(color: color),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        IconButton(
+                                          icon: const Icon(Icons.add_task,
+                                              size: 20),
+                                          tooltip: 'Convert to task',
+                                          onPressed: () =>
+                                              _showConvertModal(context, item),
+                                        ),
+                                      ],
                                     ),
                                   );
                                 },

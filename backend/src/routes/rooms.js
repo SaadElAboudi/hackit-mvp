@@ -95,6 +95,7 @@ import {
     validateSendMessagePayload,
     validateTaskActionPayload,
     validateReminderSnoozePayload,
+    validateConvertInboxItemPayload,
     validateUpdateWorkspaceBlockPayload,
     validateUpdateWorkspacePagePayload,
     validateUpdateWorkspaceDecisionPayload,
@@ -2675,6 +2676,96 @@ router.get('/:id/inbox', async (req, res, next) => {
             nextCursor,
             requestId: `inbox-${Date.now()}`,
         });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/rooms/:id/inbox/:itemId/convert-to-task
+ * Convert any inbox item (task / decision / message) into a WorkspaceTask.
+ * Body: { sourceType, title, description?, ownerId?, ownerName?, dueDate? }
+ */
+router.post('/:id/inbox/:itemId/convert-to-task', validateBody(validateConvertInboxItemPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { sourceType, title, description, ownerId, ownerName, dueDate } = req.validatedBody;
+        const itemId = req.params.itemId;
+
+        let sourceDecisionId = null;
+
+        // If the source is already a task, return it (idempotent)
+        if (sourceType === 'workspace_task') {
+            const existing = await WorkspaceTask.findOne({ _id: itemId, roomId: req.params.id }).lean();
+            if (!existing) {
+                return res.status(404).json({ error: 'Task not found' });
+            }
+            logEvent('inbox_item_converted', {
+                userId: req.userId,
+                roomId: req.params.id,
+                sourceType,
+                sourceId: itemId,
+                taskId: String(existing._id),
+                timestamp: new Date().toISOString(),
+            });
+            return res.json({ ok: true, task: workspaceTaskSummary(existing), existing: true });
+        }
+
+        // If source is a decision, link the new task and optionally mark decision converted
+        if (sourceType === 'workspace_decision') {
+            const decision = await WorkspaceDecision.findOne({ _id: itemId, roomId: req.params.id });
+            if (!decision) {
+                return res.status(404).json({ error: 'Decision not found' });
+            }
+            sourceDecisionId = decision._id;
+            // Mark decision as having a derived task (soft link)
+            if (!decision.convertedAt) {
+                decision.convertedAt = new Date();
+                await decision.save();
+            }
+        }
+
+        // For room_message sources: verify it exists (we don't mutate messages)
+        if (sourceType === 'room_message') {
+            const message = await RoomMessage.findOne({ _id: itemId, roomId: req.params.id }).lean();
+            if (!message) {
+                return res.status(404).json({ error: 'Message not found' });
+            }
+        }
+
+        const task = await WorkspaceTask.create({
+            roomId: req.params.id,
+            decisionId: sourceDecisionId,
+            title,
+            description,
+            status: 'todo',
+            ownerId: ownerId || req.userId,
+            ownerName: ownerName || req.displayName,
+            dueDate,
+            createdBy: req.userId,
+            createdByName: req.displayName,
+            lastUpdatedBy: req.userId,
+            lastUpdatedByName: req.displayName,
+        });
+
+        room.lastActivityAt = new Date();
+        await room.save();
+
+        logEvent('inbox_item_converted', {
+            userId: req.userId,
+            roomId: req.params.id,
+            sourceType,
+            sourceId: itemId,
+            taskId: String(task._id),
+            timestamp: new Date().toISOString(),
+        });
+
+        res.status(201).json({ ok: true, task: workspaceTaskSummary(task), existing: false });
     } catch (err) {
         next(err);
     }
