@@ -318,6 +318,130 @@ Scope cap: max 3 tickets
 	- Timestamp deep-links in UI
 	- Relevance checks in test fixtures
 
+## PA-001 Delivery Plan (My Day cockpit, build-ready)
+
+Goal: deliver a first production version of `My Day` that helps each employee execute daily priorities with less friction.
+
+Backlog links:
+- `BL-021` My Day cockpit
+- `BL-024` Auto follow-up engine (partial)
+- `BL-028` ROI instrumentation pack (baseline)
+
+### Scope (Sprint E1, 2 weeks)
+
+1. Daily priority panel (Top 3)
+2. Blockers panel
+3. Due-today panel
+4. Waiting-for panel
+5. In-app follow-up nudges (MVP)
+6. Event tracking for DES proxy
+
+### Ticket Breakdown
+
+#### E1-01 - My Day API contract (aggregated endpoint)
+
+- Type: Backend/API
+- Estimate: `M` (2-3 days)
+- Dependencies: none
+- Tasks:
+	- Add `GET /api/rooms/:id/my-day` aggregated endpoint
+	- Return typed payload sections: `top3`, `blocked`, `dueToday`, `waitingFor`
+	- Include per-item metadata: `id`, `kind`, `title`, `ownerName`, `dueDate`, `priority`, `sourceUrl`
+	- Support deterministic ordering and stable response envelope (`ok`, `requestId`)
+- Acceptance criteria:
+	- Endpoint returns within 400ms p50 (local baseline)
+	- Empty state returns valid typed arrays (no null-shape regressions)
+	- Contract tests cover success + validation + unauthorized room access
+
+#### E1-02 - My Day prioritization service
+
+- Type: Backend/Domain logic
+- Estimate: `M` (2-3 days)
+- Dependencies: `E1-01`
+- Tasks:
+	- Implement scoring for Top 3 priorities (due-date risk, block status, priority weight, dependency count)
+	- Add safeguards: never include completed items
+	- Add `whyRanked` short explanation per top item
+	- Add unit tests for ranking determinism
+- Acceptance criteria:
+	- Same input set yields same ranked Top 3
+	- Overdue blocked item always outranks low-priority non-risk item
+	- `whyRanked` is present for each top item
+
+#### E1-03 - My Day screen (Flutter)
+
+- Type: Frontend/Flutter
+- Estimate: `M` (2-3 days)
+- Dependencies: `E1-01`
+- Tasks:
+	- Create `my_day_screen.dart` and add entry point in root navigation
+	- Render 4 sections with loading/empty/error states
+	- Add one-click actions on items: `mark done`, `defer`, `ping owner`, `open context`
+	- Add pull-to-refresh and request-id debug affordance in error state
+- Acceptance criteria:
+	- My Day is reachable in <=1 tap from app home
+	- Each item action works in <=2 taps
+	- Empty state provides guided CTA ("Generate priorities")
+	- Widget tests cover loading/empty/content/error
+
+#### E1-04 - Action handlers and optimistic updates
+
+- Type: Frontend + Backend integration
+- Estimate: `M` (2 days)
+- Dependencies: `E1-03`
+- Tasks:
+	- Wire actions to existing task/decision endpoints
+	- Add optimistic UI state update and rollback on failure
+	- Add retry mechanism for transient errors (`429`, `5xx`)
+	- Track action outcomes (`success`, `retry`, `failed`)
+- Acceptance criteria:
+	- Action latency feels instant (optimistic update <150ms perceived)
+	- Rollback path restores consistent state on failure
+	- No duplicate action submissions on rapid taps
+
+#### E1-05 - In-app follow-up nudges (MVP)
+
+- Type: Backend + Frontend
+- Estimate: `S/M` (1-2 days)
+- Dependencies: `E1-01`
+- Tasks:
+	- Generate nudge candidates for overdue/due-soon/waiting-too-long
+	- Show non-intrusive nudge cards in My Day
+	- Support `snooze` and `dismiss` actions with reason
+	- Persist nudge interactions for analytics
+- Acceptance criteria:
+	- Nudge rules fire only for actionable items
+	- Snooze prevents repeat nudge until expiry
+	- Dismiss reason is stored and queryable
+
+#### E1-06 - DES instrumentation baseline
+
+- Type: Analytics/Data
+- Estimate: `S` (1 day)
+- Dependencies: `E1-03`, `E1-04`
+- Tasks:
+	- Define event schema: `my_day_opened`, `my_day_action_clicked`, `my_day_action_completed`
+	- Compute DES proxy: users completing >=3 priority actions/day
+	- Add daily snapshot script and markdown report template
+	- Add validation test for event payload schema
+- Acceptance criteria:
+	- DES proxy is computable daily from captured events
+	- Event schema versioning documented
+	- First baseline report published after 3 days of data
+
+### Sprint E1 Exit Criteria
+
+1. `My Day` is available in production UI for all active channels.
+2. Top 3 priorities are visible and actionable for users with open work.
+3. DES proxy is measurable from analytics events.
+4. Overdue ratio trend can be compared pre/post rollout.
+
+### Out Of Scope (E1)
+
+1. External notification channels (email/Slack nudges)
+2. Role-specific dashboards (`BL-027`)
+3. Advanced workload prediction (`BL-026` full)
+
 Sprint 3 exit criteria:
 1. Two vertical packs available in production.
 2. Citation/timestamp summaries enabled for transcript-backed outputs.
