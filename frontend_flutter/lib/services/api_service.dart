@@ -508,6 +508,38 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getInbox(
+    String roomId, {
+    String? filter,
+    String? query,
+    String? before,
+    int limit = 50,
+  }) async {
+    final qp = <String, String>{
+      'limit': '$limit',
+      if ((filter ?? '').trim().isNotEmpty) 'filter': filter!.trim(),
+      if ((query ?? '').trim().isNotEmpty) 'q': query!.trim(),
+      if ((before ?? '').trim().isNotEmpty) 'before': before!.trim(),
+    };
+    final uri = Uri.parse('$baseUrl/api/rooms/$roomId/inbox')
+        .replace(queryParameters: qp);
+    final headers = await _myDayHeaders();
+
+    final response = await _client
+        .get(uri, headers: headers)
+        .timeout(const Duration(seconds: 8));
+
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        body['error'] ?? 'Failed to fetch inbox',
+        statusCode: response.statusCode,
+      );
+    }
+
+    return body;
+  }
+
   Map<String, dynamic> _parseResponse(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);

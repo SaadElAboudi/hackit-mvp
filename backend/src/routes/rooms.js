@@ -229,6 +229,62 @@ function workspaceMilestoneSummary(milestone) {
     };
 }
 
+function computeSlaLabel(dueDate, createdAt) {
+    if (!dueDate) return 'none';
+    const now = new Date();
+    const due = new Date(dueDate);
+    if (Number.isNaN(due.getTime())) return 'none';
+
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    const dayAfterTomorrow = new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000);
+
+    if (due < now) return 'late';
+    if (due >= today && due < tomorrow) return 'today';
+    if (due >= tomorrow && due < dayAfterTomorrow) return 'tomorrow';
+
+    const created = createdAt ? new Date(createdAt) : null;
+    if (created && !Number.isNaN(created.getTime())) {
+        const ageMs = now.getTime() - created.getTime();
+        if (ageMs > 5 * 24 * 60 * 60 * 1000) {
+            return 'soon';
+        }
+    }
+
+    return 'later';
+}
+
+function slaRiskScore(label) {
+    if (label === 'late') return 4;
+    if (label === 'today') return 3;
+    if (label === 'tomorrow') return 2;
+    if (label === 'soon') return 1;
+    return 0;
+}
+
+function buildInboxItem({ type, sourceId, title, description, channel, createdBy, createdByName, createdAt, dueDate, priority, ownerId, ownerName, status, sourceType }) {
+    const sla = computeSlaLabel(dueDate, createdAt);
+    return {
+        id: `${type}-${sourceId}`,
+        type,
+        sourceId,
+        sourceType: sourceType || '',
+        title: String(title || '').trim() || 'Untitled',
+        description: String(description || '').trim(),
+        channel: String(channel || '').trim(),
+        createdBy: String(createdBy || '').trim(),
+        createdByName: String(createdByName || '').trim(),
+        createdAt,
+        dueDate,
+        priority: String(priority || 'normal').trim(),
+        sla,
+        slaRisk: slaRiskScore(sla),
+        ownerId: String(ownerId || '').trim(),
+        ownerName: String(ownerName || '').trim(),
+        status: String(status || '').trim(),
+    };
+}
+
 function formatDecisionPackMarkdown({ room, decisions, tasks, generatedAt, mode = 'checklist' }) {
     const safeRoomName = String(room?.name || 'Channel').trim() || 'Channel';
     const lines = [];
@@ -2479,6 +2535,145 @@ router.get('/:id/feedback-digest', async (req, res, next) => {
                 topWinPatterns,
                 generatedAt: now,
             },
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/inbox', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const limit = Math.max(1, Math.min(200, Number.parseInt(String(req.query?.limit || '50'), 10) || 50));
+        const filter = String(req.query?.filter || 'all').trim().toLowerCase();
+        const q = String(req.query?.q || '').trim().toLowerCase();
+        const before = String(req.query?.before || '').trim();
+        const beforeDate = before ? new Date(before) : null;
+
+        const baseDateQuery = beforeDate && !Number.isNaN(beforeDate.getTime())
+            ? { $lt: beforeDate }
+            : undefined;
+
+        const [tasks, decisions, messages] = await Promise.all([
+            WorkspaceTask.find({
+                roomId: req.params.id,
+                status: { $ne: 'done' },
+                ...(baseDateQuery ? { createdAt: baseDateQuery } : {}),
+            })
+                .sort({ createdAt: -1 })
+                .limit(300)
+                .lean(),
+            WorkspaceDecision.find({
+                roomId: req.params.id,
+                status: { $nin: ['implemented'] },
+                ...(baseDateQuery ? { createdAt: baseDateQuery } : {}),
+            })
+                .sort({ createdAt: -1 })
+                .limit(300)
+                .lean(),
+            RoomMessage.find({
+                roomId: req.params.id,
+                senderId: { $ne: 'ai' },
+                type: { $in: ['text', 'artifact', 'decision', 'research'] },
+                ...(baseDateQuery ? { createdAt: baseDateQuery } : {}),
+            })
+                .sort({ createdAt: -1 })
+                .limit(300)
+                .lean(),
+        ]);
+
+        let items = [
+            ...tasks.map((task) => buildInboxItem({
+                type: 'task',
+                sourceId: task._id,
+                title: task.title,
+                description: task.description,
+                channel: room.name,
+                createdBy: task.createdBy,
+                createdByName: task.createdByName,
+                createdAt: task.createdAt,
+                dueDate: task.dueDate,
+                priority: task.status === 'blocked' ? 'high' : 'normal',
+                ownerId: task.ownerId,
+                ownerName: task.ownerName,
+                status: task.status,
+                sourceType: 'workspace_task',
+            })),
+            ...decisions.map((decision) => buildInboxItem({
+                type: 'decision',
+                sourceId: decision._id,
+                title: decision.title,
+                description: decision.summary,
+                channel: room.name,
+                createdBy: decision.createdBy,
+                createdByName: decision.createdByName,
+                createdAt: decision.createdAt,
+                dueDate: decision.dueDate,
+                priority: decision.status === 'review' ? 'high' : 'normal',
+                ownerId: decision.ownerId,
+                ownerName: decision.ownerName,
+                status: decision.status,
+                sourceType: 'workspace_decision',
+            })),
+            ...messages.map((message) => buildInboxItem({
+                type: 'message',
+                sourceId: message._id,
+                title: String(message.content || '').slice(0, 120),
+                description: `Message from ${message.senderName || 'Unknown'}`,
+                channel: room.name,
+                createdBy: message.senderId,
+                createdByName: message.senderName,
+                createdAt: message.createdAt,
+                dueDate: null,
+                priority: 'normal',
+                ownerId: '',
+                ownerName: '',
+                status: 'new',
+                sourceType: 'room_message',
+            })),
+        ];
+
+        if (filter === 'mine') {
+            items = items.filter((item) => item.ownerId === req.userId);
+        } else if (filter === 'team') {
+            items = items.filter((item) => item.ownerId && item.ownerId !== req.userId);
+        } else if (filter === 'unassigned') {
+            items = items.filter((item) => !item.ownerId);
+        } else if (filter === 'overdue') {
+            items = items.filter((item) => item.sla === 'late');
+        }
+
+        if (q) {
+            items = items.filter((item) =>
+                item.title.toLowerCase().includes(q) ||
+                item.description.toLowerCase().includes(q) ||
+                item.channel.toLowerCase().includes(q)
+            );
+        }
+
+        items.sort((a, b) => {
+            if (b.slaRisk !== a.slaRisk) return b.slaRisk - a.slaRisk;
+            const aTime = new Date(a.createdAt || 0).getTime();
+            const bTime = new Date(b.createdAt || 0).getTime();
+            return bTime - aTime;
+        });
+
+        const paged = items.slice(0, limit);
+        const nextCursor = paged.length === limit
+            ? new Date(paged[paged.length - 1].createdAt || Date.now()).toISOString()
+            : null;
+
+        res.json({
+            ok: true,
+            items: paged,
+            count: paged.length,
+            nextCursor,
+            requestId: `inbox-${Date.now()}`,
         });
     } catch (err) {
         next(err);

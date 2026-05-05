@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/room_provider.dart';
 import '../screens/salons_screen.dart';
 import '../screens/my_day_screen.dart';
+import '../screens/inbox_screen.dart';
 import '../screens/ops_hub_screen.dart';
 import '../screens/execution_board_screen.dart';
 
@@ -51,6 +52,7 @@ class _RootTabsState extends State<RootTabs> {
         children: const [
           OpsHubScreen(),
           MyDayScreen(),
+          InboxScreen(),
           SalonsScreen(),
           ExecutionBoardScreen(),
         ],
@@ -72,6 +74,11 @@ class _RootTabsState extends State<RootTabs> {
             icon: Icon(Icons.checklist_outlined),
             selectedIcon: Icon(Icons.checklist),
             label: 'My Day',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.inbox_outlined),
+            selectedIcon: Icon(Icons.inbox),
+            label: 'Inbox',
           ),
           NavigationDestination(
             icon: Icon(Icons.forum_outlined),
