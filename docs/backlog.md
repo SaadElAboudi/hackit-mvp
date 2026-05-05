@@ -83,10 +83,10 @@ Goal: improve depth, relevance, and discovery quality.
 
 Goal: become the daily execution operating system for employees.
 
-1. [ ] My Day cockpit (Top 3 priorities, blockers, due today)
+1. [~] My Day cockpit (Top 3 priorities, blockers, due today)
 2. [ ] Unified Work Inbox (channels/events to actionable queue)
 3. [ ] Meeting Copilot (recap -> decisions -> tasks)
-4. [ ] Auto follow-up engine (nudges, overdue recovery, escalation)
+4. [~] Auto follow-up engine (nudges, overdue recovery, escalation)
 5. [ ] ROI instrumentation pack (time saved, completion, cycle-time)
 
 Reference execution plan: `docs/productivity_absolute_backlog_2026-05-05.md`
@@ -115,10 +115,10 @@ Reference execution plan: `docs/productivity_absolute_backlog_2026-05-05.md`
 | BL-018 | Accessibility review (contrast, focus, semantics) | [ ] | P1 | A/B | High | M | Quality gate for scaling usage |
 | BL-019 | Internationalization (en/fr) | [ ] | P2 | C/D | Medium | M | User expansion |
 | BL-020 | Security audit + privacy policy update | [ ] | P1 | A/B | High | M | Compliance and risk reduction |
-| BL-021 | My Day cockpit (daily execution center) | [ ] | P0 | E | High | M | Primary KPI: DES, D7 retention |
+| BL-021 | My Day cockpit (daily execution center) | [~] | P0 | E | High | M | E1 delivered (API/UI/actions/nudges/reminders); production hardening + E2 extensions pending |
 | BL-022 | Unified Work Inbox | [ ] | P0 | E | High | M/L | Primary KPI: intake-to-action time |
 | BL-023 | Meeting Copilot (decisions to tasks) | [ ] | P0 | E | High | M/L | Primary KPI: decision-to-task conversion |
-| BL-024 | Auto follow-up engine (nudges + escalation) | [ ] | P0 | E | High | M | Primary KPI: overdue ratio |
+| BL-024 | Auto follow-up engine (nudges + escalation) | [~] | P0 | E | High | M | In-app nudges/reminders/snooze shipped; escalation policies and external channels pending |
 | BL-025 | Copilot action library (role templates) | [ ] | P1 | E | Medium | M | Primary KPI: time saved per user |
 | BL-026 | Team workload risk detection | [ ] | P1 | E | Medium | M | Primary KPI: blocked task duration |
 | BL-027 | Persona dashboards with action prompts | [ ] | P2 | E | Medium | M | Primary KPI: WAU by role |
@@ -335,6 +335,14 @@ Backlog links:
 4. Waiting-for panel
 5. In-app follow-up nudges (MVP)
 6. Event tracking for DES proxy
+
+### Delivery status (2026-05-05)
+
+- E1-01/E1-02/E1-03 delivered (`fd40fd0`)
+- E1-04 delivered (`405f26f`)
+- E1-05/E1-06 delivered (`af19c8c`, `5129679`)
+- E1-07/E1-08 delivered (`e22878a`)
+- Local end-to-end smoke validated with Mongo enabled (`my-day`, `nudges`, `reminders`, `snooze`, `instrumentation` all `200`)
 
 ### Ticket Breakdown
 
