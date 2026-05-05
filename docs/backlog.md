@@ -79,6 +79,18 @@ Goal: improve depth, relevance, and discovery quality.
 4. [ ] Hybrid search embeddings + rerank
 5. [ ] Entity extraction, related content, diversity/dedup, freshness/safe-search
 
+### Phase E - Absolute Productivity System (New)
+
+Goal: become the daily execution operating system for employees.
+
+1. [ ] My Day cockpit (Top 3 priorities, blockers, due today)
+2. [ ] Unified Work Inbox (channels/events to actionable queue)
+3. [ ] Meeting Copilot (recap -> decisions -> tasks)
+4. [ ] Auto follow-up engine (nudges, overdue recovery, escalation)
+5. [ ] ROI instrumentation pack (time saved, completion, cycle-time)
+
+Reference execution plan: `docs/productivity_absolute_backlog_2026-05-05.md`
+
 ## Prioritized Backlog (Master List)
 
 | ID | Item | Status | Priority | Phase | Impact | Effort | Notes |
@@ -103,6 +115,14 @@ Goal: improve depth, relevance, and discovery quality.
 | BL-018 | Accessibility review (contrast, focus, semantics) | [ ] | P1 | A/B | High | M | Quality gate for scaling usage |
 | BL-019 | Internationalization (en/fr) | [ ] | P2 | C/D | Medium | M | User expansion |
 | BL-020 | Security audit + privacy policy update | [ ] | P1 | A/B | High | M | Compliance and risk reduction |
+| BL-021 | My Day cockpit (daily execution center) | [ ] | P0 | E | High | M | Primary KPI: DES, D7 retention |
+| BL-022 | Unified Work Inbox | [ ] | P0 | E | High | M/L | Primary KPI: intake-to-action time |
+| BL-023 | Meeting Copilot (decisions to tasks) | [ ] | P0 | E | High | M/L | Primary KPI: decision-to-task conversion |
+| BL-024 | Auto follow-up engine (nudges + escalation) | [ ] | P0 | E | High | M | Primary KPI: overdue ratio |
+| BL-025 | Copilot action library (role templates) | [ ] | P1 | E | Medium | M | Primary KPI: time saved per user |
+| BL-026 | Team workload risk detection | [ ] | P1 | E | Medium | M | Primary KPI: blocked task duration |
+| BL-027 | Persona dashboards with action prompts | [ ] | P2 | E | Medium | M | Primary KPI: WAU by role |
+| BL-028 | ROI instrumentation pack | [ ] | P1 | E | High | S/M | Required for adoption proof |
 
 BL-006 closure evidence (2026-04-29):
 - Backend: `npm test -- test/room.orchestrator.test.js test/room.trust.v1.test.js` (8/8 pass)
