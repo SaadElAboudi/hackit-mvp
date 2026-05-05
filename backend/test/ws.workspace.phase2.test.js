@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+
 import { WebSocket } from 'ws';
 
 process.env.NODE_ENV = 'test';
@@ -74,7 +75,7 @@ await test('presence.updated is emitted on room join', async (t) => {
     t.after(() => server.close());
 
     const client = await connectClient(port, ROOM_ID);
-    t.after(() => { try { client.ws.close(); } catch { } });
+    t.after(() => { try { client.ws.close(); } catch { /* noop */ } });
 
     const joined = await client.waitForFrame((m) => m.type === 'joined');
     assert.equal(joined.roomId, ROOM_ID);
@@ -90,7 +91,7 @@ await test('page.block.updated and comment events are broadcast to room clients'
     t.after(() => server.close());
 
     const client = await connectClient(port, ROOM_ID);
-    t.after(() => { try { client.ws.close(); } catch { } });
+    t.after(() => { try { client.ws.close(); } catch { /* noop */ } });
     await client.waitForFrame((m) => m.type === 'joined');
 
     const [blockFrame, createdFrame, resolvedFrame] = await Promise.all([

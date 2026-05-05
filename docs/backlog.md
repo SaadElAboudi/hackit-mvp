@@ -1,6 +1,6 @@
 # Unified Product Backlog (Single Source of Truth)
 
-Last updated: 2026-04-29
+Last updated: 2026-05-05
 
 This file is the only prioritized backlog reference for product, engineering, and release planning.
 
@@ -84,8 +84,8 @@ Goal: improve depth, relevance, and discovery quality.
 | ID | Item | Status | Priority | Phase | Impact | Effort | Notes |
 |---|---|---|---|---|---|---|---|
 | BL-001 | Flutter widget tests for artifact review/compare/status | [~] | P0 | A | High | M | Partially landed; finish coverage gaps |
-| BL-002 | Validate observability dashboards and alert routing in staging | [~] | P0 | A | High | S | Local pre-staging report done; staging sign-off pending |
-| BL-003 | Update operator runtime playbook | [~] | P0 | A | High | S | Playbook drafted; awaiting staging validation review |
+| BL-002 | Validate observability dashboards and alert routing in staging | [~] | P0 | A | High | S | Pre-release gate: deferred for now; local quality gate + observability audit automation are active |
+| BL-003 | Update operator runtime playbook | [~] | P0 | A | High | S | Playbook now includes automated audit runbook; final owner names and staging sign-off pending |
 | BL-004 | Artifact review UX polish | [ ] | P1 | A | Medium | M | Reduce friction in compare/review flows |
 | BL-005 | Explicit feedback loop on AI relevance | [x] | P0 | B | High | M | Backend/UI/instrumentation v1 shipped with tests + KPI baseline evidence |
 | BL-006 | Trust & explainability sections in outputs | [x] | P0 | B | High | M | Completed with backend + frontend trust payload/rendering tests |

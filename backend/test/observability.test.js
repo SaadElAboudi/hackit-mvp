@@ -170,3 +170,91 @@ await test('evaluateAlerts fires room_message_5xx_spike when error rate exceeds 
   assert.ok(spike, 'expected room_message_5xx_spike alert');
   assert.equal(spike.severity, 'high');
 });
+
+await test('evaluateAlerts fires search_5xx_spike when search error rate exceeds SLO', async () => {
+  const routeKey = 'POST /api/search';
+  const budget = SLO_ERROR_RATE[routeKey];
+  const snapshot = buildObservabilitySnapshot();
+  snapshot.endpoints[routeKey] = {
+    requests: 20,
+    errorRate5xx: budget + 0.1,
+    latencyMs: { p50: 120, p95: 340 },
+  };
+
+  const alerts = evaluateAlerts(snapshot);
+  const spike = alerts.find((a) => a.code === 'search_5xx_spike');
+  assert.ok(spike, 'expected search_5xx_spike alert');
+  assert.equal(spike.severity, 'high');
+});
+
+await test('evaluateAlerts fires gemini_timeout_spike when timeout rate exceeds SLO', async () => {
+  const snapshot = buildObservabilitySnapshot();
+  snapshot.external.gemini = {
+    total: 20,
+    timeout: 5,
+    error: 0,
+    success: 15,
+    fallback: 0,
+  };
+
+  const alerts = evaluateAlerts(snapshot);
+  const spike = alerts.find((a) => a.code === 'gemini_timeout_spike');
+  assert.ok(spike, 'expected gemini_timeout_spike alert');
+  assert.equal(spike.severity, 'high');
+});
+
+await test('evaluateAlerts fires youtube_error_spike when error rate exceeds SLO', async () => {
+  const snapshot = buildObservabilitySnapshot();
+  snapshot.external.youtube = {
+    total: 20,
+    timeout: 0,
+    error: 4,
+    success: 16,
+    fallback: 0,
+  };
+
+  const alerts = evaluateAlerts(snapshot);
+  const spike = alerts.find((a) => a.code === 'youtube_error_spike');
+  assert.ok(spike, 'expected youtube_error_spike alert');
+  assert.equal(spike.severity, 'medium');
+});
+
+await test('evaluateAlerts fires ws_fanout_failures when failure rate exceeds SLO', async () => {
+  const snapshot = buildObservabilitySnapshot();
+  snapshot.wsFanout = {
+    attempts: 60,
+    success: 50,
+    failed: 10,
+    failureRate: 0.1667,
+    byHub: {
+      rooms: { attempts: 30, success: 24, failed: 6, failureRate: 0.2 },
+      threads: { attempts: 30, success: 26, failed: 4, failureRate: 0.1333 },
+    },
+  };
+
+  const alerts = evaluateAlerts(snapshot);
+  const spike = alerts.find((a) => a.code === 'ws_fanout_failures');
+  assert.ok(spike, 'expected ws_fanout_failures alert');
+  assert.equal(spike.severity, 'high');
+});
+
+await test('evaluateAlerts fires persistent_alerts after consecutive non-zero windows', async () => {
+  const routeKey = 'POST /api/rooms/:id/messages';
+  const budget = SLO_ERROR_RATE[routeKey];
+  const makeSnapshot = () => {
+    const snapshot = buildObservabilitySnapshot();
+    snapshot.endpoints[routeKey] = {
+      requests: 20,
+      errorRate5xx: budget + 0.1,
+      latencyMs: { p50: 100, p95: 250 },
+    };
+    return snapshot;
+  };
+
+  evaluateAlerts(makeSnapshot());
+  evaluateAlerts(makeSnapshot());
+  const thirdAlerts = evaluateAlerts(makeSnapshot());
+  const persistent = thirdAlerts.find((a) => a.code === 'persistent_alerts');
+  assert.ok(persistent, 'expected persistent_alerts alert after consecutive windows');
+  assert.equal(persistent.severity, 'critical');
+});

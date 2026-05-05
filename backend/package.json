@@ -9,6 +9,7 @@
     "predev": "node scripts/checkNodeVersion.js",
     "dev": "nodemon src/index.js",
     "test:smoke": "node scripts/ciSmoke.js",
+    "ops:observability-audit": "node scripts/observabilityAudit.js",
     "kpi:feedback": "node scripts/feedbackKpiBaseline.js",
     "kpi:decisionpack": "node scripts/decisionPackKpiBaseline.js",
     "test:e2e-smoke": "node scripts/e2eSmokeStream.js",
@@ -29,6 +30,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.7.0",
     "morgan": "^1.10.0",
+    "node-cron": "^4.2.1",
     "ws": "^8.20.0",
     "yt-search": "^2.10.8"
   },

@@ -757,6 +757,22 @@ class RoomService {
     return DecisionPackReadiness.fromJson(_parse(res));
   }
 
+  Future<ExecutionPulse> getExecutionPulse(String roomId) async {
+    final uri = Uri.parse('$_base/api/rooms/$roomId/execution-pulse');
+    final res = await _http
+        .get(uri, headers: await _headers())
+        .timeout(const Duration(seconds: 15));
+    return ExecutionPulse.fromJson(_parse(res));
+  }
+
+  Future<FeedbackDigest> getFeedbackDigest(String roomId) async {
+    final uri = Uri.parse('$_base/api/rooms/$roomId/feedback-digest');
+    final res = await _http
+        .get(uri, headers: await _headers())
+        .timeout(const Duration(seconds: 15));
+    return FeedbackDigest.fromJson(_parse(res));
+  }
+
   Future<void> trackDecisionPackEvent(
     String roomId, {
     required String eventType,

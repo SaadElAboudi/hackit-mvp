@@ -1136,7 +1136,7 @@ async function handleMissionCommand({
   }
 }
 
-export async function suggestRoomSynthesisIfNeeded({ roomId, room, actor }) {
+export async function suggestRoomSynthesisIfNeeded({ roomId, room, actor: _actor }) {
   if (process.env.ROOM_SYNTHESIS_SUGGESTIONS === 'false') {
     return { skipped: true, reason: 'disabled' };
   }

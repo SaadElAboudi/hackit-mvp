@@ -402,6 +402,167 @@ function evaluateDecisionPackReadiness({ decisions = [], tasks = [] }) {
     };
 }
 
+function buildExecutionPulse({ decisions = [], tasks = [] }) {
+    const now = new Date();
+    const soon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const staleReviewCutoff = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+
+    const activeTasks = tasks.filter((task) => String(task?.status || 'todo') !== 'done');
+    const activeDecisions = decisions.filter((decision) => String(decision?.status || 'draft') !== 'implemented');
+
+    const overdueTasks = activeTasks.filter((task) => task?.dueDate && new Date(task.dueDate) < now);
+    const dueSoonTasks = activeTasks.filter((task) => task?.dueDate && new Date(task.dueDate) >= now && new Date(task.dueDate) <= soon);
+    const blockedTasks = activeTasks.filter((task) => String(task?.status || '') === 'blocked');
+    const unassignedTasks = activeTasks.filter(
+        (task) => !String(task?.ownerName || task?.ownerId || '').trim()
+    );
+
+    const overdueDecisions = activeDecisions.filter(
+        (decision) => decision?.dueDate && new Date(decision.dueDate) < now
+    );
+    const dueSoonDecisions = activeDecisions.filter(
+        (decision) => decision?.dueDate && new Date(decision.dueDate) >= now && new Date(decision.dueDate) <= soon
+    );
+    const decisionsWithoutOwner = activeDecisions.filter(
+        (decision) => !String(decision?.ownerName || decision?.ownerId || '').trim()
+    );
+    const staleReviewDecisions = activeDecisions.filter(
+        (decision) => String(decision?.status || '') === 'review' && decision?.updatedAt && new Date(decision.updatedAt) < staleReviewCutoff
+    );
+
+    const criticalCount =
+        overdueTasks.length + overdueDecisions.length + blockedTasks.length + staleReviewDecisions.length;
+    const warningCount =
+        dueSoonTasks.length + dueSoonDecisions.length + unassignedTasks.length + decisionsWithoutOwner.length;
+
+    const recommendations = [];
+    if (overdueDecisions.length) {
+        recommendations.push(
+            `${overdueDecisions.length} decision${overdueDecisions.length > 1 ? 's' : ''} depasse${overdueDecisions.length > 1 ? 'nt' : ''} leur echeance.`
+        );
+    }
+    if (blockedTasks.length) {
+        recommendations.push(
+            `${blockedTasks.length} tache${blockedTasks.length > 1 ? 's sont' : ' est'} bloquee${blockedTasks.length > 1 ? 's' : ''} et demande${blockedTasks.length > 1 ? 'nt' : ''} un debloquage.`
+        );
+    }
+    if (decisionsWithoutOwner.length || unassignedTasks.length) {
+        const totalWithoutOwner = decisionsWithoutOwner.length + unassignedTasks.length;
+        recommendations.push(
+            `${totalWithoutOwner} element${totalWithoutOwner > 1 ? 's n ont' : ' n a'} pas encore de responsable explicite.`
+        );
+    }
+    if (dueSoonDecisions.length || dueSoonTasks.length) {
+        const upcoming = dueSoonDecisions.length + dueSoonTasks.length;
+        recommendations.push(
+            `${upcoming} engagement${upcoming > 1 ? 's arrivent' : ' arrive'} a echeance dans les 3 prochains jours.`
+        );
+    }
+    if (!recommendations.length) {
+        recommendations.push('Execution saine: aucun signal critique ou attention immediate detecte.');
+    }
+
+    const status = criticalCount > 0 ? 'critical' : warningCount > 0 ? 'attention' : 'on_track';
+    const score = Math.max(
+        0,
+        100 -
+        overdueDecisions.length * 20 -
+        overdueTasks.length * 14 -
+        blockedTasks.length * 12 -
+        staleReviewDecisions.length * 10 -
+        dueSoonDecisions.length * 7 -
+        dueSoonTasks.length * 5 -
+        decisionsWithoutOwner.length * 6 -
+        unassignedTasks.length * 4
+    );
+
+    const focusItems = [
+        ...overdueDecisions.map((decision) => ({
+            kind: 'decision',
+            itemId: String(decision?._id || ''),
+            severity: 'critical',
+            title: String(decision?.title || 'Decision'),
+            status: String(decision?.status || 'draft'),
+            ownerName: String(decision?.ownerName || ''),
+            dueDate: decision?.dueDate || null,
+            subtitle: `Decision en retard${decision?.ownerName ? ` • ${decision.ownerName}` : ''}`,
+        })),
+        ...blockedTasks.map((task) => ({
+            kind: 'task',
+            itemId: String(task?._id || ''),
+            severity: 'critical',
+            title: String(task?.title || 'Task'),
+            status: String(task?.status || 'blocked'),
+            ownerName: String(task?.ownerName || ''),
+            dueDate: task?.dueDate || null,
+            subtitle: `Tache bloquee${task?.ownerName ? ` • ${task.ownerName}` : ''}`,
+        })),
+        ...overdueTasks.map((task) => ({
+            kind: 'task',
+            itemId: String(task?._id || ''),
+            severity: 'critical',
+            title: String(task?.title || 'Task'),
+            status: String(task?.status || 'todo'),
+            ownerName: String(task?.ownerName || ''),
+            dueDate: task?.dueDate || null,
+            subtitle: `Tache en retard${task?.ownerName ? ` • ${task.ownerName}` : ''}`,
+        })),
+        ...dueSoonDecisions.map((decision) => ({
+            kind: 'decision',
+            itemId: String(decision?._id || ''),
+            severity: 'warning',
+            title: String(decision?.title || 'Decision'),
+            status: String(decision?.status || 'draft'),
+            ownerName: String(decision?.ownerName || ''),
+            dueDate: decision?.dueDate || null,
+            subtitle: `Decision a suivre sous 3 jours${decision?.ownerName ? ` • ${decision.ownerName}` : ''}`,
+        })),
+        ...dueSoonTasks.map((task) => ({
+            kind: 'task',
+            itemId: String(task?._id || ''),
+            severity: 'warning',
+            title: String(task?.title || 'Task'),
+            status: String(task?.status || 'todo'),
+            ownerName: String(task?.ownerName || ''),
+            dueDate: task?.dueDate || null,
+            subtitle: `Tache a suivre sous 3 jours${task?.ownerName ? ` • ${task.ownerName}` : ''}`,
+        })),
+    ]
+        .sort((left, right) => {
+            const severityWeight = { critical: 0, warning: 1 };
+            const leftSeverity = severityWeight[left.severity] ?? 10;
+            const rightSeverity = severityWeight[right.severity] ?? 10;
+            if (leftSeverity !== rightSeverity) return leftSeverity - rightSeverity;
+
+            const leftDue = left.dueDate ? new Date(left.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+            const rightDue = right.dueDate ? new Date(right.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+            return leftDue - rightDue;
+        })
+        .slice(0, 5);
+
+    return {
+        generatedAt: now,
+        status,
+        score,
+        criticalCount,
+        warningCount,
+        tasks: {
+            overdue: overdueTasks.length,
+            dueSoon: dueSoonTasks.length,
+            blocked: blockedTasks.length,
+            unassigned: unassignedTasks.length,
+        },
+        decisions: {
+            overdue: overdueDecisions.length,
+            dueSoon: dueSoonDecisions.length,
+            withoutOwner: decisionsWithoutOwner.length,
+            staleReview: staleReviewDecisions.length,
+        },
+        recommendations,
+        focusItems,
+    };
+}
+
 async function loadDecisionPackData(roomId, { limit = 10, includeOpenTasks = true } = {}) {
     const decisions = await WorkspaceDecision.find({ roomId })
         .sort({ createdAt: -1 })
@@ -2211,6 +2372,100 @@ router.get('/:id/decision-pack/readiness', async (req, res, next) => {
 
         res.json({
             readiness: evaluateDecisionPackReadiness({ decisions, tasks }),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/execution-pulse', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const [decisions, tasks] = await Promise.all([
+            WorkspaceDecision.find({ roomId: req.params.id })
+                .sort({ createdAt: -1 })
+                .limit(200)
+                .lean(),
+            WorkspaceTask.find({ roomId: req.params.id })
+                .sort({ updatedAt: -1 })
+                .limit(500)
+                .lean(),
+        ]);
+
+        return res.json({
+            pulse: buildExecutionPulse({ decisions, tasks }),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/feedback-digest', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const feedbackEvents = await RoomFeedbackEvent.find({ roomId: req.params.id })
+            .sort({ createdAt: -1 })
+            .limit(500)
+            .lean();
+
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const recentEvents = feedbackEvents.filter(
+            (e) => new Date(e.createdAt) >= sevenDaysAgo
+        );
+
+        const totalFeedback = recentEvents.length;
+        const totalPertinent = recentEvents.filter((e) => e.rating === 'pertinent').length;
+        const totalMoyen = recentEvents.filter((e) => e.rating === 'moyen').length;
+        const totalHorsSujet = recentEvents.filter((e) => e.rating === 'hors_sujet').length;
+
+        const pertinentRate = totalFeedback > 0 ? totalPertinent / totalFeedback : 0;
+        const moyenRate = totalFeedback > 0 ? totalMoyen / totalFeedback : 0;
+        const horsSujetRate = totalFeedback > 0 ? totalHorsSujet / totalFeedback : 0;
+
+        const reasonCounts = {};
+        recentEvents
+            .filter((e) => e.reason && String(e.reason).trim())
+            .forEach((e) => {
+                const reason = String(e.reason || '').trim().toLowerCase();
+                reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+            });
+
+        const topFrictionPatterns = Object.entries(reasonCounts)
+            .filter(([_, count]) => count >= 2)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([reason]) => reason);
+
+        const topWinPatterns = recentEvents
+            .filter((e) => e.rating === 'pertinent' && e.reason)
+            .slice(0, 3)
+            .map((e) => String(e.reason || 'Good feedback'))
+            .filter((r) => r.trim());
+
+        return res.json({
+            digest: {
+                pertinentRate: Math.round(pertinentRate * 100) / 100,
+                moyenRate: Math.round(moyenRate * 100) / 100,
+                horsSujetRate: Math.round(horsSujetRate * 100) / 100,
+                totalFeedback,
+                totalPertinent,
+                totalMoyen,
+                totalHorsSujet,
+                topFrictionPatterns,
+                topWinPatterns,
+                generatedAt: now,
+            },
         });
     } catch (err) {
         next(err);

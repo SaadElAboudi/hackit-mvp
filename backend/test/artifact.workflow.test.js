@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 import mongoose from 'mongoose';
-import Room from '../src/models/Room.js';
 
-import RoomArtifact from '../src/models/RoomArtifact.js';
+import Room from '../src/models/Room.js';
 process.env.NODE_ENV = 'test';
 const { createApp } = await import('../src/index.js');
 

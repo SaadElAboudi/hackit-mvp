@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+
 import { WebSocket } from 'ws';
 
 process.env.NODE_ENV = 'test';
@@ -61,8 +62,8 @@ await test('synthesis_suggested is broadcast to all live clients in room', async
     t.after(() => server.close());
 
     const [a, b] = await Promise.all([connectClient(port, ROOM_ID), connectClient(port, ROOM_ID)]);
-    t.after(() => { try { a.ws.close(); } catch { } });
-    t.after(() => { try { b.ws.close(); } catch { } });
+    t.after(() => { try { a.ws.close(); } catch { /* noop */ } });
+    t.after(() => { try { b.ws.close(); } catch { /* noop */ } });
 
     await Promise.all([
         a.waitForFrame((m) => m.type === 'joined'),

@@ -402,11 +402,11 @@ class WorkspaceDecision {
         createdByName: j['createdByName']?.toString() ?? 'Anonyme',
         createdAt: DateTime.tryParse(j['createdAt']?.toString() ?? '') ??
             DateTime.now(),
-          status: j['status']?.toString() ?? 'draft',
-          ownerId: j['ownerId']?.toString() ?? '',
-          ownerName: j['ownerName']?.toString() ?? '',
-          dueDate: DateTime.tryParse(j['dueDate']?.toString() ?? ''),
-          approvedAt: DateTime.tryParse(j['approvedAt']?.toString() ?? ''),
+        status: j['status']?.toString() ?? 'draft',
+        ownerId: j['ownerId']?.toString() ?? '',
+        ownerName: j['ownerName']?.toString() ?? '',
+        dueDate: DateTime.tryParse(j['dueDate']?.toString() ?? ''),
+        approvedAt: DateTime.tryParse(j['approvedAt']?.toString() ?? ''),
       );
 }
 
@@ -619,6 +619,159 @@ class DecisionPackReadiness {
           .map((item) => item.toString())
           .where((item) => item.trim().isNotEmpty)
           .toList(),
+    );
+  }
+}
+
+class ExecutionPulseFocusItem {
+  final String kind;
+  final String itemId;
+  final String severity;
+  final String title;
+  final String status;
+  final String ownerName;
+  final DateTime? dueDate;
+  final String subtitle;
+
+  const ExecutionPulseFocusItem({
+    required this.kind,
+    required this.itemId,
+    required this.severity,
+    required this.title,
+    required this.status,
+    required this.ownerName,
+    required this.dueDate,
+    required this.subtitle,
+  });
+
+  factory ExecutionPulseFocusItem.fromJson(Map<String, dynamic> j) =>
+      ExecutionPulseFocusItem(
+        kind: j['kind']?.toString() ?? 'task',
+        itemId: j['itemId']?.toString() ?? '',
+        severity: j['severity']?.toString() ?? 'warning',
+        title: j['title']?.toString() ?? '',
+        status: j['status']?.toString() ?? '',
+        ownerName: j['ownerName']?.toString() ?? '',
+        dueDate: DateTime.tryParse(j['dueDate']?.toString() ?? ''),
+        subtitle: j['subtitle']?.toString() ?? '',
+      );
+}
+
+class ExecutionPulse {
+  final DateTime generatedAt;
+  final String status;
+  final int score;
+  final int criticalCount;
+  final int warningCount;
+  final int overdueTasks;
+  final int dueSoonTasks;
+  final int blockedTasks;
+  final int unassignedTasks;
+  final int overdueDecisions;
+  final int dueSoonDecisions;
+  final int decisionsWithoutOwner;
+  final int staleReviewDecisions;
+  final List<String> recommendations;
+  final List<ExecutionPulseFocusItem> focusItems;
+
+  const ExecutionPulse({
+    required this.generatedAt,
+    required this.status,
+    required this.score,
+    required this.criticalCount,
+    required this.warningCount,
+    required this.overdueTasks,
+    required this.dueSoonTasks,
+    required this.blockedTasks,
+    required this.unassignedTasks,
+    required this.overdueDecisions,
+    required this.dueSoonDecisions,
+    required this.decisionsWithoutOwner,
+    required this.staleReviewDecisions,
+    required this.recommendations,
+    required this.focusItems,
+  });
+
+  factory ExecutionPulse.fromJson(Map<String, dynamic> j) {
+    final pulse = (j['pulse'] as Map?)?.cast<String, dynamic>() ?? j;
+    final taskData =
+        (pulse['tasks'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final decisionData =
+        (pulse['decisions'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return ExecutionPulse(
+      generatedAt: DateTime.tryParse(pulse['generatedAt']?.toString() ?? '') ??
+          DateTime.now(),
+      status: pulse['status']?.toString() ?? 'on_track',
+      score: (pulse['score'] as num?)?.toInt() ?? 0,
+      criticalCount: (pulse['criticalCount'] as num?)?.toInt() ?? 0,
+      warningCount: (pulse['warningCount'] as num?)?.toInt() ?? 0,
+      overdueTasks: (taskData['overdue'] as num?)?.toInt() ?? 0,
+      dueSoonTasks: (taskData['dueSoon'] as num?)?.toInt() ?? 0,
+      blockedTasks: (taskData['blocked'] as num?)?.toInt() ?? 0,
+      unassignedTasks: (taskData['unassigned'] as num?)?.toInt() ?? 0,
+      overdueDecisions: (decisionData['overdue'] as num?)?.toInt() ?? 0,
+      dueSoonDecisions: (decisionData['dueSoon'] as num?)?.toInt() ?? 0,
+      decisionsWithoutOwner:
+          (decisionData['withoutOwner'] as num?)?.toInt() ?? 0,
+      staleReviewDecisions: (decisionData['staleReview'] as num?)?.toInt() ?? 0,
+      recommendations: (pulse['recommendations'] as List? ?? [])
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList(),
+      focusItems: (pulse['focusItems'] as List? ?? [])
+          .whereType<Map>()
+          .map((item) =>
+              ExecutionPulseFocusItem.fromJson(item.cast<String, dynamic>()))
+          .toList(),
+    );
+  }
+}
+
+class FeedbackDigest {
+  final double pertinentRate;
+  final double moyenRate;
+  final double horsSujetRate;
+  final int totalFeedback;
+  final int totalPertinent;
+  final int totalMoyen;
+  final int totalHorsSujet;
+  final List<String> topFrictionPatterns;
+  final List<String> topWinPatterns;
+  final DateTime generatedAt;
+
+  const FeedbackDigest({
+    required this.pertinentRate,
+    required this.moyenRate,
+    required this.horsSujetRate,
+    required this.totalFeedback,
+    required this.totalPertinent,
+    required this.totalMoyen,
+    required this.totalHorsSujet,
+    required this.topFrictionPatterns,
+    required this.topWinPatterns,
+    required this.generatedAt,
+  });
+
+  factory FeedbackDigest.fromJson(Map<String, dynamic> j) {
+    final digest = (j['digest'] as Map?)?.cast<String, dynamic>() ?? j;
+    return FeedbackDigest(
+      pertinentRate: (digest['pertinentRate'] as num?)?.toDouble() ?? 0,
+      moyenRate: (digest['moyenRate'] as num?)?.toDouble() ?? 0,
+      horsSujetRate: (digest['horsSujetRate'] as num?)?.toDouble() ?? 0,
+      totalFeedback: (digest['totalFeedback'] as num?)?.toInt() ?? 0,
+      totalPertinent: (digest['totalPertinent'] as num?)?.toInt() ?? 0,
+      totalMoyen: (digest['totalMoyen'] as num?)?.toInt() ?? 0,
+      totalHorsSujet: (digest['totalHorsSujet'] as num?)?.toInt() ?? 0,
+      topFrictionPatterns: (digest['topFrictionPatterns'] as List? ?? [])
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList(),
+      topWinPatterns: (digest['topWinPatterns'] as List? ?? [])
+          .map((item) => item.toString())
+          .where((item) => item.trim().isNotEmpty)
+          .toList(),
+      generatedAt: DateTime.tryParse(digest['generatedAt']?.toString() ?? '') ??
+          DateTime.now(),
     );
   }
 }

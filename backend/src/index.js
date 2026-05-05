@@ -13,13 +13,13 @@ import { getFeatureFlags } from './config/featureFlags.js';
 import Room from './models/Room.js';
 import roomsRouter from './routes/rooms.js';
 import { attachWebSocketServer } from './services/threadRooms.js';
+import { scheduleWeeklyDigest } from './services/weeklyDigest.js';
 import { generateWithGemini as generateWithGeminiShared } from './services/gemini.js';
 import { validateFeedbackPayload, validateSearchPayload, validateTtvPayload } from './middleware/validation.js';
 import { getChapters, extractDesiredChapters } from './services/chapters.js';
 import { getTranscript } from './services/transcript.js';
 import { searchYouTube as originalSearchYouTube } from './services/youtube.js';
 import { buildObservabilitySnapshot, evaluateAlerts, observeExternal, observeHttp, observeQualityEvent, observeTtvEvent } from './utils/observability.js';
-import { userIdMiddleware } from './utils/userIdMiddleware.js';
 
 // Avoid importing yt-search at module load on Node<20 to prevent undici File init crash
 const dynamicImport = (moduleName) => Function('m', 'return import(m)')(moduleName);
@@ -949,7 +949,7 @@ function buildReadyToSend({ mode, query, title, objective, nextActions, timeline
  * what assumptions it rests on, and its confidence level.
  * If geminiDoc is provided, enriches with extracted hypothesis + insight.
  */
-function buildTrustCard({ mode, context = {}, risks = [], query, geminiDoc = null }) {
+function buildTrustCard({ mode, context = {}, risks: _risks = [], query: _query, geminiDoc = null }) {
   const ctx = normalizeDeliveryContext(context);
 
   const assumptionsByMode = {
@@ -1005,7 +1005,7 @@ function buildTrustCard({ mode, context = {}, risks = [], query, geminiDoc = nul
         assumptions = [extracted, ...assumptions.slice(1)];
       }
     }
-    const insightMatch = geminiDoc.match(/INSIGHT CL[EÉ][^\n]*\n([^\n\[]{20,300})/i);
+    const insightMatch = geminiDoc.match(/INSIGHT CL[EÉ][^\n]*\n([^\n[]{20,300})/i);
     if (insightMatch) keyInsight = insightMatch[1].trim();
     // Degrade confidence if alarm signals detected in deliverable
     if (/signal d.alarme|risque critique|bloquant/i.test(geminiDoc) && confidence === 'élevé') {
@@ -1617,7 +1617,7 @@ app.post("/api/search", async (req, res) => {
           const stepsOnly = await generateWithGemini(summaryPrompt, 300);
           summaryText = stepsOnly;
         } else {
-          const numberedLines = fullDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[\.\)]\s/.test(l)).map(l => l.replace(/^\d+[\.\)]\s*/, ''));
+          const numberedLines = fullDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[.)]\s/.test(l)).map(l => l.replace(/^\d+[.)]\s*/, ''));
           summaryText = numberedLines.length >= 2 ? numberedLines.join('\n') : heuristicSummary({ desiredSteps, mode: deliveryMode, query });
         }
       } catch (e) {
@@ -1795,7 +1795,7 @@ app.get("/api/search/stream", async (req, res) => {
           const fullDoc = await generateWithGemini(deliverablePrompt, 1200);
           geminiDeliverable = fullDoc.trim();
           // Extract numbered lines as steps so the plan sections are populated
-          const numberedLines = fullDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[\.\)]\s/.test(l)).map(l => l.replace(/^\d+[\.\)]\s*/, ''));
+          const numberedLines = fullDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[.)]\s/.test(l)).map(l => l.replace(/^\d+[.)]\s*/, ''));
           summaryText = numberedLines.length >= 2
             ? numberedLines.join('\n')
             : heuristicSummary({ desiredSteps, mode: deliveryMode, query });
@@ -1858,7 +1858,7 @@ app.get("/api/refine/stream", (req, res) => {
   };
   const end = () => {
     if (res.writableEnded || res.destroyed) return;
-    try { res.end(); } catch (_) { }
+    try { res.end(); } catch (_) { clientState.closed = true; }
   };
 
   (async () => {
@@ -1918,7 +1918,7 @@ RÈGLES ABSOLUES :
         refinedDoc = buildReadyToSend({ mode, query: `${query}. ${followUp}`, title: query, objective: [], nextActions: [], timeline: [], acceptanceCriteria: [] });
       }
 
-      const numberedLines = refinedDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[\.\)]\s/.test(l)).map(l => l.replace(/^\d+[\.\)]\s*/, ''));
+      const numberedLines = refinedDoc.split('\n').map(l => l.trim()).filter(l => /^\d+[.)]\s/.test(l)).map(l => l.replace(/^\d+[.)]\s*/, ''));
       const steps = numberedLines.length >= 2 ? numberedLines : heuristicSummary({ mode, query: `${query}. ${followUp}` }).split('\n').filter(Boolean);
 
       const deliveryPlan = buildDeliveryPlan({ mode, query, title: query, steps, context: {}, geminiDeliverable: refinedDoc });
@@ -1963,7 +1963,7 @@ app.get("/api/challenge/stream", (req, res) => {
   };
   const end = () => {
     if (res.writableEnded || res.destroyed) return;
-    try { res.end(); } catch (_) { }
+    try { res.end(); } catch (_) { clientState.closed = true; }
   };
 
   (async () => {
@@ -2130,6 +2130,8 @@ if (shouldConnectMongo) {
   mongoose.connect(mongoUri, { bufferCommands: false })
     .then(() => {
       console.log('MongoDB connected');
+      // Initialize scheduled jobs
+      scheduleWeeklyDigest();
     })
     .catch((err) => {
       console.error('MongoDB connection error:', err?.message || err);

@@ -9,7 +9,10 @@
   "scripts": {
     "test": "cd backend && npm test",
     "test:coverage": "cd backend && npm run test:coverage",
-    "lint": "cd backend && npm run lint"
+    "lint": "cd backend && npm run lint",
+    "quality:local": "cd backend && npm test -- test/observability.test.js && cd ../frontend_flutter && flutter test test/screens/salons_screen_recommended_channel_test.dart test/screens/artifact_review_screen_test.dart test/screens/room_tasks_screen_test.dart",
+    "quality:local:strict": "npm run lint && npm run quality:local",
+    "quality:local:fast": "cd backend && npm test -- test/observability.test.js && cd ../frontend_flutter && flutter test test/screens/salons_screen_recommended_channel_test.dart"
   },
   "devDependencies": {
     "jest": "^29.2.1"

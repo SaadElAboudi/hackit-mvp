@@ -16,9 +16,11 @@
  *   Body: { prompt: string, pin?: boolean, versionLabel?: string }
  */
 
+// eslint-disable-next-line import/no-unresolved
 import Project from '../models/Project.js';
 import Thread from '../models/Thread.js';
 import Version from '../models/Version.js';
+
 import { broadcastMessage, broadcastVersion, broadcastTyping } from './threadRooms.js';
 import { generateWithGemini } from './gemini.js';
 

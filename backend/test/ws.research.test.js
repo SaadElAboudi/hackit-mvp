@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+
 import { WebSocket } from 'ws';
 
 process.env.NODE_ENV = 'test';
@@ -87,8 +88,8 @@ await test('two WS clients in the same room both receive research_attached', asy
         connectClient(port, ROOM_ID),
     ]);
 
-    t.after(() => { try { a.ws.close(); } catch { } });
-    t.after(() => { try { b.ws.close(); } catch { } });
+    t.after(() => { try { a.ws.close(); } catch { /* noop */ } });
+    t.after(() => { try { b.ws.close(); } catch { /* noop */ } });
 
     // Wait until both have received their `joined` confirmation
     await Promise.all([
@@ -142,7 +143,7 @@ await test('disconnected client is excluded from research_attached broadcast', a
         connectClient(port, ROOM_ID),
     ]);
 
-    t.after(() => { try { b.ws.close(); } catch { } });
+    t.after(() => { try { b.ws.close(); } catch { /* noop */ } });
 
     // Wait for both to join
     await Promise.all([

@@ -1166,22 +1166,6 @@ class _SalonChatScreenState extends State<SalonChatScreen> {
     await _showDecisionPackDialog(prov.decisionPack!);
   }
 
-  Future<void> _openDecisionPack({String? mode}) async {
-    final prov = context.read<RoomProvider>();
-    final messenger = ScaffoldMessenger.of(context);
-    final effectiveMode = mode ?? prov.decisionPackMode;
-    final ok = await prov.loadDecisionPack(mode: effectiveMode);
-    if (!mounted) return;
-    if (!ok || prov.decisionPack == null) {
-      messenger.showSnackBar(
-        SnackBar(
-            content: Text(prov.actionError ?? 'Decision Pack indisponible')),
-      );
-      return;
-    }
-    await _showDecisionPackDialog(prov.decisionPack!);
-  }
-
   Future<void> _showDecisionPackDialog(DecisionPackResult pack) async {
     await showDialog<void>(
       context: context,

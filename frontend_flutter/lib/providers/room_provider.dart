@@ -183,10 +183,14 @@ class RoomProvider extends ChangeNotifier {
   String decisionPackMode = 'checklist';
   DecisionPackAggregate? decisionPackAggregate;
   DecisionPackReadiness? decisionPackReadiness;
+  ExecutionPulse? executionPulse;
+  FeedbackDigest? feedbackDigest;
   DecisionPackShareResult? lastDecisionPackShare;
   bool loadingDecisionPack = false;
   bool loadingDecisionPackAggregate = false;
   bool loadingDecisionPackReadiness = false;
+  bool loadingExecutionPulse = false;
+  bool loadingFeedbackDigest = false;
   RoomIntegrationStatus? slackIntegration;
   RoomIntegrationStatus? notionIntegration;
   bool loadingNotionPages = false;
@@ -311,6 +315,11 @@ class RoomProvider extends ChangeNotifier {
       missions = contextResults[2] as List<RoomMission>;
       decisions = contextResults[3] as List<WorkspaceDecision>;
       tasks = contextResults[4] as List<WorkspaceTask>;
+      try {
+        executionPulse = await _svc.getExecutionPulse(room.id);
+      } catch (_) {
+        executionPulse = null;
+      }
 
       // Keep integration/status loading best-effort so chat load never fails
       // due to optional side panels.
@@ -936,6 +945,7 @@ class RoomProvider extends ChangeNotifier {
         sourceType: sourceType,
       );
       decisions.insert(0, created);
+      await refreshExecutionPulse(silent: true);
       notifyListeners();
       return created;
     } catch (e) {
@@ -976,6 +986,7 @@ class RoomProvider extends ChangeNotifier {
       } else {
         decisions.insert(0, updated);
       }
+      await refreshExecutionPulse(silent: true);
       notifyListeners();
       return updated;
     } catch (e) {
@@ -1001,6 +1012,7 @@ class RoomProvider extends ChangeNotifier {
         tasks: taskDrafts,
       );
       tasks = [...tasks, ...created];
+      await refreshExecutionPulse(silent: true);
       notifyListeners();
       return created;
     } catch (e) {
@@ -1027,6 +1039,7 @@ class RoomProvider extends ChangeNotifier {
       if (persist) {
         decisions = await _svc.listDecisions(room.id);
         tasks = await _svc.listTasks(room.id);
+        await refreshExecutionPulse(silent: true);
         notifyListeners();
       }
       return result;
@@ -1068,6 +1081,7 @@ class RoomProvider extends ChangeNotifier {
       } else {
         tasks.insert(0, updated);
       }
+      await refreshExecutionPulse(silent: true);
       notifyListeners();
       return updated;
     } catch (e) {
@@ -1097,6 +1111,7 @@ class RoomProvider extends ChangeNotifier {
         dueDate: dueDate,
       );
       tasks.insert(0, created);
+      await refreshExecutionPulse(silent: true);
       notifyListeners();
       return created;
     } catch (e) {
@@ -1391,6 +1406,48 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> refreshExecutionPulse({bool silent = false}) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    if (!silent) {
+      loadingExecutionPulse = true;
+      notifyListeners();
+    }
+    try {
+      executionPulse = await _svc.getExecutionPulse(room.id);
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    } finally {
+      loadingExecutionPulse = false;
+      if (!silent) {
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> loadFeedbackDigest({bool silent = false}) async {
+    final room = currentRoom;
+    if (room == null) return false;
+    if (!silent) {
+      loadingFeedbackDigest = true;
+      notifyListeners();
+    }
+    try {
+      feedbackDigest = await _svc.getFeedbackDigest(room.id);
+      return true;
+    } catch (e) {
+      actionError = _errorMessage(e);
+      return false;
+    } finally {
+      loadingFeedbackDigest = false;
+      if (!silent) {
+        notifyListeners();
+      }
+    }
+  }
+
   Future<bool> refreshDecisionPackAggregate({int sinceDays = 7}) async {
     final room = currentRoom;
     if (room == null) return false;
@@ -1445,6 +1502,8 @@ class RoomProvider extends ChangeNotifier {
     decisionPackMode = 'checklist';
     decisionPackAggregate = null;
     decisionPackReadiness = null;
+    executionPulse = null;
+    feedbackDigest = null;
     lastDecisionPackShare = null;
     slackIntegration = null;
     notionIntegration = null;
@@ -1452,6 +1511,8 @@ class RoomProvider extends ChangeNotifier {
     loadingShareHistory = false;
     loadingDecisionPack = false;
     loadingDecisionPackAggregate = false;
+    loadingExecutionPulse = false;
+    loadingFeedbackDigest = false;
     loadingIntegrations = false;
     aiThinking = false;
     wsReconnecting = false;

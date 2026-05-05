@@ -24,8 +24,10 @@
  */
 
 import { WebSocketServer } from 'ws';
-import { handleRoomConnection } from './roomWS.js';
+
 import { observeWsFanout } from '../utils/observability.js';
+
+import { handleRoomConnection } from './roomWS.js';
 
 /** @type {Map<string, Set<WebSocket>>} threadId → set of connected sockets */
 const rooms = new Map();

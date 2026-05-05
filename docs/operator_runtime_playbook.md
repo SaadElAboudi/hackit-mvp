@@ -1,6 +1,6 @@
 # Operator Runtime Playbook
 
-Last updated: 2026-04-29
+Last updated: 2026-05-05
 Backlog links: BL-003, S1-02
 
 ## Purpose
@@ -79,6 +79,21 @@ curl -sS "$TARGET_URL/health"
 curl -sS "$TARGET_URL/health/integrations"
 curl -sS "$TARGET_URL/health/observability"
 ```
+
+Automated observability audit report:
+
+```bash
+cd backend
+TARGET_URL=https://<staging-url> \
+SMOKE_API_HOST=<internal-http-host> \
+SMOKE_API_PORT=<internal-http-port> \
+npm run ops:observability-audit
+```
+
+Expected outcome:
+- command exits `0`
+- report generated in `docs/observability_validation_report_<YYYY-MM-DD>.md`
+- include report link in incident/release notes
 
 Room smoke check:
 

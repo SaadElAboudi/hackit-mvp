@@ -1,6 +1,6 @@
 # Observability Staging Checklist (Phase 8)
 
-Last updated: 2026-04-29
+Last updated: 2026-05-05
 
 This checklist validates the Phase 8 rollout in a staging environment.
 
@@ -19,6 +19,27 @@ Validate the following shipped capabilities:
 2. At least one staging app instance is running with WebSocket enabled.
 3. If telemetry validation is required, run a frontend build with `ANALYTICS_OPT_IN=true`.
 4. You have credentials for staging log/monitoring dashboards.
+
+## Fast-path Automation (recommended first pass)
+
+From `backend/`, run:
+
+```bash
+TARGET_URL=https://<staging-url> \
+SMOKE_API_HOST=<internal-http-host> \
+SMOKE_API_PORT=<internal-http-port> \
+npm run ops:observability-audit
+```
+
+Notes:
+- `SMOKE_API_HOST` / `SMOKE_API_PORT` are optional for pure `http://` targets.
+- For `https://` targets, provide smoke host/port only if your staging network exposes an HTTP-reachable gateway for smoke traffic.
+- Report is generated at `docs/observability_validation_report_<YYYY-MM-DD>.md`.
+
+Pass criteria:
+- Audit command exits with code `0`.
+- Generated report includes Step 1 payload evidence and Step 2 smoke output.
+- No `FAIL` status on Step 2 in generated report.
 
 ## Step 1: Baseline Health Endpoints
 

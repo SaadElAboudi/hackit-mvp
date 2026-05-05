@@ -7,9 +7,17 @@ import 'package:hackit_mvp_flutter/providers/room_provider.dart';
 import 'package:hackit_mvp_flutter/screens/salons_screen.dart';
 
 class _FakeRoomProvider extends RoomProvider {
-  _FakeRoomProvider({this.withInsights = true});
+  _FakeRoomProvider({
+    this.withInsights = true,
+    this.topByFeedbackId = 'product',
+    this.topByD7Id = 'product',
+    this.underperformingIds = const ['marketing'],
+  });
 
   final bool withInsights;
+  final String? topByFeedbackId;
+  final String? topByD7Id;
+  final List<String> underperformingIds;
   String? lastTemplateId;
   String? lastTemplateVersion;
   String? lastName;
@@ -105,11 +113,20 @@ class _FakeRoomProvider extends RoomProvider {
       d7RetentionRate: 25,
     );
 
+    final byId = <String, DomainTemplateStats>{
+      'product': productStats,
+      'marketing': marketingStats,
+    };
+
     templateStats = const [productStats, marketingStats];
-    templateInsights = const DomainTemplateInsights(
-      topByFeedback: productStats,
-      topByD7Retention: productStats,
-      underperformingTemplates: [marketingStats],
+    templateInsights = DomainTemplateInsights(
+      topByFeedback:
+          topByFeedbackId == null ? null : byId[topByFeedbackId ?? ''],
+      topByD7Retention: topByD7Id == null ? null : byId[topByD7Id ?? ''],
+      underperformingTemplates: underperformingIds
+          .map((id) => byId[id])
+          .whereType<DomainTemplateStats>()
+          .toList(),
     );
     notifyListeners();
   }
@@ -219,6 +236,47 @@ void main() {
     await tester.pumpWidget(_wrap(provider));
     await tester.pumpAndSettle();
 
+    expect(find.text('Creer channel recommande'), findsNothing);
+  });
+
+  testWidgets(
+      'falls back to top D7 recommendation when top feedback is underperforming',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final provider = _FakeRoomProvider(
+      topByFeedbackId: 'product',
+      topByD7Id: 'marketing',
+      underperformingIds: const ['product'],
+    );
+
+    await tester.pumpWidget(_wrap(provider));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Modele recommande: Marketing'), findsOneWidget);
+
+    await tester.tap(find.text('Creer channel recommande'));
+    await tester.pumpAndSettle();
+
+    expect(provider.createCalls, 1);
+    expect(provider.lastTemplateId, 'marketing');
+  });
+
+  testWidgets(
+      'does not show recommendation when all top candidates are blocked',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final provider = _FakeRoomProvider(
+      topByFeedbackId: 'product',
+      topByD7Id: 'marketing',
+      underperformingIds: const ['product', 'marketing'],
+    );
+
+    await tester.pumpWidget(_wrap(provider));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Modele recommande:'), findsNothing);
     expect(find.text('Creer channel recommande'), findsNothing);
   });
 }
