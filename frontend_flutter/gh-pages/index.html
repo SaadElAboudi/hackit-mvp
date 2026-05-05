@@ -72,14 +72,16 @@
 
   <script>
     // Deprecated local variable replaced by template token.
-    // Flutter tooling will substitute "405964622" at build time.
-    const serviceWorkerVersion = '"405964622"';
+    // Flutter tooling will substitute "3167605613" at build time.
+    const serviceWorkerVersion = '"3167605613"';
   </script>
   <!-- Flutter bootstrap (generated during build) includes the loader and auto-starts the app. -->
   <script src="flutter_bootstrap.js" defer></script>
 </head>
 
 <body>
+  <!-- Fallback: define minimal buildConfig if bootstrap race occurs -->
+  <script>if(!window._flutter)window._flutter={};if(!window._flutter.buildConfig){window._flutter.buildConfig={entrypointUrl:"main.dart.js"};}</script>
   <!-- No inline bootstrap code needed; flutter_bootstrap.js calls loader.load() for us. -->
 </body>
 
