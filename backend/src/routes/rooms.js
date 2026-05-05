@@ -34,6 +34,7 @@ import {
 import { generateWithGemini as generateWithGeminiShared } from '../services/gemini.js';
 import { discoverNotionPages, validateNotionToken } from '../services/notion.js';
 import { executeWithRetry, getExportConnector } from '../services/exportConnectors.js';
+import { getMyDay, getMyDayStats } from '../services/myDayService.js';
 import {
     broadcastRoomChallenge,
     broadcastCommentCreated,
@@ -2468,6 +2469,37 @@ router.get('/:id/feedback-digest', async (req, res, next) => {
             },
         });
     } catch (err) {
+        next(err);
+    }
+});
+
+router.get('/:id/my-day', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const myDay = await getMyDay(req.params.id, req.userId);
+
+        // Ensure all sections are arrays even if empty
+        const response = {
+            ok: myDay.ok !== false,
+            top3: myDay.top3 || [],
+            blocked: myDay.blocked || [],
+            dueToday: myDay.dueToday || [],
+            waitingFor: myDay.waitingFor || [],
+            requestId: myDay.requestId,
+            computedAt: myDay.computedAt,
+        };
+
+        // Set cache header: 1 minute (cache is good enough for daily cockpit)
+        res.set('Cache-Control', 'private, max-age=60');
+        res.json(response);
+    } catch (err) {
+        console.error('[rooms] my-day error:', err);
         next(err);
     }
 });

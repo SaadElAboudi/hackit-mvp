@@ -336,6 +336,44 @@ class ApiService {
 
   // Removed getVideoDetails to simplify API surface; not used by the app.
 
+  /// E1-01: Fetch My Day aggregated data (top 3, blocked, due-today, waiting-for).
+  Future<Map<String, dynamic>> getMyDay(String roomId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('user_id') ?? '';
+    final displayName = prefs.getString('display_name') ?? 'User';
+
+    final uri = Uri.parse('$baseUrl/api/rooms/$roomId/my-day');
+    try {
+      final response = await _client.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId,
+          'x-display-name': displayName,
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        return _decodeJsonObject(response.body);
+      } else if (response.statusCode == 403) {
+        throw ApiException('Not a member of this room', statusCode: 403);
+      } else if (response.statusCode == 404) {
+        throw ApiException('Room not found', statusCode: 404);
+      } else {
+        final error = _decodeJsonObject(response.body);
+        throw ApiException(
+          error['error'] ?? 'Failed to fetch My Day',
+          statusCode: response.statusCode,
+        );
+      }
+    } on TimeoutException {
+      throw ApiException('Request timeout');
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Error fetching My Day: $e');
+    }
+  }
+
   Map<String, dynamic> _parseResponse(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);
