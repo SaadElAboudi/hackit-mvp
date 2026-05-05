@@ -116,7 +116,7 @@ Reference execution plan: `docs/productivity_absolute_backlog_2026-05-05.md`
 | BL-019 | Internationalization (en/fr) | [ ] | P2 | C/D | Medium | M | User expansion |
 | BL-020 | Security audit + privacy policy update | [ ] | P1 | A/B | High | M | Compliance and risk reduction |
 | BL-021 | My Day cockpit (daily execution center) | [~] | P0 | E | High | M | E1 delivered (API/UI/actions/nudges/reminders); production hardening + E2 extensions pending |
-| BL-022 | Unified Work Inbox | [ ] | P0 | E | High | M/L | Primary KPI: intake-to-action time |
+| BL-022 | Unified Work Inbox | [~] | P0 | E | High | M/L | E2-01/02 inbox API+UI, E2-03 convert-to-task, E2-04 snooze+SLA report shipped (commits ab7af10, e7169a8) |
 | BL-023 | Meeting Copilot (decisions to tasks) | [ ] | P0 | E | High | M/L | Primary KPI: decision-to-task conversion |
 | BL-024 | Auto follow-up engine (nudges + escalation) | [~] | P0 | E | High | M | In-app nudges/reminders/snooze shipped; escalation policies and external channels pending |
 | BL-025 | Copilot action library (role templates) | [ ] | P1 | E | Medium | M | Primary KPI: time saved per user |

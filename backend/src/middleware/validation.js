@@ -1060,6 +1060,27 @@ export function validateReminderSnoozePayload(body) {
   return { snoozeMinutes: Math.trunc(snoozeMinutes) };
 }
 
+export function validateSnoozeInboxItemPayload(body) {
+  const raw = body?.snoozeMinutes;
+  const snoozeMinutes = Number(raw);
+
+  if (!Number.isFinite(snoozeMinutes)) {
+    throw badRequest('snoozeMinutes must be a number', {
+      field: 'snoozeMinutes',
+      received: raw,
+    });
+  }
+
+  if (snoozeMinutes < 5 || snoozeMinutes > 10080) { // max 1 week
+    throw badRequest('snoozeMinutes must be between 5 and 10080 (1 week)', {
+      field: 'snoozeMinutes',
+      received: raw,
+    });
+  }
+
+  return { snoozeMinutes: Math.trunc(snoozeMinutes) };
+}
+
 const VALID_SOURCE_TYPES = ['workspace_task', 'workspace_decision', 'room_message'];
 
 export function validateConvertInboxItemPayload(body) {

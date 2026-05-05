@@ -95,6 +95,7 @@ import {
     validateSendMessagePayload,
     validateTaskActionPayload,
     validateReminderSnoozePayload,
+    validateSnoozeInboxItemPayload,
     validateConvertInboxItemPayload,
     validateUpdateWorkspaceBlockPayload,
     validateUpdateWorkspacePagePayload,
@@ -267,6 +268,7 @@ function buildInboxItem({ type, sourceId, title, description, channel, createdBy
     const sla = computeSlaLabel(dueDate, createdAt);
     return {
         id: `${type}-${sourceId}`,
+        itemId: String(sourceId || ''),
         type,
         sourceId,
         sourceType: sourceType || '',
@@ -2766,6 +2768,94 @@ router.post('/:id/inbox/:itemId/convert-to-task', validateBody(validateConvertIn
         });
 
         res.status(201).json({ ok: true, task: workspaceTaskSummary(task), existing: false });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/rooms/:id/inbox/:itemId/snooze
+ * Snooze an inbox item for N minutes (in-memory, per-user).
+ * Body: { snoozeMinutes, sourceType }
+ */
+const _inboxSnoozeStore = new Map(); // key: `${userId}:${itemId}` => ISO expiry
+
+router.post('/:id/inbox/:itemId/snooze', validateBody(validateSnoozeInboxItemPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { snoozeMinutes } = req.validatedBody;
+        const itemId = req.params.itemId;
+        const sourceType = String(req.body?.sourceType || 'unknown').trim();
+        const key = `${req.userId}:${itemId}`;
+        const snoozeUntil = new Date(Date.now() + snoozeMinutes * 60_000).toISOString();
+
+        _inboxSnoozeStore.set(key, snoozeUntil);
+
+        logEvent('inbox_item_snoozed', {
+            userId: req.userId,
+            roomId: req.params.id,
+            itemId,
+            sourceType,
+            snoozeUntil,
+            timestamp: new Date().toISOString(),
+        });
+
+        res.json({ ok: true, itemId, snoozeUntil });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * GET /api/rooms/:id/inbox/sla-report
+ * Returns SLA health breakdown for the room's open items.
+ */
+router.get('/:id/inbox/sla-report', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const [tasks, decisions] = await Promise.all([
+            WorkspaceTask.find({ roomId: req.params.id, status: { $ne: 'done' } }).lean(),
+            WorkspaceDecision.find({ roomId: req.params.id, status: { $nin: ['implemented'] } }).lean(),
+        ]);
+
+        const items = [
+            ...tasks.map((t) => ({ dueDate: t.dueDate, createdAt: t.createdAt, type: 'task' })),
+            ...decisions.map((d) => ({ dueDate: d.dueDate, createdAt: d.createdAt, type: 'decision' })),
+        ];
+
+        const buckets = { late: 0, today: 0, tomorrow: 0, soon: 0, none: 0 };
+        for (const item of items) {
+            const label = computeSlaLabel(item.dueDate, item.createdAt);
+            buckets[label] = (buckets[label] || 0) + 1;
+        }
+
+        const total = items.length;
+        const healthScore = total === 0 ? 100
+            : Math.max(0, Math.round(100 - (buckets.late / total) * 100));
+
+        logEvent('inbox_sla_report_viewed', {
+            userId: req.userId,
+            roomId: req.params.id,
+            timestamp: new Date().toISOString(),
+        });
+
+        res.json({
+            ok: true,
+            total,
+            buckets,
+            healthScore,
+            requestId: `sla-report-${Date.now()}`,
+        });
     } catch (err) {
         next(err);
     }

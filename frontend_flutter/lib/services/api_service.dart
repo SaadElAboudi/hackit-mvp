@@ -579,6 +579,53 @@ class ApiService {
     return body;
   }
 
+  Future<Map<String, dynamic>> snoozeInboxItem(
+    String roomId,
+    String itemId, {
+    required int snoozeMinutes,
+    String sourceType = 'unknown',
+  }) async {
+    final uri = Uri.parse(
+        '$baseUrl/api/rooms/$roomId/inbox/$itemId/snooze');
+    final headers = await _myDayHeaders();
+    headers['Content-Type'] = 'application/json';
+
+    final response = await _client
+        .post(uri,
+            headers: headers,
+            body: jsonEncode(
+                {'snoozeMinutes': snoozeMinutes, 'sourceType': sourceType}))
+        .timeout(const Duration(seconds: 8));
+
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        body['error'] ?? 'Failed to snooze item',
+        statusCode: response.statusCode,
+      );
+    }
+    return body;
+  }
+
+  Future<Map<String, dynamic>> getInboxSlaReport(String roomId) async {
+    final uri =
+        Uri.parse('$baseUrl/api/rooms/$roomId/inbox/sla-report');
+    final headers = await _myDayHeaders();
+
+    final response = await _client
+        .get(uri, headers: headers)
+        .timeout(const Duration(seconds: 8));
+
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        body['error'] ?? 'Failed to fetch SLA report',
+        statusCode: response.statusCode,
+      );
+    }
+    return body;
+  }
+
   Map<String, dynamic> _parseResponse(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);

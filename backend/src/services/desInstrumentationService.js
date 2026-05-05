@@ -48,6 +48,14 @@ const eventSchemas = {
         version: EVENT_SCHEMA_VERSION,
         fields: ['userId', 'roomId', 'sourceType', 'sourceId', 'taskId', 'timestamp'],
     },
+    inbox_item_snoozed: {
+        version: EVENT_SCHEMA_VERSION,
+        fields: ['userId', 'roomId', 'itemId', 'sourceType', 'snoozeUntil', 'timestamp'],
+    },
+    inbox_sla_report_viewed: {
+        version: EVENT_SCHEMA_VERSION,
+        fields: ['userId', 'roomId', 'timestamp'],
+    },
 };
 
 /**

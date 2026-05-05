@@ -27,11 +27,15 @@ class _InboxScreenState extends State<InboxScreen> {
   String? _error;
   String _selectedFilter = 'all';
   String? _nextCursor;
+  Map<String, dynamic>? _slaReport;
+  // itemId -> snoozeUntil ISO
+  final Map<String, String> _snoozed = {};
 
   @override
   void initState() {
     super.initState();
     _loadInbox(reset: true);
+    _loadSlaReport();
   }
 
   @override
@@ -90,6 +94,89 @@ class _InboxScreenState extends State<InboxScreen> {
         _error = 'Failed to load inbox: $e';
       });
     }
+  }
+
+  Future<void> _loadSlaReport() async {
+    try {
+      final prov = context.read<RoomProvider>();
+      await prov.ensureCurrentRoom(createIfMissing: false);
+      final room = prov.currentRoom;
+      if (room == null) return;
+      final api = ApiService(http.Client());
+      final report = await api.getInboxSlaReport(room.id);
+      if (!mounted) return;
+      setState(() => _slaReport = report);
+    } catch (_) {
+      // non-critical, ignore
+    }
+  }
+
+  Future<void> _snoozeItem(
+      BuildContext context, Map<String, dynamic> item, int minutes) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final prov = context.read<RoomProvider>();
+      final roomId = prov.currentRoom?.id ?? '';
+      final itemId = (item['itemId'] ?? '').toString();
+      final api = ApiService(http.Client());
+      final result = await api.snoozeInboxItem(
+        roomId,
+        itemId,
+        snoozeMinutes: minutes,
+        sourceType: (item['sourceType'] ?? 'unknown').toString(),
+      );
+      if (!mounted) return;
+      final until = result['snoozeUntil']?.toString() ?? '';
+      setState(() => _snoozed[itemId] = until);
+      messenger.showSnackBar(
+        SnackBar(
+            content: Text('Snoozed for $minutes min'),
+            duration: const Duration(seconds: 2)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+            content: Text('Snooze failed: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Widget _buildSlaBar() {
+    final report = _slaReport;
+    if (report == null) return const SizedBox.shrink();
+    final health = (report['healthScore'] as num?)?.toInt() ?? 100;
+    final buckets = (report['buckets'] as Map?) ?? {};
+    final late = (buckets['late'] as num?)?.toInt() ?? 0;
+    final total = (report['total'] as num?)?.toInt() ?? 0;
+    final barColor = health >= 80
+        ? Colors.green
+        : health >= 50
+            ? Colors.orange
+            : Colors.red;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: barColor.withValues(alpha: 0.08),
+        border: Border.all(color: barColor.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.health_and_safety, size: 16, color: barColor),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'SLA health: $health% • $total open items'
+              '${late > 0 ? ' • $late late' : ''}',
+              style: TextStyle(fontSize: 12, color: barColor),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Color _slaColor(String sla) {
@@ -345,6 +432,7 @@ class _InboxScreenState extends State<InboxScreen> {
             ),
           ),
           const SizedBox(height: 8),
+          _buildSlaBar(),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -422,6 +510,41 @@ class _InboxScreenState extends State<InboxScreen> {
                                           ),
                                         ),
                                         const SizedBox(width: 4),
+                                        if (_snoozed.containsKey(
+                                            (item['itemId'] ?? '').toString()))
+                                          const Tooltip(
+                                            message: 'Snoozed',
+                                            child: Icon(Icons.snooze,
+                                                size: 16,
+                                                color: Colors.grey),
+                                          )
+                                        else
+                                          PopupMenuButton<int>(
+                                            icon: const Icon(
+                                                Icons.snooze_outlined,
+                                                size: 18),
+                                            tooltip: 'Snooze',
+                                            itemBuilder: (_) => const [
+                                              PopupMenuItem(
+                                                  value: 30,
+                                                  child: Text('30 min')),
+                                              PopupMenuItem(
+                                                  value: 60,
+                                                  child: Text('1 hour')),
+                                              PopupMenuItem(
+                                                  value: 480,
+                                                  child: Text('8 hours')),
+                                              PopupMenuItem(
+                                                  value: 1440,
+                                                  child: Text('1 day')),
+                                              PopupMenuItem(
+                                                  value: 10080,
+                                                  child: Text('1 week')),
+                                            ],
+                                            onSelected: (minutes) =>
+                                                _snoozeItem(
+                                                    context, item, minutes),
+                                          ),
                                         IconButton(
                                           icon: const Icon(Icons.add_task,
                                               size: 20),
