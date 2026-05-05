@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/room_provider.dart';
 import '../screens/salons_screen.dart';
 import '../screens/ops_hub_screen.dart';
 import '../screens/execution_board_screen.dart';
@@ -13,6 +16,30 @@ class RootTabs extends StatefulWidget {
 
 class _RootTabsState extends State<RootTabs> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final prov = context.read<RoomProvider>();
+      await prov.loadRooms();
+      await prov.loadTemplates();
+      await prov.loadTemplateStats();
+
+      if (!mounted) return;
+
+      if (prov.currentRoom == null && prov.rooms.isNotEmpty) {
+        await prov.openRoom(prov.rooms.first);
+        await prov.loadFeedbackDigest(silent: true);
+      }
+
+      if (mounted && prov.rooms.isEmpty && _selectedIndex == 0) {
+        setState(() {
+          _selectedIndex = 1;
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

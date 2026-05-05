@@ -1339,6 +1339,8 @@ async function generateWithGemini(prompt, maxOutputTokens = 256, options = {}) {
 app.get("/health", (_req, res) => {
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
   const mock = (process.env.MOCK_MODE || mockDefault) === "true";
+  const mongoConnected = mongoose.connection.readyState === 1;
+  const mongoBlocked = mongoUri.length > 0 && isLocalMongoUri && !allowLocalMongo;
   res.json({
     ok: true,
     mode: mock ? 'MOCK' : 'REAL',
@@ -1347,6 +1349,11 @@ app.get("/health", (_req, res) => {
     version: APP_VERSION,
     projectId: process.env.PROJECT_ID || null,
     youtubeApi: Boolean(process.env.YT_API_KEY),
+    mongo: {
+      configured: mongoUri.length > 0,
+      connected: mongoConnected,
+      blockedLocalUri: mongoBlocked,
+    },
     gemini: {
       enabled: USE_GEMINI_ENV,
       model: GEMINI_MODEL,
@@ -1363,6 +1370,8 @@ app.get("/health", (_req, res) => {
 app.get("/health/extended", (_req, res) => {
   const mockDefault = process.env.YT_API_KEY ? "false" : "true";
   const mock = (process.env.MOCK_MODE || mockDefault) === "true";
+  const mongoConnected = mongoose.connection.readyState === 1;
+  const mongoBlocked = mongoUri.length > 0 && isLocalMongoUri && !allowLocalMongo;
   res.json({
     ok: true,
     mode: mock ? 'MOCK' : 'REAL',
@@ -1372,6 +1381,11 @@ app.get("/health/extended", (_req, res) => {
     timestamp: new Date().toISOString(),
     projectId: process.env.PROJECT_ID || null,
     youtube: { hasKey: Boolean(process.env.YT_API_KEY) },
+    mongo: {
+      configured: mongoUri.length > 0,
+      connected: mongoConnected,
+      blockedLocalUri: mongoBlocked,
+    },
     gemini: {
       configured: (process.env.USE_GEMINI || "false") === "true",
       hasKey: Boolean(GEMINI_API_KEY),
@@ -2098,9 +2112,11 @@ let server = null;
 if (isDirectRun) {
   const PORT = process.env.PORT || 3000;
   server = app.listen(PORT, () => {
+    const mockDefault = process.env.YT_API_KEY ? 'false' : 'true';
+    const mockEnabled = (process.env.MOCK_MODE || mockDefault) === 'true';
     console.log(`Server running on port ${PORT}`);
     console.log(`Project: ${process.env.PROJECT_ID || 'unknown'}`);
-    console.log(`Mock mode: ${(process.env.MOCK_MODE || 'true') === 'true' ? 'enabled' : 'disabled'}`);
+    console.log(`Mock mode: ${mockEnabled ? 'enabled' : 'disabled'}`);
     console.log(`Gemini: ${USE_GEMINI_ENV ? `enabled (${GEMINI_MODEL}, timeout=${GEMINI_TIMEOUT_MS}ms)` : 'disabled'}`);
     console.log(`YouTube API key: ${process.env.YT_API_KEY ? 'present' : 'missing'}`);
   });
