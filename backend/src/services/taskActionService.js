@@ -20,29 +20,29 @@ import { broadcastRoomMessage } from '../services/roomWS.js';
  * @returns {Promise<WorkspaceTask>}
  */
 export async function markTaskDone(roomId, taskId, userId) {
-  const task = await WorkspaceTask.findByIdAndUpdate(
-    taskId,
-    {
-      status: 'done',
-      lastUpdatedBy: userId,
-      updatedAt: new Date(),
-    },
-    { new: true }
-  ).exec();
+    const task = await WorkspaceTask.findByIdAndUpdate(
+        taskId,
+        {
+            status: 'done',
+            lastUpdatedBy: userId,
+            updatedAt: new Date(),
+        },
+        { new: true }
+    ).exec();
 
-  if (task) {
-    // Broadcast state change via WebSocket
-    broadcastRoomMessage(roomId, {
-      type: 'task_updated',
-      taskId: task._id.toString(),
-      status: task.status,
-      title: task.title,
-      userId,
-      timestamp: new Date().toISOString(),
-    });
-  }
+    if (task) {
+        // Broadcast state change via WebSocket
+        broadcastRoomMessage(roomId, {
+            type: 'task_updated',
+            taskId: task._id.toString(),
+            status: task.status,
+            title: task.title,
+            userId,
+            timestamp: new Date().toISOString(),
+        });
+    }
 
-  return task;
+    return task;
 }
 
 /**
@@ -54,30 +54,30 @@ export async function markTaskDone(roomId, taskId, userId) {
  * @returns {Promise<WorkspaceTask>}
  */
 export async function deferTask(roomId, taskId, deferUntil, userId) {
-  const deferDate = new Date(deferUntil);
-  const task = await WorkspaceTask.findByIdAndUpdate(
-    taskId,
-    {
-      dueDate: deferDate,
-      lastUpdatedBy: userId,
-      updatedAt: new Date(),
-    },
-    { new: true }
-  ).exec();
+    const deferDate = new Date(deferUntil);
+    const task = await WorkspaceTask.findByIdAndUpdate(
+        taskId,
+        {
+            dueDate: deferDate,
+            lastUpdatedBy: userId,
+            updatedAt: new Date(),
+        },
+        { new: true }
+    ).exec();
 
-  if (task) {
-    broadcastRoomMessage(roomId, {
-      type: 'task_updated',
-      taskId: task._id.toString(),
-      dueDate: task.dueDate,
-      title: task.title,
-      action: 'deferred',
-      userId,
-      timestamp: new Date().toISOString(),
-    });
-  }
+    if (task) {
+        broadcastRoomMessage(roomId, {
+            type: 'task_updated',
+            taskId: task._id.toString(),
+            dueDate: task.dueDate,
+            title: task.title,
+            action: 'deferred',
+            userId,
+            timestamp: new Date().toISOString(),
+        });
+    }
 
-  return task;
+    return task;
 }
 
 /**
@@ -90,31 +90,31 @@ export async function deferTask(roomId, taskId, deferUntil, userId) {
  * @returns {Promise<WorkspaceTask>}
  */
 export async function reassignTask(roomId, taskId, newOwnerId, newOwnerName, userId) {
-  const task = await WorkspaceTask.findByIdAndUpdate(
-    taskId,
-    {
-      ownerId: newOwnerId,
-      ownerName: newOwnerName,
-      lastUpdatedBy: userId,
-      updatedAt: new Date(),
-    },
-    { new: true }
-  ).exec();
+    const task = await WorkspaceTask.findByIdAndUpdate(
+        taskId,
+        {
+            ownerId: newOwnerId,
+            ownerName: newOwnerName,
+            lastUpdatedBy: userId,
+            updatedAt: new Date(),
+        },
+        { new: true }
+    ).exec();
 
-  if (task) {
-    broadcastRoomMessage(roomId, {
-      type: 'task_updated',
-      taskId: task._id.toString(),
-      ownerId: task.ownerId,
-      ownerName: task.ownerName,
-      title: task.title,
-      action: 'reassigned',
-      userId,
-      timestamp: new Date().toISOString(),
-    });
-  }
+    if (task) {
+        broadcastRoomMessage(roomId, {
+            type: 'task_updated',
+            taskId: task._id.toString(),
+            ownerId: task.ownerId,
+            ownerName: task.ownerName,
+            title: task.title,
+            action: 'reassigned',
+            userId,
+            timestamp: new Date().toISOString(),
+        });
+    }
 
-  return task;
+    return task;
 }
 
 /**
@@ -126,35 +126,35 @@ export async function reassignTask(roomId, taskId, newOwnerId, newOwnerName, use
  * @returns {Promise<WorkspaceTask>}
  */
 export async function updateTaskPriority(roomId, taskId, priority, userId) {
-  // For MVP, priority is stored as a meta tag in description.
-  // Future: add explicit priority field to WorkspaceTask schema.
-  const validPriorities = ['low', 'medium', 'high', 'urgent'];
-  if (!validPriorities.includes(priority)) {
-    throw new Error(`Invalid priority: ${priority}`);
-  }
+    // For MVP, priority is stored as a meta tag in description.
+    // Future: add explicit priority field to WorkspaceTask schema.
+    const validPriorities = ['low', 'medium', 'high', 'urgent'];
+    if (!validPriorities.includes(priority)) {
+        throw new Error(`Invalid priority: ${priority}`);
+    }
 
-  const task = await WorkspaceTask.findByIdAndUpdate(
-    taskId,
-    {
-      lastUpdatedBy: userId,
-      updatedAt: new Date(),
-    },
-    { new: true }
-  ).exec();
+    const task = await WorkspaceTask.findByIdAndUpdate(
+        taskId,
+        {
+            lastUpdatedBy: userId,
+            updatedAt: new Date(),
+        },
+        { new: true }
+    ).exec();
 
-  if (task) {
-    broadcastRoomMessage(roomId, {
-      type: 'task_updated',
-      taskId: task._id.toString(),
-      priority,
-      title: task.title,
-      action: 'priority_updated',
-      userId,
-      timestamp: new Date().toISOString(),
-    });
-  }
+    if (task) {
+        broadcastRoomMessage(roomId, {
+            type: 'task_updated',
+            taskId: task._id.toString(),
+            priority,
+            title: task.title,
+            action: 'priority_updated',
+            userId,
+            timestamp: new Date().toISOString(),
+        });
+    }
 
-  return task;
+    return task;
 }
 
 /**
@@ -167,47 +167,47 @@ export async function updateTaskPriority(roomId, taskId, priority, userId) {
  * @returns {Promise<object>} - { taskId, noteId, note, author }
  */
 export async function addTaskNote(roomId, taskId, note, userId, userName) {
-  // For MVP, notes are appended to task description with author/timestamp.
-  // Future: create dedicated TaskNote model.
-  const timestamp = new Date().toISOString();
-  const noteEntry = `[${timestamp}] ${userName}: ${note}`;
+    // For MVP, notes are appended to task description with author/timestamp.
+    // Future: create dedicated TaskNote model.
+    const timestamp = new Date().toISOString();
+    const noteEntry = `[${timestamp}] ${userName}: ${note}`;
 
-  const task = await WorkspaceTask.findById(taskId).exec();
-  if (!task) {
-    throw new Error('Task not found');
-  }
+    const task = await WorkspaceTask.findById(taskId).exec();
+    if (!task) {
+        throw new Error('Task not found');
+    }
 
-  const updatedDescription = task.description
-    ? `${task.description}\n\n${noteEntry}`
-    : noteEntry;
+    const updatedDescription = task.description
+        ? `${task.description}\n\n${noteEntry}`
+        : noteEntry;
 
-  const updatedTask = await WorkspaceTask.findByIdAndUpdate(
-    taskId,
-    {
-      description: updatedDescription,
-      lastUpdatedBy: userId,
-      updatedAt: new Date(),
-    },
-    { new: true }
-  ).exec();
+    const updatedTask = await WorkspaceTask.findByIdAndUpdate(
+        taskId,
+        {
+            description: updatedDescription,
+            lastUpdatedBy: userId,
+            updatedAt: new Date(),
+        },
+        { new: true }
+    ).exec();
 
-  if (updatedTask) {
-    broadcastRoomMessage(roomId, {
-      type: 'task_updated',
-      taskId: updatedTask._id.toString(),
-      title: updatedTask.title,
-      action: 'note_added',
-      noteAuthor: userName,
-      userId,
-      timestamp,
-    });
-  }
+    if (updatedTask) {
+        broadcastRoomMessage(roomId, {
+            type: 'task_updated',
+            taskId: updatedTask._id.toString(),
+            title: updatedTask.title,
+            action: 'note_added',
+            noteAuthor: userName,
+            userId,
+            timestamp,
+        });
+    }
 
-  return {
-    taskId: updatedTask._id.toString(),
-    noting: noteEntry,
-    author: userName,
-  };
+    return {
+        taskId: updatedTask._id.toString(),
+        noting: noteEntry,
+        author: userName,
+    };
 }
 
 /**
@@ -215,70 +215,70 @@ export async function addTaskNote(roomId, taskId, note, userId, userName) {
  * Returns summary of successes/failures for a list of actions.
  */
 export async function executeBatchActions(roomId, actions, userId) {
-  const results = [];
+    const results = [];
 
-  for (const action of actions) {
-    try {
-      let result;
-      switch (action.type) {
-        case 'mark_done':
-          result = await markTaskDone(roomId, action.taskId, userId);
-          results.push({ taskId: action.taskId, success: true, result });
-          break;
+    for (const action of actions) {
+        try {
+            let result;
+            switch (action.type) {
+                case 'mark_done':
+                    result = await markTaskDone(roomId, action.taskId, userId);
+                    results.push({ taskId: action.taskId, success: true, result });
+                    break;
 
-        case 'defer':
-          result = await deferTask(roomId, action.taskId, action.deferUntil, userId);
-          results.push({ taskId: action.taskId, success: true, result });
-          break;
+                case 'defer':
+                    result = await deferTask(roomId, action.taskId, action.deferUntil, userId);
+                    results.push({ taskId: action.taskId, success: true, result });
+                    break;
 
-        case 'reassign':
-          result = await reassignTask(
-            roomId,
-            action.taskId,
-            action.newOwnerId,
-            action.newOwnerName,
-            userId
-          );
-          results.push({ taskId: action.taskId, success: true, result });
-          break;
+                case 'reassign':
+                    result = await reassignTask(
+                        roomId,
+                        action.taskId,
+                        action.newOwnerId,
+                        action.newOwnerName,
+                        userId
+                    );
+                    results.push({ taskId: action.taskId, success: true, result });
+                    break;
 
-        case 'update_priority':
-          result = await updateTaskPriority(roomId, action.taskId, action.priority, userId);
-          results.push({ taskId: action.taskId, success: true, result });
-          break;
+                case 'update_priority':
+                    result = await updateTaskPriority(roomId, action.taskId, action.priority, userId);
+                    results.push({ taskId: action.taskId, success: true, result });
+                    break;
 
-        case 'add_note':
-          result = await addTaskNote(
-            roomId,
-            action.taskId,
-            action.note,
-            userId,
-            action.userName
-          );
-          results.push({ taskId: action.taskId, success: true, result });
-          break;
+                case 'add_note':
+                    result = await addTaskNote(
+                        roomId,
+                        action.taskId,
+                        action.note,
+                        userId,
+                        action.userName
+                    );
+                    results.push({ taskId: action.taskId, success: true, result });
+                    break;
 
-        default:
-          results.push({
-            taskId: action.taskId,
-            success: false,
-            error: `Unknown action type: ${action.type}`,
-          });
-      }
-    } catch (err) {
-      results.push({
-        taskId: action.taskId,
-        success: false,
-        error: err.message,
-      });
+                default:
+                    results.push({
+                        taskId: action.taskId,
+                        success: false,
+                        error: `Unknown action type: ${action.type}`,
+                    });
+            }
+        } catch (err) {
+            results.push({
+                taskId: action.taskId,
+                success: false,
+                error: err.message,
+            });
+        }
     }
-  }
 
-  return {
-    ok: true,
-    total: actions.length,
-    succeeded: results.filter((r) => r.success).length,
-    failed: results.filter((r) => !r.success).length,
-    results,
-  };
+    return {
+        ok: true,
+        total: actions.length,
+        succeeded: results.filter((r) => r.success).length,
+        failed: results.filter((r) => !r.success).length,
+        results,
+    };
 }

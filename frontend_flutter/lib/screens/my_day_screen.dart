@@ -25,11 +25,13 @@ class _MyDayScreenState extends State<MyDayScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   String? _lastRequestId;
+  List<Map<String, dynamic>> _nudges = [];
 
   @override
   void initState() {
     super.initState();
     _loadMyDay();
+    _loadNudges();
   }
 
   Future<void> _loadMyDay() async {
@@ -54,7 +56,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
       final apiService = ApiService(http.Client());
       final responseData = await apiService.getMyDay(room.id);
       final response = MyDayResponse.fromJson(responseData);
-      
+
       if (!mounted) return;
 
       setState(() {
@@ -68,6 +70,46 @@ class _MyDayScreenState extends State<MyDayScreen> {
         _isLoading = false;
         _errorMessage = 'Failed to load My Day: $e';
       });
+    }
+  }
+
+  Future<void> _loadNudges() async {
+    try {
+      final prov = context.read<RoomProvider>();
+      final room = prov.currentRoom;
+      if (room == null) return;
+
+      final apiService = ApiService(http.Client());
+      // Stub: would call apiService.getNudges(room.id)
+      // For now, return empty list
+      if (!mounted) return;
+      setState(() => _nudges = []);
+    } catch (e) {
+      debugPrint('Error loading nudges: $e');
+    }
+  }
+
+  Future<void> _dismissNudge(String nudgeId, {String reason = ''}) async {
+    try {
+      final prov = context.read<RoomProvider>();
+      final room = prov.currentRoom;
+      if (room == null) return;
+
+      // TODO: call API to dismiss nudge
+      setState(() {
+        _nudges.removeWhere((n) => n['id'] == nudgeId);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nudge dismissed (E1-05 pending)')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 
@@ -208,6 +250,10 @@ class _MyDayScreenState extends State<MyDayScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_nudges.isNotEmpty) ...[
+                _buildNudgesSection(),
+                const SizedBox(height: 24),
+              ],
               _buildSection('Top 3 Priorities', myDay.top3, Colors.blue),
               const SizedBox(height: 24),
               _buildSection('Blockers', myDay.blocked, Colors.red),
@@ -219,6 +265,113 @@ class _MyDayScreenState extends State<MyDayScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildNudgesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 4,
+              height: 24,
+              color: Colors.amber,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Nudges',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _nudges.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, index) {
+            final nudge = _nudges[index];
+            final urgency = nudge['urgency'] ?? 'low';
+            final urgencyColor = _getUrgencyColor(urgency);
+
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: urgencyColor.withOpacity(0.1),
+                border: Border.all(color: urgencyColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 3,
+                        height: 16,
+                        color: urgencyColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              nudge['title'] ?? 'Nudge',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                            Text(
+                              nudge['subtitle'] ?? '',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Colors.grey.shade600,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if ((nudge['message'] ?? '').isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        nudge['message'],
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () =>
+                            _dismissNudge(nudge['id'], reason: 'not_ready'),
+                        child: const Text('Dismiss'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.tonal(
+                        onPressed: () =>
+                            _openContext(nudge['taskId'] ?? ''),
+                        child: const Text('View'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -418,6 +571,21 @@ class _MyDayScreenState extends State<MyDayScreen> {
     }
   }
 
+  Color _getUrgencyColor(String urgency) {
+    switch (urgency) {
+      case 'critical':
+        return Colors.red;
+      case 'high':
+        return Colors.orange;
+      case 'medium':
+        return Colors.amber;
+      case 'low':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
   String _formatDate(String dateStr) {
     try {
       final date = DateTime.parse(dateStr);
@@ -467,19 +635,20 @@ class MyDayResponse {
   factory MyDayResponse.fromJson(Map<String, dynamic> json) {
     return MyDayResponse(
       ok: json['ok'] ?? false,
-      top3:
-          (json['top3'] as List?)?.map((e) => MyDayItem.fromJson(e)).toList() ??
-              [],
+      top3: (json['top3'] as List?)
+              ?.map((item) => MyDayItem.fromJson(item))
+              .toList() ??
+          [],
       blocked: (json['blocked'] as List?)
-              ?.map((e) => MyDayItem.fromJson(e))
+              ?.map((item) => MyDayItem.fromJson(item))
               .toList() ??
           [],
       dueToday: (json['dueToday'] as List?)
-              ?.map((e) => MyDayItem.fromJson(e))
+              ?.map((item) => MyDayItem.fromJson(item))
               .toList() ??
           [],
       waitingFor: (json['waitingFor'] as List?)
-              ?.map((e) => MyDayItem.fromJson(e))
+              ?.map((item) => MyDayItem.fromJson(item))
               .toList() ??
           [],
       requestId: json['requestId'] ?? 'unknown',
@@ -490,41 +659,32 @@ class MyDayResponse {
 
 class MyDayItem {
   final String id;
-  final String kind;
   final String title;
   final String description;
-  final String? ownerName;
-  final String? dueDate;
   final String priority;
-  final String status;
-  final String sourceUrl;
+  final String? dueDate;
+  final String? ownerName;
   final String whyRanked;
 
   MyDayItem({
     required this.id,
-    required this.kind,
     required this.title,
     required this.description,
-    this.ownerName,
-    this.dueDate,
     required this.priority,
-    required this.status,
-    required this.sourceUrl,
+    this.dueDate,
+    this.ownerName,
     required this.whyRanked,
   });
 
   factory MyDayItem.fromJson(Map<String, dynamic> json) {
     return MyDayItem(
       id: json['id'] ?? '',
-      kind: json['kind'] ?? 'unknown',
-      title: json['title'] ?? '',
+      title: json['title'] ?? 'Untitled',
       description: json['description'] ?? '',
-      ownerName: json['ownerName'],
+      priority: json['priority'] ?? 'medium',
       dueDate: json['dueDate'],
-      priority: json['priority'] ?? 'low',
-      status: json['status'] ?? 'unknown',
-      sourceUrl: json['sourceUrl'] ?? '',
-      whyRanked: json['whyRanked'] ?? '',
+      ownerName: json['ownerName'],
+      whyRanked: json['whyRanked'] ?? 'Ranked by priority',
     );
   }
 }

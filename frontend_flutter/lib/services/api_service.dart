@@ -222,7 +222,8 @@ class ApiService {
     final queryParameters = <String, String>{
       'query': query,
       'followUp': followUp,
-      'existingDoc': existingDoc.substring(0, existingDoc.length.clamp(0, 2000)),
+      'existingDoc':
+          existingDoc.substring(0, existingDoc.length.clamp(0, 2000)),
       'mode': mode,
     };
     final uri = Uri.parse('$baseUrl/api/refine/stream')
@@ -251,8 +252,8 @@ class ApiService {
         );
         if (dataLine.isNotEmpty) {
           final jsonStr = dataLine.substring(5).trim();
-          final map = _decodeJsonObject(jsonStr,
-              fallback: const {'type': 'malformed'});
+          final map =
+              _decodeJsonObject(jsonStr, fallback: const {'type': 'malformed'});
           if (map['type'] != 'malformed') {
             yield StreamEvent.fromJson(map);
           }
@@ -281,8 +282,7 @@ class ApiService {
     final streamed = await _client.send(request);
     if (streamed.statusCode != 200) {
       await streamed.stream.bytesToString();
-      throw ApiException(
-          'Challenge stream error: HTTP ${streamed.statusCode}',
+      throw ApiException('Challenge stream error: HTTP ${streamed.statusCode}',
           statusCode: streamed.statusCode);
     }
     final decoder = utf8.decoder.bind(streamed.stream);

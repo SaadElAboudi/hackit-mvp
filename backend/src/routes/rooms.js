@@ -42,6 +42,8 @@ import {
     updateTaskPriority,
     addTaskNote,
 } from '../services/taskActionService.js';
+import { generateNudgeCandidates, recordNudgeInteraction } from '../services/nudgeService.js';
+import { logEvent, computeDESProxy, generateDailySnapshot } from '../services/desInstrumentationService.js';
 import {
     broadcastRoomChallenge,
     broadcastCommentCreated,
@@ -2491,7 +2493,7 @@ router.get('/:id/my-day', async (req, res, next) => {
         }
 
         const myDay = await getMyDay(req.params.id, req.userId);
-        
+
         // Ensure all sections are arrays even if empty
         const response = {
             ok: myDay.ok !== false,
@@ -2571,8 +2573,136 @@ router.post('/:id/tasks/:taskId/action', validateBody(validateTaskActionPayload)
         });
     } catch (err) {
         console.error('[rooms] task action error:', err);
+    });
+
+router.get('/:id/nudges', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        // E1-05: Generate nudge candidates for current user
+        const nudges = await generateNudgeCandidates(req.params.id, req.userId, {
+            includeWaitingFor: true,
+        });
+
+        // Log event for instrumentation
+        logEvent('my_day_nudge_shown', {
+            userId: req.userId,
+            roomId: req.params.id,
+            nudgeCount: nudges.length,
+            timestamp: new Date().toISOString(),
+            sessionId: req.userId, // stub
+        });
+
+        res.json({
+            ok: true,
+            nudges,
+            count: nudges.length,
+            requestId: `nudges-${Date.now()}`,
+        });
+    } catch (err) {
+        console.error('[rooms] nudges error:', err);
         next(err);
     }
+});
+
+router.post('/:id/nudges/:nudgeId/dismiss', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { reason = '' } = req.body || {};
+
+        // Record interaction for analytics
+        const interaction = await recordNudgeInteraction(
+            req.params.id,
+            req.userId,
+            req.params.nudgeId,
+            'dismiss',
+            { reason }
+        );
+
+        // Log event
+        logEvent('my_day_nudge_dismissed', {
+            userId: req.userId,
+            roomId: req.params.id,
+            nudgeId: req.params.nudgeId,
+            reason,
+            timestamp: new Date().toISOString(),
+        });
+
+        res.json({ ok: true, interaction });
+    } catch (err) {
+        console.error('[rooms] nudge dismiss error:', err);
+        next(err);
+    }
+});
+
+router.get('/:id/instrumentation/des', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        // Ops hub only (stub: check authorization)
+        // For MVP, allow all members
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        // E1-06: Compute DES proxy
+        const desData = await computeDESProxy();
+
+        res.json({
+            ok: true,
+            des: desData.des,
+            date: desData.date,
+            successfulUsers: desData.successfulUsers,
+            requestId: `des-${Date.now()}`,
+        });
+    } catch (err) {
+        console.error('[rooms] instrumentation des error:', err);
+        next(err);
+    }
+});
+
+router.get('/:id/instrumentation/daily-snapshot', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        // E1-06: Generate daily snapshot
+        const snapshot = generateDailySnapshot();
+
+        // Return as markdown or JSON
+        const format = req.query.format === 'json' ? 'json' : 'markdown';
+        if (format === 'markdown') {
+            res.set('Content-Type', 'text/markdown');
+            res.send(snapshot);
+        } else {
+            res.json({
+                ok: true,
+                markdown: snapshot,
+                requestId: `snapshot-${Date.now()}`,
+            });
+        }
+    } catch (err) {
+        console.error('[rooms] instrumentation snapshot error:', err);
+        next(err);
+    }
+    next(err);
+}
 });
 
 router.post('/:id/decision-pack/share', validateBody(validateDecisionPackSharePayload), async (req, res, next) => {
