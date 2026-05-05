@@ -457,6 +457,57 @@ class ApiService {
     return body;
   }
 
+  Future<List<Map<String, dynamic>>> getReminders(String roomId) async {
+    final uri = Uri.parse('$baseUrl/api/rooms/$roomId/reminders');
+    final headers = await _myDayHeaders();
+
+    final response = await _client
+        .get(uri, headers: headers)
+        .timeout(const Duration(seconds: 8));
+
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        body['error'] ?? 'Failed to fetch reminders',
+        statusCode: response.statusCode,
+      );
+    }
+
+    final reminders = body['reminders'];
+    if (reminders is! List) return const [];
+    return reminders
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<void> snoozeReminder(
+    String roomId,
+    String reminderId,
+    int snoozeMinutes,
+  ) async {
+    final uri = Uri.parse(
+      '$baseUrl/api/rooms/$roomId/reminders/$reminderId/snooze',
+    );
+    final headers = await _myDayHeaders();
+
+    final response = await _client
+        .post(
+          uri,
+          headers: headers,
+          body: jsonEncode({'snoozeMinutes': snoozeMinutes}),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode != 200) {
+      final body = _decodeJsonObject(response.body);
+      throw ApiException(
+        body['error'] ?? 'Failed to snooze reminder',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
   Map<String, dynamic> _parseResponse(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);

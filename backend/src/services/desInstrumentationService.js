@@ -36,6 +36,14 @@ const eventSchemas = {
         version: EVENT_SCHEMA_VERSION,
         fields: ['userId', 'roomId', 'nudgeId', 'reason', 'timestamp'],
     },
+    my_day_reminder_shown: {
+        version: EVENT_SCHEMA_VERSION,
+        fields: ['userId', 'roomId', 'reminderType', 'taskId', 'timestamp'],
+    },
+    my_day_reminder_snoozed: {
+        version: EVENT_SCHEMA_VERSION,
+        fields: ['userId', 'roomId', 'reminderId', 'snoozeMinutes', 'timestamp'],
+    },
 };
 
 /**
@@ -53,7 +61,9 @@ export function logEvent(eventType, payload) {
         }
 
         // Validate required fields
-        const missing = schema.fields.filter((f) => !payload[f]);
+        const missing = schema.fields.filter(
+            (f) => payload[f] === undefined || payload[f] === null || payload[f] === ''
+        );
         if (missing.length > 0) {
             console.warn(`[desInstrumentation] Missing fields for ${eventType}:`, missing);
             return false;

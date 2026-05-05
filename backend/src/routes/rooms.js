@@ -44,6 +44,7 @@ import {
 } from '../services/taskActionService.js';
 import { generateNudgeCandidates, recordNudgeInteraction } from '../services/nudgeService.js';
 import { logEvent, computeDESProxy, generateDailySnapshot } from '../services/desInstrumentationService.js';
+import { generateReminderCards, snoozeReminder } from '../services/reminderService.js';
 import {
     broadcastRoomChallenge,
     broadcastCommentCreated,
@@ -93,6 +94,7 @@ import {
     validateSharePayload,
     validateSendMessagePayload,
     validateTaskActionPayload,
+    validateReminderSnoozePayload,
     validateUpdateWorkspaceBlockPayload,
     validateUpdateWorkspacePagePayload,
     validateUpdateWorkspaceDecisionPayload,
@@ -2634,6 +2636,70 @@ router.get('/:id/nudges', async (req, res, next) => {
         });
     } catch (err) {
         console.error('[rooms] nudges error:', err);
+        next(err);
+    }
+});
+
+router.get('/:id/reminders', async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const reminders = await generateReminderCards(req.params.id, req.userId);
+
+        for (const reminder of reminders) {
+            logEvent('my_day_reminder_shown', {
+                userId: req.userId,
+                roomId: req.params.id,
+                reminderType: reminder.type,
+                taskId: reminder.taskId,
+                timestamp: new Date().toISOString(),
+            });
+        }
+
+        res.json({
+            ok: true,
+            reminders,
+            count: reminders.length,
+            requestId: `reminders-${Date.now()}`,
+        });
+    } catch (err) {
+        console.error('[rooms] reminders error:', err);
+        next(err);
+    }
+});
+
+router.post('/:id/reminders/:reminderId/snooze', validateBody(validateReminderSnoozePayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const result = snoozeReminder(
+            req.params.id,
+            req.userId,
+            req.params.reminderId,
+            req.validatedBody.snoozeMinutes
+        );
+
+        logEvent('my_day_reminder_snoozed', {
+            userId: req.userId,
+            roomId: req.params.id,
+            reminderId: req.params.reminderId,
+            snoozeMinutes: req.validatedBody.snoozeMinutes,
+            timestamp: new Date().toISOString(),
+        });
+
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        console.error('[rooms] reminder snooze error:', err);
         next(err);
     }
 });

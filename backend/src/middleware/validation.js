@@ -978,10 +978,6 @@ export function validateTaskActionPayload(body) {
   const type = String(body?.type || '').trim().toLowerCase();
   const taskId = String(body?.taskId || '').trim();
 
-  if (!taskId) {
-    throw badRequest('taskId is required', { field: 'taskId' });
-  }
-
   const validTypes = ['mark_done', 'defer', 'reassign', 'update_priority', 'add_note'];
   if (!validTypes.includes(type)) {
     throw badRequest('type must be one of: mark_done, defer, reassign, update_priority, add_note', {
@@ -990,7 +986,10 @@ export function validateTaskActionPayload(body) {
     });
   }
 
-  const action = { type, taskId };
+  const action = { type };
+  if (taskId) {
+    action.taskId = taskId;
+  }
 
   if (type === 'defer') {
     const deferUntil = body?.deferUntil;
@@ -1038,4 +1037,25 @@ export function validateTaskActionPayload(body) {
   }
 
   return action;
+}
+
+export function validateReminderSnoozePayload(body) {
+  const raw = body?.snoozeMinutes;
+  const snoozeMinutes = Number(raw);
+
+  if (!Number.isFinite(snoozeMinutes)) {
+    throw badRequest('snoozeMinutes must be a number', {
+      field: 'snoozeMinutes',
+      received: raw,
+    });
+  }
+
+  if (snoozeMinutes < 5 || snoozeMinutes > 1440) {
+    throw badRequest('snoozeMinutes must be between 5 and 1440', {
+      field: 'snoozeMinutes',
+      received: raw,
+    });
+  }
+
+  return { snoozeMinutes: Math.trunc(snoozeMinutes) };
 }

@@ -26,6 +26,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
   String? _errorMessage;
   String? _lastRequestId;
   List<Map<String, dynamic>> _nudges = [];
+  List<Map<String, dynamic>> _reminders = [];
 
   @override
   void initState() {
@@ -36,6 +37,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
   Future<void> _refreshAll() async {
     await _loadMyDay();
     await _loadNudges();
+    await _loadReminders();
   }
 
   Future<void> _loadMyDay() async {
@@ -89,6 +91,43 @@ class _MyDayScreenState extends State<MyDayScreen> {
       setState(() => _nudges = nudges);
     } catch (e) {
       debugPrint('Error loading nudges: $e');
+    }
+  }
+
+  Future<void> _loadReminders() async {
+    try {
+      final prov = context.read<RoomProvider>();
+      final room = prov.currentRoom;
+      if (room == null) return;
+
+      final apiService = ApiService(http.Client());
+      final reminders = await apiService.getReminders(room.id);
+      if (!mounted) return;
+      setState(() => _reminders = reminders);
+    } catch (e) {
+      debugPrint('Error loading reminders: $e');
+    }
+  }
+
+  Future<void> _snoozeReminder(String reminderId, int minutes) async {
+    try {
+      final prov = context.read<RoomProvider>();
+      final room = prov.currentRoom;
+      if (room == null) return;
+
+      final apiService = ApiService(http.Client());
+      await apiService.snoozeReminder(room.id, reminderId, minutes);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reminder snoozed for ${minutes}m')),
+      );
+      await _loadReminders();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 
@@ -290,6 +329,10 @@ class _MyDayScreenState extends State<MyDayScreen> {
                 _buildNudgesSection(),
                 const SizedBox(height: 24),
               ],
+              if (_reminders.isNotEmpty) ...[
+                _buildRemindersSection(),
+                const SizedBox(height: 24),
+              ],
               _buildSection('Top 3 Priorities', myDay.top3, Colors.blue),
               const SizedBox(height: 24),
               _buildSection('Blockers', myDay.blocked, Colors.red),
@@ -401,6 +444,100 @@ class _MyDayScreenState extends State<MyDayScreen> {
                       FilledButton.tonal(
                         onPressed: () => _openContext(nudge['taskId'] ?? ''),
                         child: const Text('View'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRemindersSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 4,
+              height: 24,
+              color: Colors.teal,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Reminders',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _reminders.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, index) {
+            final reminder = _reminders[index];
+            final severity = reminder['severity'] ?? 'low';
+            final color = _getUrgencyColor(severity);
+            final options = (reminder['snoozeOptionsMinutes'] as List?)
+                    ?.map((e) => int.tryParse('$e') ?? 60)
+                    .toList() ??
+                [60, 240];
+
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                border: Border.all(color: color),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    reminder['title'] ?? 'Reminder',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    reminder['subtitle'] ?? '',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade700,
+                        ),
+                  ),
+                  if ((reminder['message'] ?? '').toString().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        reminder['message'],
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final minutes in options)
+                        OutlinedButton(
+                          onPressed: () => _snoozeReminder(
+                            reminder['id'] ?? '',
+                            minutes,
+                          ),
+                          child: Text('Snooze ${_formatMinutes(minutes)}'),
+                        ),
+                      FilledButton.tonal(
+                        onPressed: () => _openContext(reminder['taskId'] ?? ''),
+                        child: const Text('View task'),
                       ),
                     ],
                   ),
@@ -647,6 +784,14 @@ class _MyDayScreenState extends State<MyDayScreen> {
     } catch (e) {
       return 'Unknown';
     }
+  }
+
+  String _formatMinutes(int minutes) {
+    if (minutes >= 60) {
+      final hours = (minutes / 60).toStringAsFixed(minutes % 60 == 0 ? 0 : 1);
+      return '${hours}h';
+    }
+    return '${minutes}m';
   }
 }
 
