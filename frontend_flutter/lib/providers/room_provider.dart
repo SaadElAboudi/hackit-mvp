@@ -17,6 +17,7 @@ class RoomProvider extends ChangeNotifier {
     required String surface,
   }) _logFeedbackSignal;
   final Set<String> _feedbackFailedMessageIds = <String>{};
+  Future<bool>? _ensureRoomFuture;
 
   RoomProvider({
     RoomService? service,
@@ -136,7 +137,23 @@ class RoomProvider extends ChangeNotifier {
   /// - Otherwise loads rooms and opens the first one.
   /// - If no room exists and [createIfMissing] is true, creates a default room
   ///   and opens it.
-  Future<bool> ensureCurrentRoom({bool createIfMissing = false}) async {
+  Future<bool> ensureCurrentRoom({bool createIfMissing = false}) {
+    final inFlight = _ensureRoomFuture;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _ensureCurrentRoomInternal(createIfMissing: createIfMissing);
+    _ensureRoomFuture = future;
+    return future.whenComplete(() {
+      if (identical(_ensureRoomFuture, future)) {
+        _ensureRoomFuture = null;
+      }
+    });
+  }
+
+  Future<bool> _ensureCurrentRoomInternal(
+      {bool createIfMissing = false}) async {
     if (currentRoom != null) return true;
 
     if (rooms.isEmpty && !loadingRooms) {

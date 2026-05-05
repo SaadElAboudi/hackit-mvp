@@ -22,7 +22,7 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<RoomProvider>();
-      await prov.ensureCurrentRoom(createIfMissing: true);
+      await prov.ensureCurrentRoom(createIfMissing: false);
       if (!mounted) return;
       setState(() {
         _rebuildMaps();
@@ -46,6 +46,25 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
       'implemented':
           prov.decisions.where((d) => d.status == 'implemented').toList(),
     };
+  }
+
+  Future<void> _openRoom(Room room) async {
+    final prov = context.read<RoomProvider>();
+    await prov.openRoom(room);
+    if (!mounted) return;
+    setState(() {
+      _rebuildMaps();
+    });
+  }
+
+  Future<void> _createGeneralRoom() async {
+    final prov = context.read<RoomProvider>();
+    final room = await prov.createRoom(
+      name: 'General',
+      displayName: prov.myUserId ?? 'Utilisateur',
+    );
+    if (room == null) return;
+    await _openRoom(room);
   }
 
   @override
@@ -84,10 +103,74 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
     if (prov.currentRoom == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Execution Board')),
-        body: Center(
-          child: Text(
-            'Selectionnez un channel',
-            style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.6)),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Selectionnez un channel pour afficher le Kanban.',
+                style:
+                    TextStyle(color: scheme.onSurface.withValues(alpha: 0.75)),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed:
+                        prov.loadingRooms ? null : () => prov.loadRooms(),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Actualiser'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: _createGeneralRoom,
+                    icon: const Icon(Icons.add_circle_outline),
+                    label: const Text('Creer General'),
+                  ),
+                ],
+              ),
+              if (prov.roomsError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  prov.roomsError!,
+                  style: TextStyle(color: scheme.error),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Expanded(
+                child: prov.loadingRooms
+                    ? const Center(child: CircularProgressIndicator())
+                    : prov.rooms.isEmpty
+                        ? Center(
+                            child: Text(
+                              'Aucun channel disponible.',
+                              style: TextStyle(
+                                color: scheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: prov.rooms.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final room = prov.rooms[index];
+                              return ListTile(
+                                tileColor: scheme.surfaceContainerHighest,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                title: Text(room.name),
+                                subtitle: Text('${room.memberCount} membre(s)'),
+                                trailing:
+                                    const Icon(Icons.chevron_right_rounded),
+                                onTap: () => _openRoom(room),
+                              );
+                            },
+                          ),
+              ),
+            ],
           ),
         ),
       );
