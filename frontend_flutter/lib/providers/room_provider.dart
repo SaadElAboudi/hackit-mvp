@@ -128,6 +128,40 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
+  /// Ensures [currentRoom] is available for screens that depend on room context
+  /// (Ops Hub, Kanban, etc.).
+  ///
+  /// Behavior:
+  /// - If a room is already active, returns true.
+  /// - Otherwise loads rooms and opens the first one.
+  /// - If no room exists and [createIfMissing] is true, creates a default room
+  ///   and opens it.
+  Future<bool> ensureCurrentRoom({bool createIfMissing = false}) async {
+    if (currentRoom != null) return true;
+
+    if (rooms.isEmpty && !loadingRooms) {
+      await loadRooms();
+    }
+
+    if (currentRoom != null) return true;
+
+    if (rooms.isNotEmpty) {
+      await openRoom(rooms.first);
+      return currentRoom != null;
+    }
+
+    if (!createIfMissing) return false;
+
+    final room = await createRoom(
+      name: 'General',
+      displayName: ProjectService.currentDisplayName ?? 'Utilisateur',
+    );
+    if (room == null) return false;
+
+    await openRoom(room);
+    return currentRoom != null;
+  }
+
   Future<Room?> createRoom({
     required String name,
     String type = 'group',

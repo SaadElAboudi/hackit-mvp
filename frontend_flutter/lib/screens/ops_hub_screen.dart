@@ -19,12 +19,16 @@ class _OpsHubScreenState extends State<OpsHubScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final prov = context.read<RoomProvider>();
-      if (prov.currentRoom != null) {
-        prov.refreshExecutionPulse(silent: true);
-        prov.loadFeedbackDigest(silent: true);
-      }
+      _bootstrapRoomAndData();
     });
+  }
+
+  Future<void> _bootstrapRoomAndData() async {
+    final prov = context.read<RoomProvider>();
+    final hasRoom = await prov.ensureCurrentRoom(createIfMissing: true);
+    if (!hasRoom) return;
+    await prov.refreshExecutionPulse(silent: true);
+    await prov.loadFeedbackDigest(silent: true);
   }
 
   @override

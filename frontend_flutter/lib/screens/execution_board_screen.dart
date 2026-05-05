@@ -20,7 +20,14 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
   @override
   void initState() {
     super.initState();
-    _rebuildMaps();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final prov = context.read<RoomProvider>();
+      await prov.ensureCurrentRoom(createIfMissing: true);
+      if (!mounted) return;
+      setState(() {
+        _rebuildMaps();
+      });
+    });
   }
 
   void _rebuildMaps() {

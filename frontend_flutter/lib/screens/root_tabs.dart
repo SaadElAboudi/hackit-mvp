@@ -28,12 +28,13 @@ class _RootTabsState extends State<RootTabs> {
 
       if (!mounted) return;
 
-      if (prov.currentRoom == null && prov.rooms.isNotEmpty) {
-        await prov.openRoom(prov.rooms.first);
+      final hasRoom = await prov.ensureCurrentRoom(createIfMissing: true);
+      if (hasRoom) {
+        await prov.refreshExecutionPulse(silent: true);
         await prov.loadFeedbackDigest(silent: true);
       }
 
-      if (mounted && prov.rooms.isEmpty && _selectedIndex == 0) {
+      if (mounted && !hasRoom && _selectedIndex == 0) {
         setState(() {
           _selectedIndex = 1;
         });
