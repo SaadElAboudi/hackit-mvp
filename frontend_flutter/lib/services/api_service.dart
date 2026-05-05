@@ -374,6 +374,89 @@ class ApiService {
     }
   }
 
+  Future<Map<String, String>> _myDayHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('user_id') ?? '';
+    final displayName = prefs.getString('display_name') ?? 'User';
+    return {
+      'Content-Type': 'application/json',
+      'x-user-id': userId,
+      'x-display-name': displayName,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getNudges(String roomId) async {
+    final uri = Uri.parse('$baseUrl/api/rooms/$roomId/nudges');
+    final headers = await _myDayHeaders();
+
+    final response = await _client
+        .get(uri, headers: headers)
+        .timeout(const Duration(seconds: 8));
+
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        body['error'] ?? 'Failed to fetch nudges',
+        statusCode: response.statusCode,
+      );
+    }
+
+    final nudges = body['nudges'];
+    if (nudges is! List) return const [];
+    return nudges
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<void> dismissNudge(
+    String roomId,
+    String nudgeId, {
+    String reason = '',
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/rooms/$roomId/nudges/$nudgeId/dismiss');
+    final headers = await _myDayHeaders();
+
+    final response = await _client
+        .post(
+          uri,
+          headers: headers,
+          body: jsonEncode({'reason': reason}),
+        )
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode != 200) {
+      final body = _decodeJsonObject(response.body);
+      throw ApiException(
+        body['error'] ?? 'Failed to dismiss nudge',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> executeTaskAction(
+    String roomId,
+    String taskId,
+    Map<String, dynamic> action,
+  ) async {
+    final uri = Uri.parse('$baseUrl/api/rooms/$roomId/tasks/$taskId/action');
+    final headers = await _myDayHeaders();
+
+    final response = await _client
+        .post(uri, headers: headers, body: jsonEncode(action))
+        .timeout(const Duration(seconds: 8));
+
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        body['error'] ?? 'Task action failed',
+        statusCode: response.statusCode,
+      );
+    }
+
+    return body;
+  }
+
   Map<String, dynamic> _parseResponse(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);

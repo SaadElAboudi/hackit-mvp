@@ -8,8 +8,6 @@
  * Event schema is versioned for backward compat.
  */
 
-import mongoose from 'mongoose';
-
 // Simple in-memory event store for MVP (future: persistent store)
 const eventLog = [];
 const EVENT_SCHEMA_VERSION = '1.0';
@@ -86,9 +84,9 @@ export function logEvent(eventType, payload) {
  * Compute DES (Daily Execution Success) proxy.
  * DES = count of unique users who completed >= 3 priority actions today.
  *
- * @returns {Promise<object>} - { des, detailsByUser, date }
+ * @returns {object} - { des, detailsByUser, date }
  */
-export async function computeDESProxy() {
+export function computeDESProxy() {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 

@@ -2494,6 +2494,13 @@ router.get('/:id/my-day', async (req, res, next) => {
 
         const myDay = await getMyDay(req.params.id, req.userId);
 
+        logEvent('my_day_opened', {
+            userId: req.userId,
+            roomId: req.params.id,
+            timestamp: new Date().toISOString(),
+            sessionId: req.userId,
+        });
+
         // Ensure all sections are arrays even if empty
         const response = {
             ok: myDay.ok !== false,
@@ -2525,6 +2532,14 @@ router.post('/:id/tasks/:taskId/action', validateBody(validateTaskActionPayload)
 
         const { taskId } = req.params;
         const action = req.validatedBody;
+
+        logEvent('my_day_action_clicked', {
+            userId: req.userId,
+            roomId: req.params.id,
+            actionType: action.type,
+            timestamp: new Date().toISOString(),
+            sessionId: req.userId,
+        });
 
         let result;
         switch (action.type) {
@@ -2571,9 +2586,20 @@ router.post('/:id/tasks/:taskId/action', validateBody(validateTaskActionPayload)
             result,
             requestId: `task-action-${Date.now()}`,
         });
+
+        logEvent('my_day_action_completed', {
+            userId: req.userId,
+            roomId: req.params.id,
+            taskId,
+            actionType: action.type,
+            timestamp: new Date().toISOString(),
+            sessionId: req.userId,
+        });
     } catch (err) {
         console.error('[rooms] task action error:', err);
-    });
+        next(err);
+    }
+});
 
 router.get('/:id/nudges', async (req, res, next) => {
     try {
@@ -2589,14 +2615,16 @@ router.get('/:id/nudges', async (req, res, next) => {
             includeWaitingFor: true,
         });
 
-        // Log event for instrumentation
-        logEvent('my_day_nudge_shown', {
-            userId: req.userId,
-            roomId: req.params.id,
-            nudgeCount: nudges.length,
-            timestamp: new Date().toISOString(),
-            sessionId: req.userId, // stub
-        });
+        // Log one event per nudge so schema fields remain consistent.
+        for (const nudge of nudges) {
+            logEvent('my_day_nudge_shown', {
+                userId: req.userId,
+                roomId: req.params.id,
+                nudgeType: nudge.type,
+                taskId: nudge.taskId,
+                timestamp: new Date().toISOString(),
+            });
+        }
 
         res.json({
             ok: true,
@@ -2701,8 +2729,6 @@ router.get('/:id/instrumentation/daily-snapshot', async (req, res, next) => {
         console.error('[rooms] instrumentation snapshot error:', err);
         next(err);
     }
-    next(err);
-}
 });
 
 router.post('/:id/decision-pack/share', validateBody(validateDecisionPackSharePayload), async (req, res, next) => {

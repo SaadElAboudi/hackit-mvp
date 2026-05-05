@@ -21,8 +21,8 @@ import WorkspaceTask from '../models/WorkspaceTask.js';
 export async function generateNudgeCandidates(roomId, userId, options = {}) {
     const { includeWaitingFor = true } = options;
     const now = new Date();
+    const nowMs = now.getTime();
     const oneDayMs = 86400000;
-    const threeDaysMs = 3 * oneDayMs;
 
     try {
         const tasks = await WorkspaceTask.find({
@@ -61,7 +61,8 @@ export async function generateNudgeCandidates(roomId, userId, options = {}) {
             // Type 2: Tasks due within 24h assigned to current user
             if (task.ownerId === userId && task.dueDate && task.status !== 'done') {
                 const dueDate = new Date(task.dueDate);
-                if (dueDate > now && dueDate <= now + oneDayMs) {
+                const dueDateMs = dueDate.getTime();
+                if (dueDateMs > nowMs && dueDateMs <= nowMs + oneDayMs) {
                     nudges.push({
                         id: `nudge-dueSoon-${task._id}`,
                         taskId: task._id.toString(),
@@ -105,14 +106,15 @@ export async function generateNudgeCandidates(roomId, userId, options = {}) {
                 const daysSinceUpdate = Math.ceil((now - lastUpdate) / oneDayMs);
 
                 if (daysSinceUpdate >= 2) {
+                    const ownerName = task.ownerName || 'teammate';
                     nudges.push({
                         id: `nudge-waitingFor-${task._id}`,
                         taskId: task._id.toString(),
                         type: 'waiting_for',
                         urgency: daysSinceUpdate > 7 ? 'high' : 'low',
                         title: `Waiting: ${task.title}`,
-                        subtitle: `${daysSinceUpdate} day${daysSinceUpdate > 1 ? 's' : ''} no update from ${task.ownerName}`,
-                        message: `You're waiting on ${task.ownerName}. Consider pinging them.`,
+                        subtitle: `${daysSinceUpdate} day${daysSinceUpdate > 1 ? 's' : ''} no update from ${ownerName}`,
+                        message: `You're waiting on ${ownerName}. Consider pinging them.`,
                         action: 'ping_owner',
                         dismissible: true,
                         snoozeable: false, // Can't snooze others' tasks
@@ -172,7 +174,7 @@ export async function recordNudgeInteraction(roomId, userId, nudgeId, action, me
  * Compute nudge effectiveness stats.
  * (Stub for future: query NudgeInteraction events)
  */
-export async function getNudgeStats(roomId) {
+export async function getNudgeStats(_roomId) {
     return {
         totalGenerated: 0,
         totalDismissed: 0,

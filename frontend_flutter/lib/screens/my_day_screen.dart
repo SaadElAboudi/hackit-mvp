@@ -30,8 +30,12 @@ class _MyDayScreenState extends State<MyDayScreen> {
   @override
   void initState() {
     super.initState();
-    _loadMyDay();
-    _loadNudges();
+    _refreshAll();
+  }
+
+  Future<void> _refreshAll() async {
+    await _loadMyDay();
+    await _loadNudges();
   }
 
   Future<void> _loadMyDay() async {
@@ -80,10 +84,9 @@ class _MyDayScreenState extends State<MyDayScreen> {
       if (room == null) return;
 
       final apiService = ApiService(http.Client());
-      // Stub: would call apiService.getNudges(room.id)
-      // For now, return empty list
+      final nudges = await apiService.getNudges(room.id);
       if (!mounted) return;
-      setState(() => _nudges = []);
+      setState(() => _nudges = nudges);
     } catch (e) {
       debugPrint('Error loading nudges: $e');
     }
@@ -95,14 +98,16 @@ class _MyDayScreenState extends State<MyDayScreen> {
       final room = prov.currentRoom;
       if (room == null) return;
 
-      // TODO: call API to dismiss nudge
+      final apiService = ApiService(http.Client());
+      await apiService.dismissNudge(room.id, nudgeId, reason: reason);
+
       setState(() {
         _nudges.removeWhere((n) => n['id'] == nudgeId);
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nudge dismissed (E1-05 pending)')),
+          const SnackBar(content: Text('Nudge dismissed')),
         );
       }
     } catch (e) {
@@ -114,13 +119,24 @@ class _MyDayScreenState extends State<MyDayScreen> {
   }
 
   Future<void> _markTaskDone(String taskId) async {
-    // E1-04: Action handler stub
     try {
-      // TODO: call API to mark task done
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task marked done (E1-04 pending)')),
+      final prov = context.read<RoomProvider>();
+      final room = prov.currentRoom;
+      if (room == null) return;
+
+      final apiService = ApiService(http.Client());
+      await apiService.executeTaskAction(
+        room.id,
+        taskId,
+        const {'type': 'mark_done'},
       );
-      await _loadMyDay();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task marked done')),
+      );
+      await _refreshAll();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -130,10 +146,30 @@ class _MyDayScreenState extends State<MyDayScreen> {
   }
 
   Future<void> _deferTask(String taskId) async {
-    // E1-04: Action handler stub
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Task deferred (E1-04 pending)')),
-    );
+    try {
+      final prov = context.read<RoomProvider>();
+      final room = prov.currentRoom;
+      if (room == null) return;
+
+      final deferUntil = DateTime.now().add(const Duration(days: 1));
+      final apiService = ApiService(http.Client());
+      await apiService.executeTaskAction(
+        room.id,
+        taskId,
+        {'type': 'defer', 'deferUntil': deferUntil.toIso8601String()},
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task deferred to tomorrow')),
+      );
+      await _refreshAll();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
   }
 
   Future<void> _pingOwner(String taskId) async {
@@ -159,7 +195,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadMyDay,
+            onPressed: _refreshAll,
             tooltip: 'Refresh',
           ),
         ],
@@ -242,7 +278,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadMyDay,
+      onRefresh: _refreshAll,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Padding(
@@ -302,7 +338,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
             return Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: urgencyColor.withOpacity(0.1),
+                color: urgencyColor.withValues(alpha: 0.1),
                 border: Border.all(color: urgencyColor),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -323,7 +359,10 @@ class _MyDayScreenState extends State<MyDayScreen> {
                           children: [
                             Text(
                               nudge['title'] ?? 'Nudge',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
                                     fontWeight: FontWeight.w500,
                                   ),
                             ),
@@ -360,8 +399,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
                       ),
                       const SizedBox(width: 8),
                       FilledButton.tonal(
-                        onPressed: () =>
-                            _openContext(nudge['taskId'] ?? ''),
+                        onPressed: () => _openContext(nudge['taskId'] ?? ''),
                         child: const Text('View'),
                       ),
                     ],
