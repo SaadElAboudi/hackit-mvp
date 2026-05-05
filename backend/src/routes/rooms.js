@@ -36,6 +36,13 @@ import { discoverNotionPages, validateNotionToken } from '../services/notion.js'
 import { executeWithRetry, getExportConnector } from '../services/exportConnectors.js';
 import { getMyDay, getMyDayStats } from '../services/myDayService.js';
 import {
+    markTaskDone,
+    deferTask,
+    reassignTask,
+    updateTaskPriority,
+    addTaskNote,
+} from '../services/taskActionService.js';
+import {
     broadcastRoomChallenge,
     broadcastCommentCreated,
     broadcastCommentResolved,
@@ -83,6 +90,7 @@ import {
     validateShareHistoryQuery,
     validateSharePayload,
     validateSendMessagePayload,
+    validateTaskActionPayload,
     validateUpdateWorkspaceBlockPayload,
     validateUpdateWorkspacePagePayload,
     validateUpdateWorkspaceDecisionPayload,
@@ -2483,7 +2491,7 @@ router.get('/:id/my-day', async (req, res, next) => {
         }
 
         const myDay = await getMyDay(req.params.id, req.userId);
-
+        
         // Ensure all sections are arrays even if empty
         const response = {
             ok: myDay.ok !== false,
@@ -2500,6 +2508,69 @@ router.get('/:id/my-day', async (req, res, next) => {
         res.json(response);
     } catch (err) {
         console.error('[rooms] my-day error:', err);
+        next(err);
+    }
+});
+
+router.post('/:id/tasks/:taskId/action', validateBody(validateTaskActionPayload), async (req, res, next) => {
+    try {
+        const room = await loadRoomOr404(req.params.id, res);
+        if (!room) return;
+
+        if (!isRoomMember(room, req.userId)) {
+            return res.status(403).json({ error: 'Not a member of this room' });
+        }
+
+        const { taskId } = req.params;
+        const action = req.validatedBody;
+
+        let result;
+        switch (action.type) {
+            case 'mark_done':
+                result = await markTaskDone(req.params.id, taskId, req.userId);
+                break;
+
+            case 'defer':
+                result = await deferTask(req.params.id, taskId, action.deferUntil, req.userId);
+                break;
+
+            case 'reassign':
+                result = await reassignTask(
+                    req.params.id,
+                    taskId,
+                    action.newOwnerId,
+                    action.newOwnerName,
+                    req.userId
+                );
+                break;
+
+            case 'update_priority':
+                result = await updateTaskPriority(req.params.id, taskId, action.priority, req.userId);
+                break;
+
+            case 'add_note':
+                result = await addTaskNote(
+                    req.params.id,
+                    taskId,
+                    action.note,
+                    req.userId,
+                    req.displayName
+                );
+                break;
+
+            default:
+                return res.status(400).json({ error: `Unknown action type: ${action.type}` });
+        }
+
+        res.json({
+            ok: true,
+            action: action.type,
+            taskId,
+            result,
+            requestId: `task-action-${Date.now()}`,
+        });
+    } catch (err) {
+        console.error('[rooms] task action error:', err);
         next(err);
     }
 });

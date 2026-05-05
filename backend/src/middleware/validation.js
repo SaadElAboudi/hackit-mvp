@@ -973,3 +973,69 @@ export function validateKpiDashboardQuery(query) {
 
   return { sinceDays: Math.trunc(sinceDays) };
 }
+
+export function validateTaskActionPayload(body) {
+  const type = String(body?.type || '').trim().toLowerCase();
+  const taskId = String(body?.taskId || '').trim();
+
+  if (!taskId) {
+    throw badRequest('taskId is required', { field: 'taskId' });
+  }
+
+  const validTypes = ['mark_done', 'defer', 'reassign', 'update_priority', 'add_note'];
+  if (!validTypes.includes(type)) {
+    throw badRequest('type must be one of: mark_done, defer, reassign, update_priority, add_note', {
+      field: 'type',
+      received: body?.type,
+    });
+  }
+
+  const action = { type, taskId };
+
+  if (type === 'defer') {
+    const deferUntil = body?.deferUntil;
+    if (!deferUntil) {
+      throw badRequest('deferUntil is required for defer action', { field: 'deferUntil' });
+    }
+    const deferDate = new Date(deferUntil);
+    if (Number.isNaN(deferDate.getTime())) {
+      throw badRequest('deferUntil must be a valid ISO date', { field: 'deferUntil' });
+    }
+    action.deferUntil = deferDate;
+  }
+
+  if (type === 'reassign') {
+    const newOwnerId = String(body?.newOwnerId || '').trim();
+    const newOwnerName = String(body?.newOwnerName || '').trim();
+    if (!newOwnerId) {
+      throw badRequest('newOwnerId is required for reassign action', { field: 'newOwnerId' });
+    }
+    action.newOwnerId = newOwnerId;
+    action.newOwnerName = newOwnerName || `User_${newOwnerId.slice(-6)}`;
+  }
+
+  if (type === 'update_priority') {
+    const priority = String(body?.priority || '').trim().toLowerCase();
+    const validPriorities = ['low', 'medium', 'high', 'urgent'];
+    if (!validPriorities.includes(priority)) {
+      throw badRequest('priority must be one of: low, medium, high, urgent', {
+        field: 'priority',
+        received: body?.priority,
+      });
+    }
+    action.priority = priority;
+  }
+
+  if (type === 'add_note') {
+    const note = String(body?.note || '').trim();
+    if (!note) {
+      throw badRequest('note is required for add_note action', { field: 'note' });
+    }
+    if (note.length > 1000) {
+      throw badRequest('note is too long', { field: 'note', max: 1000 });
+    }
+    action.note = note;
+  }
+
+  return action;
+}
