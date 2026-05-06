@@ -481,6 +481,13 @@ async function tryGemini(prompt, maxOutputTokens = 900) {
   try {
     return await generateWithGemini(prompt, maxOutputTokens);
   } catch (error) {
+    const status = Number(error?.status || error?.response?.status || 0);
+    const message = String(error?.message || '');
+    const isModelNotFound =
+      status === 404 || /requested entity was not found|not\s*found/i.test(message);
+    if (isModelNotFound) {
+      return null;
+    }
     console.warn('[roomOrchestrator] Gemini fallback:', error?.message || error);
     return null;
   }
@@ -509,6 +516,13 @@ async function tryGeminiStreaming(prompt, roomId, tempId, maxOutputTokens = 900)
     if (text) broadcastRoomMessageChunk(roomId, tempId, text); // final flush
     return text;
   } catch (err) {
+    const status = Number(err?.status || err?.response?.status || 0);
+    const message = String(err?.message || '');
+    const isModelNotFound =
+      status === 404 || /requested entity was not found|not\s*found/i.test(message);
+    if (isModelNotFound) {
+      return null;
+    }
     console.warn('[roomOrchestrator] streaming fallback:', err?.message || err);
     return null;
   }

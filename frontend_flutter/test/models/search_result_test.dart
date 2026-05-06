@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hackit_mvp_flutter/models/search_result.dart';
+import 'package:hackit_mvp_flutter/models/base_search_result.dart';
 
 void main() {
   group('SearchResult Model Tests', () {
@@ -11,7 +11,7 @@ void main() {
         'source': 'Test Source'
       };
 
-      final result = SearchResult.fromMap(map);
+      final result = BaseSearchResult.fromMap(map);
 
       expect(result.title, 'Test Title');
       expect(result.steps, ['Step 1', 'Step 2']);
@@ -21,9 +21,9 @@ void main() {
 
     test('fromMap handles missing data gracefully', () {
       final map = {'title': 'Only Title'};
-      
-      final result = SearchResult.fromMap(map);
-      
+
+      final result = BaseSearchResult.fromMap(map);
+
       expect(result.title, 'Only Title');
       expect(result.steps, isEmpty);
       expect(result.videoUrl, '');
@@ -37,9 +37,9 @@ void main() {
         'videoUrl': null,
         'source': null
       };
-      
-      final result = SearchResult.fromMap(map);
-      
+
+      final result = BaseSearchResult.fromMap(map);
+
       expect(result.title, '');
       expect(result.steps, isEmpty);
       expect(result.videoUrl, '');
@@ -47,15 +47,11 @@ void main() {
     });
 
     test('toMap converts object correctly', () {
-      const result = SearchResult(
-        title: 'Test',
-        steps: ['1', '2'],
-        videoUrl: 'url',
-        source: 'source'
-      );
-      
+      const result = BaseSearchResult(
+          title: 'Test', steps: ['1', '2'], videoUrl: 'url', source: 'source');
+
       final map = result.toMap();
-      
+
       expect(map['title'], 'Test');
       expect(map['steps'], ['1', '2']);
       expect(map['videoUrl'], 'url');

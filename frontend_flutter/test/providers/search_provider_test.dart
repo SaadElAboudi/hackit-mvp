@@ -47,19 +47,20 @@ void main() {
     });
 
     test('successful search updates state correctly', () async {
-      when(() => mockApi.searchVideos('test'))
+      when(() => mockApi.searchVideos('test', context: null))
           .thenAnswer((_) async => baseResult);
       await provider.search('test');
       expect(provider.loading, false);
       expect(provider.error, null);
       expect(provider.result?.title, 'Test');
       expect(provider.messages.where((m) => m.role.name == 'assistant').length,
-          2); // steps + video
+          1); // single assistant steps bubble with embedded videoUrl
     });
 
     test('transient failure retries then succeeds', () async {
       int calls = 0;
-      when(() => mockApi.searchVideos('test')).thenAnswer((_) async {
+      when(() => mockApi.searchVideos('test', context: null))
+          .thenAnswer((_) async {
         calls++;
         if (calls < 2) {
           throw ApiException('Request timeout');
@@ -73,7 +74,7 @@ void main() {
     });
 
     test('non-transient failure does not retry (quota)', () async {
-      when(() => mockApi.searchVideos('test'))
+      when(() => mockApi.searchVideos('test', context: null))
           .thenThrow(ApiException('Quota exceeded', statusCode: 429));
       await provider.search('test');
       // Should map to quota message
@@ -91,12 +92,12 @@ void main() {
     });
 
     test('regenerateFor does not add user bubble', () async {
-      when(() => mockApi.searchVideos('hello'))
+      when(() => mockApi.searchVideos('hello', context: null))
           .thenAnswer((_) async => baseResult);
       await provider.search('hello');
       final userCountBefore =
           provider.messages.where((m) => m.role.name == 'user').length;
-      when(() => mockApi.searchVideos('hello'))
+      when(() => mockApi.searchVideos('hello', context: null))
           .thenAnswer((_) async => baseResult);
       await provider.regenerateFor('hello');
       final userCountAfter =

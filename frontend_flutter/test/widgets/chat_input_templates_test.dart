@@ -36,21 +36,21 @@ void main() {
       await tester.enterText(tf, 'déboucher un évier');
       await tester.pump();
 
-      // Tap ELI5
-      await tester.tap(find.text('ELI5'));
+      // Tap current mode chip
+      await tester.tap(find.text('⚡ Cadrer'));
       await tester.pump();
       await tester.pumpAndSettle();
 
       // Submit
-      await tester.tap(find.text('Rechercher'));
+      await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
       await tester.pump();
 
       expect(submitted, isNotNull);
-      expect(submitted, contains("Explique comme si j'avais 5 ans:"));
+      expect(submitted, contains('Mode CADRER.'));
 
       // Ensure persistence of last template selection
       final provider2 = SearchProvider(prefs: prefs, testMode: true);
-      expect(provider2.lastTemplate, 'eli5');
+      expect(provider2.lastTemplate, 'cadrer');
     });
   });
 }

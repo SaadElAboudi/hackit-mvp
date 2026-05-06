@@ -31,7 +31,7 @@ import {
     triggerRoomAutomation,
     suggestRoomSynthesisIfNeeded,
 } from '../services/roomOrchestrator.js';
-import { generateWithGemini as generateWithGeminiShared } from '../services/gemini.js';
+import { generateWithGemini } from '../services/gemini.js';
 import { discoverNotionPages, validateNotionToken } from '../services/notion.js';
 import { executeWithRetry, getExportConnector } from '../services/exportConnectors.js';
 import { getMyDay, getMyDayStats } from '../services/myDayService.js';
@@ -796,7 +796,7 @@ async function executeDecisionExtraction(req, res, next, { missionIdOverride = '
             ].join('\n');
 
             try {
-                const llmText = await generateWithGeminiShared(prompt, 1400, {
+                const llmText = await generateWithGemini(prompt, 1400, {
                     model: 'models/gemini-2.0-flash-lite',
                     preferModels: ['models/gemini-2.0-flash-lite', 'models/gemini-2.0-flash'],
                     timeoutMs: 25000,

@@ -200,6 +200,7 @@ export const generateWithGemini = async (prompt, maxOutputTokens = 256, options 
   }
 
   let lastError;
+  const unavailableModels = [];
   for (const model of tryModels) {
     for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt++) {
       try {
@@ -247,8 +248,8 @@ export const generateWithGemini = async (prompt, maxOutputTokens = 256, options 
           /Contenu bloqu[eé]/i.test(error?.message || "");
 
         if (isNotFound || isBlocked) {
-          if (attempt >= maxAttemptsPerModel) {
-            console.warn(`Modele indisponible ou bloque (${model}), tentative du modele suivant...`);
+          if (attempt >= maxAttemptsPerModel && !unavailableModels.includes(model)) {
+            unavailableModels.push(model);
           }
           break;
         }
@@ -263,6 +264,21 @@ export const generateWithGemini = async (prompt, maxOutputTokens = 256, options 
         throw error;
       }
     }
+  }
+
+  const lastStatus = Number(lastError?.response?.status || 0);
+  const lastMessage = String(lastError?.response?.data?.error?.message || lastError?.message || '');
+  const exhaustedUnavailableModels =
+    unavailableModels.length > 0 &&
+    (lastStatus === 404 || /not\s*found|blocked|safety|contenu bloqu/i.test(lastMessage));
+
+  if (exhaustedUnavailableModels) {
+    const unavailableError = new Error(
+      `Gemini models unavailable: ${unavailableModels.join(', ')}`
+    );
+    unavailableError.status = lastStatus || 404;
+    unavailableError.response = lastError?.response || null;
+    throw unavailableError;
   }
 
   console.error("Erreur API Gemini:", lastError?.response?.data || lastError?.message || lastError);
@@ -337,6 +353,15 @@ export const streamWithGemini = async (prompt, onChunk, maxOutputTokens = 900) =
 
     return fullText || null;
   } catch (err) {
+    const status = Number(err?.response?.status || 0);
+    const providerMessage = String(err?.response?.data?.error?.message || err?.message || '');
+    const isModelNotFound =
+      status === 404 || /requested entity was not found|not\s*found/i.test(providerMessage);
+
+    if (isModelNotFound) {
+      return null;
+    }
+
     console.warn('[gemini] streamWithGemini error:', err?.message || err);
     return null;
   }

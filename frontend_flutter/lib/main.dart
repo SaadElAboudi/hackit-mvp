@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,20 +18,43 @@ final getIt = GetIt.instance;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final prefs = await SharedPreferences.getInstance();
-  getIt.registerSingleton<SharedPreferences>(prefs);
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    Zone.current.handleUncaughtError(
+      details.exception,
+      details.stack ?? StackTrace.current,
+    );
+  };
 
-  final cacheManager = CacheManager(prefs);
-  getIt.registerSingleton<CacheManager>(cacheManager);
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Unhandled platform error: $error');
+    debugPrintStack(stackTrace: stack);
+    return true;
+  };
 
-  await ProjectService.init();
+  await runZonedGuarded(() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!getIt.isRegistered<SharedPreferences>()) {
+      getIt.registerSingleton<SharedPreferences>(prefs);
+    }
 
-  // Warm up backend (Render free tier cold start)
-  unawaited(ApiService.create().pingHealth(
-    timeout: const Duration(seconds: 90),
-  ));
+    final cacheManager = CacheManager(prefs);
+    if (!getIt.isRegistered<CacheManager>()) {
+      getIt.registerSingleton<CacheManager>(cacheManager);
+    }
 
-  runApp(const MyApp());
+    await ProjectService.init();
+
+    // Warm up backend (Render free tier cold start)
+    unawaited(ApiService.create().pingHealth(
+      timeout: const Duration(seconds: 90),
+    ));
+
+    runApp(const MyApp());
+  }, (error, stack) {
+    debugPrint('Unhandled zone error: $error');
+    debugPrintStack(stackTrace: stack);
+  });
 }
 
 class MyApp extends StatefulWidget {

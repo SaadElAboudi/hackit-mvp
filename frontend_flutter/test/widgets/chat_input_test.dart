@@ -20,8 +20,8 @@ void main() {
       ));
 
       expect(find.byType(TextField), findsOneWidget);
-      expect(find.byType(ElevatedButton), findsOneWidget);
-      expect(find.text('Rechercher'), findsOneWidget);
+      expect(find.byType(FilledButton), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
     });
 
     testWidgets('handles empty input correctly', (WidgetTester tester) async {
@@ -35,7 +35,7 @@ void main() {
         ),
       ));
 
-      await tester.tap(find.byType(ElevatedButton));
+      await tester.tap(find.byType(FilledButton));
       await tester.pump();
 
       expect(searchCalled, isFalse);
@@ -53,7 +53,7 @@ void main() {
       ));
 
       await tester.enterText(find.byType(TextField), '  test query  ');
-      await tester.tap(find.byType(ElevatedButton));
+      await tester.tap(find.byType(FilledButton));
       await tester.pump();
 
       expect(capturedQuery, 'test query');
@@ -72,11 +72,14 @@ void main() {
       ));
 
       await tester.enterText(find.byType(TextField), 'test');
-      await tester.tap(find.byType(ElevatedButton));
+      await tester.tap(find.byType(FilledButton));
       await tester.pump();
 
       expect(searchCalled, isFalse);
-      expect((tester.widget(find.byType(ElevatedButton)) as ElevatedButton).enabled, isFalse);
+      expect(
+        (tester.widget(find.byType(FilledButton)) as FilledButton).onPressed,
+        isNull,
+      );
     });
   });
 }

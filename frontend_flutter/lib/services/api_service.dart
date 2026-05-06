@@ -7,6 +7,7 @@ import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/base_search_result.dart';
 import '../models/stream_event.dart';
+import '../services/project_service.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -338,19 +339,13 @@ class ApiService {
 
   /// E1-01: Fetch My Day aggregated data (top 3, blocked, due-today, waiting-for).
   Future<Map<String, dynamic>> getMyDay(String roomId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString('user_id') ?? '';
-    final displayName = prefs.getString('display_name') ?? 'User';
+    final headers = await _myDayHeaders();
 
     final uri = Uri.parse('$baseUrl/api/rooms/$roomId/my-day');
     try {
       final response = await _client.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': userId,
-          'x-display-name': displayName,
-        },
+        headers: headers,
       ).timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
@@ -375,13 +370,15 @@ class ApiService {
   }
 
   Future<Map<String, String>> _myDayHeaders() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString('user_id') ?? '';
-    final displayName = prefs.getString('display_name') ?? 'User';
+    if (ProjectService.currentUserId == null) {
+      await ProjectService.init();
+    }
+    final userId = (ProjectService.currentUserId ?? '').trim();
+    final displayName = (ProjectService.currentDisplayName ?? 'User').trim();
     return {
       'Content-Type': 'application/json',
       'x-user-id': userId,
-      'x-display-name': displayName,
+      'x-display-name': displayName.isEmpty ? 'User' : displayName,
     };
   }
 

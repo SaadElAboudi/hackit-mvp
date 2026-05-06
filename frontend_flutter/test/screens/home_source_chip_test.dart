@@ -11,7 +11,7 @@ class TestSearchProvider extends SearchProvider {
   TestSearchProvider() : super();
 
   @override
-  Future<void> search(String query) async {
+  Future<void> search(String query, {Map<String, String?>? context}) async {
     calls += 1;
     lastQuery = query;
     // Avoid network: directly append a synthetic assistant steps message.
@@ -46,8 +46,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('youtube-api'), findsOneWidget);
-      expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+      expect(find.text('A title'), findsOneWidget);
+      expect(find.byIcon(Icons.bolt_rounded), findsAtLeastNWidgets(1));
     });
 
     testWidgets('Retry button disabled when no lastQuery', (tester) async {

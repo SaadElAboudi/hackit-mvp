@@ -1306,16 +1306,31 @@ async function generateWithGemini(prompt, maxOutputTokens = 256, options = {}) {
       throw new Error(`Gemini timeout after ${GEMINI_TIMEOUT_MS}ms`);
     }
     // If NOT_FOUND: try a known accessible lite model explicitly once
-    if (
-      status === 404 &&
-      allowModelFallback &&
-      currentModel !== 'models/gemini-2.0-flash-lite' &&
-      currentModel !== 'models/gemini-2.0-flash-lite-001'
-    ) {
-      return await generateWithGemini(prompt, maxOutputTokens, {
-        model: 'models/gemini-2.0-flash-lite',
-        allowModelFallback: false,
-      });
+    if (status === 404 && allowModelFallback) {
+      const fallbackModels = [
+        'models/gemini-2.0-flash-lite',
+        'models/gemini-1.5-flash',
+      ];
+
+      for (const fallbackModel of fallbackModels) {
+        if (fallbackModel === currentModel) continue;
+        try {
+          return await generateWithGemini(prompt, maxOutputTokens, {
+            model: fallbackModel,
+            allowModelFallback: false,
+          });
+        } catch (fallbackError) {
+          const fallbackStatus = Number(
+            fallbackError?.status || fallbackError?.response?.status || 0
+          );
+          const fallbackMessage = String(fallbackError?.message || '');
+          const fallbackNotFound =
+            fallbackStatus === 404 || /not\s*found/i.test(fallbackMessage);
+          if (!fallbackNotFound) {
+            throw fallbackError;
+          }
+        }
+      }
     }
     observeExternal('gemini', 'error');
     if (
@@ -1332,7 +1347,10 @@ async function generateWithGemini(prompt, maxOutputTokens = 256, options = {}) {
         GEMINI_BREAKER_UNTIL = Math.max(GEMINI_BREAKER_UNTIL, now + BREAKER_OPEN_MS);
       }
     }
-    throw new Error(message || "Gemini generation failed");
+    const wrappedError = new Error(message || "Gemini generation failed");
+    wrappedError.status = status || 500;
+    wrappedError.response = error?.response || null;
+    throw wrappedError;
   }
 }
 
@@ -2108,6 +2126,8 @@ export function createApp() {
 // Tests set NODE_ENV='test' in test/_setup.mjs before importing this module.
 const isDirectRun = process.env.NODE_ENV !== 'test';
 let server = null;
+const activeConnections = new Set();
+let isShuttingDown = false;
 
 if (isDirectRun) {
   const PORT = process.env.PORT || 3000;
@@ -2123,6 +2143,13 @@ if (isDirectRun) {
 
   // Attach WebSocket server for real-time thread collaboration
   attachWebSocketServer(server);
+
+  server.on('connection', (socket) => {
+    activeConnections.add(socket);
+    socket.on('close', () => {
+      activeConnections.delete(socket);
+    });
+  });
 
   server.on('error', (err) => {
     console.error('Server listen error:', err?.message || err);
@@ -2197,19 +2224,22 @@ app.post('/api/ai/chat', async (req, res) => {
       .filter(Boolean)
       .join('\n\n');
 
-    const reply = await generateWithGeminiShared(prompt, 1024, {
+    const reply = await generateWithGemini(prompt, 1024, {
       model: 'models/gemini-2.0-flash-lite',
-      preferModels: ['models/gemini-2.0-flash-lite'],
-      timeoutMs: 30000,
       temperature: 0.55,
-      maxAttemptsPerModel: 2,
-      allowQualityRepair: true,
       systemInstruction: String(systemPrompt || '').trim(),
     });
 
     return res.json({ reply });
   } catch (err) {
     const message = String(err?.message || '');
+    const status = Number(err?.status || err?.response?.status || 0);
+    if (status === 404 || /not\s*found|requested entity was not found/i.test(message)) {
+      return res.json({
+        reply:
+          'Le modele IA est temporairement indisponible. J\'ai bien recu ta demande, reessaie dans quelques instants.',
+      });
+    }
     if (err.response?.status === 429 || /quota|rate limit|too many requests|429/i.test(message)) {
       return res.status(429).json({ error: 'Quota IA dépassé, réessaie dans quelques secondes.' });
     }
@@ -2251,15 +2281,24 @@ app.use((err, _req, res, next) => {
 
 if (isDirectRun) {
   const closeServerGracefully = (signal) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
     console.log(`Received ${signal}, shutting down gracefully...`);
     const timeout = setTimeout(() => {
+      for (const socket of activeConnections) {
+        try {
+          socket.destroy();
+        } catch (_) {
+          // best effort
+        }
+      }
       console.error('Graceful shutdown timeout reached, forcing exit');
       process.exit(1);
     }, 10000);
 
-    const finalize = () => {
+    const finalize = (code = 0) => {
       clearTimeout(timeout);
-      process.exit(0);
+      process.exit(code);
     };
 
     Promise.resolve()
@@ -2271,12 +2310,19 @@ if (isDirectRun) {
       .catch(() => { })
       .finally(() => {
         if (!server) return finalize();
+        if (typeof server.closeIdleConnections === 'function') {
+          server.closeIdleConnections();
+        }
         server.close(() => finalize());
       });
   };
 
   process.on('SIGINT', () => closeServerGracefully('SIGINT'));
   process.on('SIGTERM', () => closeServerGracefully('SIGTERM'));
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error);
+    closeServerGracefully('uncaughtException');
+  });
   process.on('unhandledRejection', (reason) => {
     console.error('Unhandled promise rejection:', reason);
   });

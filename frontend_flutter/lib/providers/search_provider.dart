@@ -52,6 +52,7 @@ class SearchProvider extends ChangeNotifier {
   String? lastQuery;
   Map<String, String?>? _lastContext;
   final SharedPreferences? _prefs;
+  final bool _testMode;
   List<ChatMessage> messages = [];
   // Draft prompt temporarily set when user chooses to edit a previous message.
   String? _draftText;
@@ -67,11 +68,15 @@ class SearchProvider extends ChangeNotifier {
     CacheManager? cacheManager,
     SharedPreferences? prefs,
     HistoryFavoritesProvider? historyFavorites,
+    bool testMode = false,
   })  : _api = api ?? ApiService.create(),
         _cacheManager = cacheManager,
         _prefs = prefs,
+        _testMode = testMode,
         _historyFavs = historyFavorites {
-    _initConnectivity();
+    if (!_testMode) {
+      _initConnectivity();
+    }
     _loadMessages();
   }
 
@@ -499,8 +504,8 @@ class SearchProvider extends ChangeNotifier {
     int? stepsMsgIndex;
 
     try {
-      final stream = _api.refineStream(
-          originalQuery, followUp.trim(), existingPlan, deliveryMode ?? 'produire');
+      final stream = _api.refineStream(originalQuery, followUp.trim(),
+          existingPlan, deliveryMode ?? 'produire');
       await for (final evt in stream) {
         switch (evt.type) {
           case 'meta':
@@ -526,8 +531,8 @@ class SearchProvider extends ChangeNotifier {
               partialSteps = [...partialSteps, step.trim()];
               if (stepsMsgIndex != null) {
                 final m = messages[stepsMsgIndex];
-                final updated = m.copyWith(
-                    content: {...m.content, 'steps': partialSteps});
+                final updated =
+                    m.copyWith(content: {...m.content, 'steps': partialSteps});
                 messages = [
                   ...messages.sublist(0, stepsMsgIndex),
                   updated,

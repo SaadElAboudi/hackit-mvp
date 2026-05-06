@@ -68,6 +68,7 @@ export async function getMyDay(roomId, userId) {
 
         if (!tasks || tasks.length === 0) {
             return {
+                ok: true,
                 top3: [],
                 blocked: [],
                 dueToday: [],
