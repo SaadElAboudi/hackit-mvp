@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 
 import '../models/room.dart';
@@ -220,8 +221,7 @@ class _TasksBoard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     const columns = ['todo', 'in_progress', 'blocked', 'done'];
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return _HorizontalWheelScroll(
       child: SizedBox(
         width: columns.length * 320.0,
         child: Row(
@@ -231,7 +231,12 @@ class _TasksBoard extends StatelessWidget {
               title: _formatTaskStatus(status),
               count: tasks.length,
               items: tasks,
-              statusOptions: ['todo', 'in_progress', 'blocked', 'done'],
+              statusOptions: const [
+                'todo',
+                'in_progress',
+                'blocked',
+                'done',
+              ],
               currentStatus: status,
               onStatusChange: onStatusChange,
               columnColor: _statusColor(status, scheme),
@@ -257,8 +262,7 @@ class _DecisionsBoard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     const columns = ['draft', 'review', 'approved', 'implemented'];
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return _HorizontalWheelScroll(
       child: SizedBox(
         width: columns.length * 320.0,
         child: Row(
@@ -268,12 +272,73 @@ class _DecisionsBoard extends StatelessWidget {
               title: _formatDecisionStatus(status),
               count: decisions.length,
               items: decisions,
-              statusOptions: ['draft', 'review', 'approved', 'implemented'],
+              statusOptions: const [
+                'draft',
+                'review',
+                'approved',
+                'implemented',
+              ],
               currentStatus: status,
               onStatusChange: onStatusChange,
               columnColor: _statusColor(status, scheme),
             );
           }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _HorizontalWheelScroll extends StatefulWidget {
+  final Widget child;
+
+  const _HorizontalWheelScroll({required this.child});
+
+  @override
+  State<_HorizontalWheelScroll> createState() => _HorizontalWheelScrollState();
+}
+
+class _HorizontalWheelScrollState extends State<_HorizontalWheelScroll> {
+  final ScrollController _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_controller.hasClients) return;
+
+    final dx = event.scrollDelta.dx;
+    final dy = event.scrollDelta.dy;
+    final horizontalDelta = dx.abs() > dy.abs() ? dx : dy;
+    if (horizontalDelta == 0) return;
+
+    final position = _controller.position;
+    final nextOffset = (position.pixels + horizontalDelta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+
+    if (nextOffset != position.pixels) {
+      _controller.jumpTo(nextOffset);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: Scrollbar(
+        controller: _controller,
+        thumbVisibility: true,
+        interactive: true,
+        child: SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          child: widget.child,
         ),
       ),
     );
@@ -366,6 +431,8 @@ class _KanbanColumn<T> extends StatelessWidget {
                     ),
                   )
                 : ListView.builder(
+                  primary: false,
+                  physics: const ClampingScrollPhysics(),
                     padding: const EdgeInsets.all(8),
                     itemCount: items.length,
                     itemBuilder: (ctx, idx) {
@@ -474,9 +541,9 @@ class _KanbanCard<T> extends StatelessWidget {
 
   void _showCardMenu(BuildContext context, ColorScheme scheme) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Card actions: edit, delete (coming soon)'),
-        duration: const Duration(milliseconds: 2000),
+      const SnackBar(
+        content: Text('Card actions: edit, delete (coming soon)'),
+        duration: Duration(milliseconds: 2000),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -1691,9 +1692,8 @@ class _WideTaskBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scrollbar(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+    return _HorizontalWheelScroll(
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1714,6 +1714,62 @@ class _WideTaskBoard extends StatelessWidget {
               ),
             );
           }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _HorizontalWheelScroll extends StatefulWidget {
+  final Widget child;
+
+  const _HorizontalWheelScroll({required this.child});
+
+  @override
+  State<_HorizontalWheelScroll> createState() => _HorizontalWheelScrollState();
+}
+
+class _HorizontalWheelScrollState extends State<_HorizontalWheelScroll> {
+  final ScrollController _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_controller.hasClients) return;
+
+    final dx = event.scrollDelta.dx;
+    final dy = event.scrollDelta.dy;
+    final horizontalDelta = dx.abs() > dy.abs() ? dx : dy;
+    if (horizontalDelta == 0) return;
+
+    final position = _controller.position;
+    final nextOffset = (position.pixels + horizontalDelta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+
+    if (nextOffset != position.pixels) {
+      _controller.jumpTo(nextOffset);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: Scrollbar(
+        controller: _controller,
+        thumbVisibility: true,
+        interactive: true,
+        child: SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          physics: const ClampingScrollPhysics(),
+          child: widget.child,
         ),
       ),
     );
