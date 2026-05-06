@@ -140,6 +140,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
       final apiService = ApiService(http.Client());
       await apiService.dismissNudge(room.id, nudgeId, reason: reason);
 
+      if (!mounted) return;
       setState(() {
         _nudges.removeWhere((n) => n['id'] == nudgeId);
       });

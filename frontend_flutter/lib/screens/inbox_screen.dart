@@ -137,8 +137,7 @@ class _InboxScreenState extends State<InboxScreen> {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-            content: Text('Snooze failed: $e'),
-            backgroundColor: Colors.red),
+            content: Text('Snooze failed: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -515,8 +514,7 @@ class _InboxScreenState extends State<InboxScreen> {
                                           const Tooltip(
                                             message: 'Snoozed',
                                             child: Icon(Icons.snooze,
-                                                size: 16,
-                                                color: Colors.grey),
+                                                size: 16, color: Colors.grey),
                                           )
                                         else
                                           PopupMenuButton<int>(

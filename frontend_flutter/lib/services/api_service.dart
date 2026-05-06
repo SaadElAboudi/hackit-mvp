@@ -585,8 +585,7 @@ class ApiService {
     required int snoozeMinutes,
     String sourceType = 'unknown',
   }) async {
-    final uri = Uri.parse(
-        '$baseUrl/api/rooms/$roomId/inbox/$itemId/snooze');
+    final uri = Uri.parse('$baseUrl/api/rooms/$roomId/inbox/$itemId/snooze');
     final headers = await _myDayHeaders();
     headers['Content-Type'] = 'application/json';
 
@@ -608,8 +607,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getInboxSlaReport(String roomId) async {
-    final uri =
-        Uri.parse('$baseUrl/api/rooms/$roomId/inbox/sla-report');
+    final uri = Uri.parse('$baseUrl/api/rooms/$roomId/inbox/sla-report');
     final headers = await _myDayHeaders();
 
     final response = await _client

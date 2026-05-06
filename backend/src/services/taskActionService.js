@@ -10,7 +10,7 @@
  */
 
 import WorkspaceTask from '../models/WorkspaceTask.js';
-import { broadcastRoomMessage } from '../services/roomWS.js';
+import { broadcastRoomMessage } from './roomWS.js';
 
 /**
  * Mark a task as done.
@@ -25,7 +25,6 @@ export async function markTaskDone(roomId, taskId, userId) {
         {
             status: 'done',
             lastUpdatedBy: userId,
-            updatedAt: new Date(),
         },
         { new: true }
     ).exec();
@@ -60,7 +59,6 @@ export async function deferTask(roomId, taskId, deferUntil, userId) {
         {
             dueDate: deferDate,
             lastUpdatedBy: userId,
-            updatedAt: new Date(),
         },
         { new: true }
     ).exec();
@@ -96,7 +94,6 @@ export async function reassignTask(roomId, taskId, newOwnerId, newOwnerName, use
             ownerId: newOwnerId,
             ownerName: newOwnerName,
             lastUpdatedBy: userId,
-            updatedAt: new Date(),
         },
         { new: true }
     ).exec();
@@ -137,7 +134,6 @@ export async function updateTaskPriority(roomId, taskId, priority, userId) {
         taskId,
         {
             lastUpdatedBy: userId,
-            updatedAt: new Date(),
         },
         { new: true }
     ).exec();
@@ -186,7 +182,6 @@ export async function addTaskNote(roomId, taskId, note, userId, userName) {
         {
             description: updatedDescription,
             lastUpdatedBy: userId,
-            updatedAt: new Date(),
         },
         { new: true }
     ).exec();

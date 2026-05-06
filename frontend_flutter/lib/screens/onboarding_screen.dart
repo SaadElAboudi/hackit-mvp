@@ -96,8 +96,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         border: OutlineInputBorder(),
                       ),
                       validator: (v) {
-                        if (v == null || v.trim().isEmpty)
+                        if (v == null || v.trim().isEmpty) {
                           return 'Champ requis';
+                        }
                         if (v.trim().length < 2) return 'Au moins 2 caractères';
                         return null;
                       },
