@@ -65,6 +65,8 @@ class _RootTabsState extends State<RootTabs> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
@@ -72,31 +74,55 @@ class _RootTabsState extends State<RootTabs> {
           return _loadedTabs[index] ?? const SizedBox.shrink();
         }),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-            _loadedTabs[index] ??= _buildTab(index);
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Accueil',
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.45)),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.shadow.withValues(alpha: 0.08),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.playlist_add_check_circle_outlined),
-            selectedIcon: Icon(Icons.playlist_add_check_circle),
-            label: 'Priorites',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: NavigationBar(
+              height: 72,
+              selectedIndex: _selectedIndex,
+              labelBehavior:
+                  NavigationDestinationLabelBehavior.onlyShowSelected,
+              onDestinationSelected: (index) {
+                setState(() {
+                  _selectedIndex = index;
+                  _loadedTabs[index] ??= _buildTab(index);
+                });
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: 'Accueil',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.playlist_add_check_circle_outlined),
+                  selectedIcon: Icon(Icons.playlist_add_check_circle),
+                  label: 'Priorites',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.forum_outlined),
+                  selectedIcon: Icon(Icons.forum),
+                  label: 'Salons',
+                ),
+              ],
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.forum_outlined),
-            selectedIcon: Icon(Icons.forum),
-            label: 'Salons',
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -16,6 +16,8 @@ class ExecutionBoardScreen extends StatefulWidget {
 class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
   Map<String, List<WorkspaceTask>> _tasksByStatus = {};
   Map<String, List<WorkspaceDecision>> _decisionsByStatus = {};
+  int _activeBoardIndex = 0;
+  bool _switchingRoom = false;
 
   @override
   void initState() {
@@ -50,14 +52,17 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
 
   Future<void> _openRoom(Room room) async {
     try {
+      setState(() => _switchingRoom = true);
       final prov = context.read<RoomProvider>();
       await prov.openRoom(room);
       if (!mounted) return;
       setState(() {
         _rebuildMaps();
+        _switchingRoom = false;
       });
     } catch (e) {
       if (!mounted) return;
+      setState(() => _switchingRoom = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Impossible d ouvrir le salon: $e')),
       );
@@ -128,108 +133,345 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
   @override
   Widget build(BuildContext context) {
     final prov = context.watch<RoomProvider>();
+    final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
 
     _rebuildMaps();
 
     if (prov.currentRoom == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Board d execution')),
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Selectionnez un salon pour afficher le Kanban.',
-                style:
-                    TextStyle(color: scheme.onSurface.withValues(alpha: 0.75)),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed:
-                        prov.loadingRooms ? null : () => prov.loadRooms(),
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Actualiser'),
+        appBar: AppBar(title: const Text('Execution board')),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                scheme.primary.withValues(alpha: 0.08),
+                scheme.surface,
+              ],
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Selectionne un salon pour afficher le Kanban.',
+                  style: text.bodyMedium?.copyWith(
+                    color: scheme.onSurface.withValues(alpha: 0.75),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: _createGeneralRoom,
-                    icon: const Icon(Icons.add_circle_outline),
-                    label: const Text('Creer General'),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed:
+                          prov.loadingRooms ? null : () => prov.loadRooms(),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Actualiser'),
+                    ),
+                    FilledButton.icon(
+                      onPressed: _createGeneralRoom,
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('Creer General'),
+                    ),
+                  ],
+                ),
+                if (prov.roomsError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    prov.roomsError!,
+                    style: text.bodySmall?.copyWith(color: scheme.error),
                   ),
                 ],
-              ),
-              if (prov.roomsError != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  prov.roomsError!,
-                  style: TextStyle(color: scheme.error),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: prov.loadingRooms
+                        ? const Center(
+                            key: ValueKey('rooms_loading'),
+                            child: CircularProgressIndicator(),
+                          )
+                        : prov.rooms.isEmpty
+                            ? Center(
+                                key: const ValueKey('rooms_empty'),
+                                child: Text(
+                                  'Aucun salon disponible.',
+                                  style: text.bodyMedium?.copyWith(
+                                    color: scheme.onSurface
+                                        .withValues(alpha: 0.58),
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                key: const ValueKey('rooms_list'),
+                                itemCount: prov.rooms.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final room = prov.rooms[index];
+                                  return Material(
+                                    color: scheme.surface,
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(16),
+                                      onTap: () => _openRoom(room),
+                                      child: Ink(
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: scheme.outlineVariant
+                                                .withValues(alpha: 0.45),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            CircleAvatar(
+                                              backgroundColor: scheme.primary
+                                                  .withValues(alpha: 0.15),
+                                              foregroundColor: scheme.primary,
+                                              child: const Icon(
+                                                  Icons.forum_rounded),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    room.name,
+                                                    style: text.titleMedium
+                                                        ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    '${room.memberCount} membre(s)',
+                                                    style: text.bodySmall
+                                                        ?.copyWith(
+                                                      color: scheme.onSurface
+                                                          .withValues(
+                                                              alpha: 0.65),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const Icon(
+                                                Icons.chevron_right_rounded),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                  ),
                 ),
               ],
-              const SizedBox(height: 12),
-              Expanded(
-                child: prov.loadingRooms
-                    ? const Center(child: CircularProgressIndicator())
-                    : prov.rooms.isEmpty
-                        ? Center(
-                            child: Text(
-                              'Aucun salon disponible.',
-                              style: TextStyle(
-                                color: scheme.onSurface.withValues(alpha: 0.6),
-                              ),
-                            ),
-                          )
-                        : ListView.separated(
-                            itemCount: prov.rooms.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final room = prov.rooms[index];
-                              return ListTile(
-                                tileColor: scheme.surfaceContainerHighest,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                title: Text(room.name),
-                                subtitle: Text('${room.memberCount} membre(s)'),
-                                trailing:
-                                    const Icon(Icons.chevron_right_rounded),
-                                onTap: () => _openRoom(room),
-                              );
-                            },
-                          ),
-              ),
-            ],
+            ),
           ),
         ),
       );
     }
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Board d execution'),
-          elevation: 0,
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Taches'),
-              Tab(text: 'Decisions'),
+    final totalTasks = prov.tasks.length;
+    final totalDecisions = prov.decisions.length;
+    final blockedTasks = _tasksByStatus['blocked']?.length ?? 0;
+    final doneTasks = _tasksByStatus['done']?.length ?? 0;
+    final completionRate =
+        totalTasks == 0 ? 0 : ((doneTasks / totalTasks) * 100).round();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Execution board'),
+        actions: [
+          if (_switchingRoom)
+            const Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              scheme.primary.withValues(alpha: 0.06),
+              scheme.surface,
             ],
           ),
         ),
-        body: TabBarView(
+        child: Column(
           children: [
-            _TasksBoard(
-              tasksByStatus: _tasksByStatus,
-              onStatusChange: _handleStatusChange,
+            _BoardHero(
+              roomName: prov.currentRoom?.name ?? 'Salon actif',
+              totalTasks: totalTasks,
+              blockedTasks: blockedTasks,
+              totalDecisions: totalDecisions,
+              completionRate: completionRate,
             ),
-            _DecisionsBoard(
-              decisionsByStatus: _decisionsByStatus,
-              onStatusChange: _handleDecisionStatusChange,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment<int>(
+                    value: 0,
+                    icon: Icon(Icons.task_alt_rounded),
+                    label: Text('Taches'),
+                  ),
+                  ButtonSegment<int>(
+                    value: 1,
+                    icon: Icon(Icons.rule_folder_outlined),
+                    label: Text('Decisions'),
+                  ),
+                ],
+                selected: {_activeBoardIndex},
+                onSelectionChanged: (selection) {
+                  setState(() {
+                    _activeBoardIndex = selection.first;
+                  });
+                },
+              ),
+            ),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: _activeBoardIndex == 0
+                    ? _TasksBoard(
+                        key: const ValueKey('tasks_board'),
+                        tasksByStatus: _tasksByStatus,
+                        onStatusChange: _handleStatusChange,
+                      )
+                    : _DecisionsBoard(
+                        key: const ValueKey('decisions_board'),
+                        decisionsByStatus: _decisionsByStatus,
+                        onStatusChange: _handleDecisionStatusChange,
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BoardHero extends StatelessWidget {
+  final String roomName;
+  final int totalTasks;
+  final int blockedTasks;
+  final int totalDecisions;
+  final int completionRate;
+
+  const _BoardHero({
+    required this.roomName,
+    required this.totalTasks,
+    required this.blockedTasks,
+    required this.totalDecisions,
+    required this.completionRate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            scheme.primary.withValues(alpha: 0.16),
+            scheme.tertiary.withValues(alpha: 0.12),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border:
+            Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            roomName,
+            style: text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Pilotage en temps reel des taches et decisions',
+            style: text.bodySmall?.copyWith(
+              color: scheme.onSurface.withValues(alpha: 0.72),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _HeroMetric(label: 'Taches', value: '$totalTasks'),
+              _HeroMetric(label: 'Bloquees', value: '$blockedTasks'),
+              _HeroMetric(label: 'Decisions', value: '$totalDecisions'),
+              _HeroMetric(label: 'Done', value: '$completionRate%'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMetric extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _HeroMetric({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.66),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+      ),
+      child: RichText(
+        text: TextSpan(
+          style: DefaultTextStyle.of(context).style,
+          children: [
+            TextSpan(
+              text: '$value ',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            TextSpan(
+              text: label,
+              style: TextStyle(
+                color: scheme.onSurface.withValues(alpha: 0.72),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -243,6 +485,7 @@ class _TasksBoard extends StatelessWidget {
   final Future<void> Function(WorkspaceTask, String) onStatusChange;
 
   const _TasksBoard({
+    super.key,
     required this.tasksByStatus,
     required this.onStatusChange,
   });
@@ -254,7 +497,7 @@ class _TasksBoard extends StatelessWidget {
 
     return _HorizontalWheelScroll(
       child: SizedBox(
-        width: columns.length * 320.0,
+        width: columns.length * 336.0,
         child: Row(
           children: columns.map((status) {
             final tasks = tasksByStatus[status] ?? [];
@@ -284,6 +527,7 @@ class _DecisionsBoard extends StatelessWidget {
   final Future<void> Function(WorkspaceDecision, String) onStatusChange;
 
   const _DecisionsBoard({
+    super.key,
     required this.decisionsByStatus,
     required this.onStatusChange,
   });
@@ -295,7 +539,7 @@ class _DecisionsBoard extends StatelessWidget {
 
     return _HorizontalWheelScroll(
       child: SizedBox(
-        width: columns.length * 320.0,
+        width: columns.length * 336.0,
         child: Row(
           children: columns.map((status) {
             final decisions = decisionsByStatus[status] ?? [];
@@ -353,7 +597,11 @@ class _HorizontalWheelScrollState extends State<_HorizontalWheelScroll> {
     );
 
     if (nextOffset != position.pixels) {
-      _controller.jumpTo(nextOffset);
+      _controller.animateTo(
+        nextOffset,
+        duration: const Duration(milliseconds: 90),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -400,22 +648,29 @@ class _KanbanColumn<T> extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Container(
-      width: 320,
+      width: 324,
       margin: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: columnColor.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow.withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: columnColor.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
               ),
               border: Border(
                 bottom: BorderSide(color: columnColor.withValues(alpha: 0.2)),
@@ -426,6 +681,7 @@ class _KanbanColumn<T> extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: columnColor,
                   ),
@@ -453,12 +709,22 @@ class _KanbanColumn<T> extends StatelessWidget {
           Expanded(
             child: items.isEmpty
                 ? Center(
-                    child: Text(
-                      'Vide',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: scheme.onSurface.withValues(alpha: 0.4),
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.inbox_outlined,
+                          color: scheme.onSurface.withValues(alpha: 0.3),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Aucun element',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurface.withValues(alpha: 0.45),
+                          ),
+                        ),
+                      ],
                     ),
                   )
                 : ListView.builder(
@@ -509,62 +775,100 @@ class _KanbanCard<T> extends StatelessWidget {
     final dueDate = isTask
         ? (item as WorkspaceTask).dueDate
         : (item as WorkspaceDecision).dueDate;
+    final dueNow = dueDate != null && dueDate.isBefore(DateTime.now());
+    final statusFormatter = isTask ? _formatTaskStatus : _formatDecisionStatus;
 
-    return GestureDetector(
-      onTap: () {
-        _showCardMenu(context, scheme);
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: scheme.outline.withValues(alpha: 0.1),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            _showCardMenu(context, scheme);
+          },
+          child: Ink(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: scheme.outline.withValues(alpha: 0.16),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  scheme.surface,
+                  scheme.surfaceContainerLowest,
+                ],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (ownerName.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.person_outline_rounded,
+                        size: 14,
+                        color: scheme.onSurface.withValues(alpha: 0.52),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          ownerName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: scheme.onSurface.withValues(alpha: 0.64),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (dueDate != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (dueNow ? scheme.error : scheme.tertiary)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _formatDate(dueDate),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: dueNow ? scheme.error : scheme.tertiary,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                _StatusChangeMenu(
+                  statusOptions: statusOptions,
+                  currentStatus: currentStatus,
+                  formatStatus: statusFormatter,
+                  onStatusChange: (newStatus) {
+                    onStatusChange(item, newStatus);
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (ownerName.trim().isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                ownerName,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: scheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-            if (dueDate != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                _formatDate(dueDate),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: dueDate.isBefore(DateTime.now())
-                      ? scheme.error
-                      : scheme.tertiary,
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            _StatusChangeMenu(
-              statusOptions: statusOptions,
-              currentStatus: currentStatus,
-              onStatusChange: (newStatus) {
-                onStatusChange(item, newStatus);
-              },
-            ),
-          ],
         ),
       ),
     );
@@ -583,11 +887,13 @@ class _KanbanCard<T> extends StatelessWidget {
 class _StatusChangeMenu extends StatelessWidget {
   final List<String> statusOptions;
   final String currentStatus;
+  final String Function(String) formatStatus;
   final Function(String) onStatusChange;
 
   const _StatusChangeMenu({
     required this.statusOptions,
     required this.currentStatus,
+    required this.formatStatus,
     required this.onStatusChange,
   });
 
@@ -606,7 +912,7 @@ class _StatusChangeMenu extends StatelessWidget {
                   else
                     const SizedBox(width: 16),
                   const SizedBox(width: 8),
-                  Text(status),
+                  Text(formatStatus(status)),
                 ],
               ),
             ),
@@ -616,16 +922,16 @@ class _StatusChangeMenu extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.primaryContainer,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.arrow_drop_down_rounded, size: 14),
-            SizedBox(width: 2),
+            const Icon(Icons.swap_horiz_rounded, size: 14),
+            const SizedBox(width: 4),
             Text(
-              'Changer statut',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              formatStatus(currentStatus),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
             ),
           ],
         ),
