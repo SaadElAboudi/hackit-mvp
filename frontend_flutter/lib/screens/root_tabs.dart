@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/room_provider.dart';
+import '../screens/home_overview_screen.dart';
 import '../screens/salons_screen.dart';
 import '../screens/my_day_screen.dart';
-import '../screens/inbox_screen.dart';
-import '../screens/ops_hub_screen.dart';
-import '../screens/execution_board_screen.dart';
 
-/// Root tab navigation: Ops Hub (default) + Channels.
+/// Navigation principale simplifiee: Accueil, Priorites, Salons.
 class RootTabs extends StatefulWidget {
   const RootTabs({super.key});
 
@@ -20,10 +18,17 @@ class _RootTabsState extends State<RootTabs> {
   int _selectedIndex = 0;
   late final List<Widget?> _loadedTabs;
 
+  void _goToTab(int index) {
+    setState(() {
+      _selectedIndex = index;
+      _loadedTabs[index] ??= _buildTab(index);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
-    _loadedTabs = List<Widget?>.filled(5, null);
+    _loadedTabs = List<Widget?>.filled(3, null);
     _loadedTabs[_selectedIndex] = _buildTab(_selectedIndex);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<RoomProvider>();
@@ -35,7 +40,7 @@ class _RootTabsState extends State<RootTabs> {
 
       if (mounted && !hasRoom && _selectedIndex == 0) {
         setState(() {
-          _selectedIndex = 3;
+          _selectedIndex = 2;
           _loadedTabs[_selectedIndex] = _buildTab(_selectedIndex);
         });
       }
@@ -45,15 +50,14 @@ class _RootTabsState extends State<RootTabs> {
   Widget _buildTab(int index) {
     switch (index) {
       case 0:
-        return const OpsHubScreen();
+        return HomeOverviewScreen(
+          onOpenPriorities: () => _goToTab(1),
+          onOpenSalons: () => _goToTab(2),
+        );
       case 1:
         return const MyDayScreen();
       case 2:
-        return const InboxScreen();
-      case 3:
         return const SalonsScreen();
-      case 4:
-        return const ExecutionBoardScreen();
       default:
         return const SizedBox.shrink();
     }
@@ -64,7 +68,7 @@ class _RootTabsState extends State<RootTabs> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: List<Widget>.generate(5, (index) {
+        children: List<Widget>.generate(3, (index) {
           return _loadedTabs[index] ?? const SizedBox.shrink();
         }),
       ),
@@ -78,29 +82,19 @@ class _RootTabsState extends State<RootTabs> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.monitor_heart_outlined),
-            selectedIcon: Icon(Icons.monitor_heart),
-            label: 'Ops Hub',
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Accueil',
           ),
           NavigationDestination(
-            icon: Icon(Icons.checklist_outlined),
-            selectedIcon: Icon(Icons.checklist),
-            label: 'My Day',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.inbox_outlined),
-            selectedIcon: Icon(Icons.inbox),
-            label: 'Inbox',
+            icon: Icon(Icons.playlist_add_check_circle_outlined),
+            selectedIcon: Icon(Icons.playlist_add_check_circle),
+            label: 'Priorites',
           ),
           NavigationDestination(
             icon: Icon(Icons.forum_outlined),
             selectedIcon: Icon(Icons.forum),
-            label: 'Channels',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Kanban',
+            label: 'Salons',
           ),
         ],
       ),

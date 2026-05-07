@@ -2196,30 +2196,40 @@ app.use('/api/rooms', roomsRouter);
 // Uses gemini-2.0-flash-lite (30 RPM free tier) with up to 2 retries on 429.
 app.post('/api/ai/chat', async (req, res) => {
   try {
-    const { message, history = [], systemPrompt } = req.body;
-    if (!message || typeof message !== 'string' || message.trim() === '') {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const rawMessage = typeof body.message === 'string' ? body.message : '';
+    const message = rawMessage.trim();
+    if (!message) {
       return res.status(400).json({ error: 'message requis' });
     }
+    if (message.length > 4000) {
+      return res.status(400).json({ error: 'message trop long (max 4000 caracteres)' });
+    }
+
+    const history = Array.isArray(body.history) ? body.history : [];
+    const systemPrompt = typeof body.systemPrompt === 'string'
+      ? body.systemPrompt.trim().slice(0, 2000)
+      : '';
+
     if (!GEMINI_API_KEY) {
       return res.status(503).json({ error: 'Service IA non configuré côté serveur.' });
     }
 
-    const compactHistory = Array.isArray(history)
-      ? history
-        .slice(-16)
-        .map((m) => {
-          const role = m?.role === 'model' ? 'assistant' : 'user';
-          const text = String(m?.text || '').trim();
-          return text ? `[${role}] ${text}` : null;
-        })
-        .filter(Boolean)
-      : [];
+    const compactHistory = history
+      .slice(-16)
+      .map((m) => {
+        if (!m || typeof m !== 'object') return null;
+        const role = m.role === 'model' ? 'assistant' : 'user';
+        const text = String(m.text || '').trim().slice(0, 800);
+        return text ? `[${role}] ${text}` : null;
+      })
+      .filter(Boolean);
 
     const prompt = [
       'Tu es un copilote IA personnel. Reponds de facon claire, concrete et actionnable.',
       'Interdiction: formules vagues, reponse template, generalites sans lien avec la demande.',
       compactHistory.length ? `Historique recent:\n${compactHistory.join('\n\n')}` : '',
-      `Demande utilisateur:\n${message.trim()}`,
+      `Demande utilisateur:\n${message}`,
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -2280,6 +2290,10 @@ app.use((err, _req, res, next) => {
 });
 
 if (isDirectRun) {
+  const FATAL_UNHANDLED_REJECTION =
+    String(process.env.FATAL_UNHANDLED_REJECTION || '') === 'true'
+    || (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test');
+
   const closeServerGracefully = (signal) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
@@ -2325,5 +2339,8 @@ if (isDirectRun) {
   });
   process.on('unhandledRejection', (reason) => {
     console.error('Unhandled promise rejection:', reason);
+    if (FATAL_UNHANDLED_REJECTION) {
+      closeServerGracefully('unhandledRejection');
+    }
   });
 }

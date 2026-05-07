@@ -152,12 +152,36 @@ function canReviewArtifacts(room, userId) {
 }
 
 async function loadRoomOr404(roomId, res) {
-    const room = await Room.findById(roomId);
+    const normalizedRoomId = String(roomId || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(normalizedRoomId)) {
+        res.status(404).json({ error: 'Room not found' });
+        return null;
+    }
+
+    const room = await Room.findById(normalizedRoomId);
     if (!room) {
         res.status(404).json({ error: 'Room not found' });
         return null;
     }
     return room;
+}
+
+function requireObjectId(value, res, { field = 'id', label = 'resource' } = {}) {
+    const normalized = String(value || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(normalized)) {
+        res.status(400).json({ error: `Invalid ${label} ${field}` });
+        return null;
+    }
+    return normalized;
+}
+
+function requireCompactIdentifier(value, res, { field = 'id', maxLength = 128 } = {}) {
+    const normalized = String(value || '').trim();
+    if (!normalized || normalized.length > maxLength) {
+        res.status(400).json({ error: `Invalid ${field}` });
+        return null;
+    }
+    return normalized;
 }
 
 function roomResponse(room) {
@@ -2697,7 +2721,11 @@ router.post('/:id/inbox/:itemId/convert-to-task', validateBody(validateConvertIn
         }
 
         const { sourceType, title, description, ownerId, ownerName, dueDate } = req.validatedBody;
-        const itemId = req.params.itemId;
+        const itemId = requireObjectId(req.params.itemId, res, {
+            field: 'itemId',
+            label: 'inbox item',
+        });
+        if (!itemId) return;
 
         let sourceDecisionId = null;
 
@@ -2789,7 +2817,11 @@ router.post('/:id/inbox/:itemId/snooze', validateBody(validateSnoozeInboxItemPay
         }
 
         const { snoozeMinutes } = req.validatedBody;
-        const itemId = req.params.itemId;
+        const itemId = requireCompactIdentifier(req.params.itemId, res, {
+            field: 'itemId',
+            maxLength: 200,
+        });
+        if (!itemId) return;
         const sourceType = String(req.body?.sourceType || 'unknown').trim();
         const key = `${req.userId}:${itemId}`;
         const snoozeUntil = new Date(Date.now() + snoozeMinutes * 60_000).toISOString();
@@ -2908,7 +2940,11 @@ router.post('/:id/tasks/:taskId/action', validateBody(validateTaskActionPayload)
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
-        const { taskId } = req.params;
+        const taskId = requireObjectId(req.params.taskId, res, {
+            field: 'taskId',
+            label: 'task',
+        });
+        if (!taskId) return;
         const action = req.validatedBody;
 
         logEvent('my_day_action_clicked', {
@@ -3058,17 +3094,23 @@ router.post('/:id/reminders/:reminderId/snooze', validateBody(validateReminderSn
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
+        const reminderId = requireCompactIdentifier(req.params.reminderId, res, {
+            field: 'reminderId',
+            maxLength: 200,
+        });
+        if (!reminderId) return;
+
         const result = snoozeReminder(
             req.params.id,
             req.userId,
-            req.params.reminderId,
+            reminderId,
             req.validatedBody.snoozeMinutes
         );
 
         logEvent('my_day_reminder_snoozed', {
             userId: req.userId,
             roomId: req.params.id,
-            reminderId: req.params.reminderId,
+            reminderId,
             snoozeMinutes: req.validatedBody.snoozeMinutes,
             timestamp: new Date().toISOString(),
         });
@@ -3089,23 +3131,30 @@ router.post('/:id/nudges/:nudgeId/dismiss', async (req, res, next) => {
             return res.status(403).json({ error: 'Not a member of this room' });
         }
 
+        const nudgeId = requireCompactIdentifier(req.params.nudgeId, res, {
+            field: 'nudgeId',
+            maxLength: 200,
+        });
+        if (!nudgeId) return;
+
         const { reason = '' } = req.body || {};
+        const normalizedReason = String(reason || '').trim().slice(0, 500);
 
         // Record interaction for analytics
         const interaction = await recordNudgeInteraction(
             req.params.id,
             req.userId,
-            req.params.nudgeId,
+            nudgeId,
             'dismiss',
-            { reason }
+            { reason: normalizedReason }
         );
 
         // Log event
         logEvent('my_day_nudge_dismissed', {
             userId: req.userId,
             roomId: req.params.id,
-            nudgeId: req.params.nudgeId,
-            reason,
+            nudgeId,
+            reason: normalizedReason,
             timestamp: new Date().toISOString(),
         });
 

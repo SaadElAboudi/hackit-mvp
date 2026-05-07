@@ -16,6 +16,7 @@ class SalonsScreen extends StatefulWidget {
 
 class _SalonsScreenState extends State<SalonsScreen> {
   bool _inviteHandled = false;
+  bool _showTemplateInsights = false;
 
   String _starterMissionPromptForTemplate(DomainTemplate? template) {
     final prompts = template?.starterPrompts ?? const <String>[];
@@ -201,7 +202,7 @@ class _SalonsScreenState extends State<SalonsScreen> {
         backgroundColor: scheme.surface,
         elevation: 0,
         title: const Text(
-          'Channels',
+          'Salons',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
         ),
         actions: [
@@ -224,45 +225,117 @@ class _SalonsScreenState extends State<SalonsScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Hero description
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Text(
-              'Collaborez dans des channels partageables. L’IA est un collègue visible par tous quand vous l’interpellez avec @ia ou une commande.',
-              style: TextStyle(
-                color: scheme.onSurface.withValues(alpha: 0.55),
-                fontSize: 13,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    scheme.primary.withValues(alpha: 0.13),
+                    scheme.tertiary.withValues(alpha: 0.08),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: scheme.primary.withValues(alpha: 0.16),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    prov.currentRoom == null
+                        ? 'Centralisez vos discussions dans des salons clairs.'
+                        : 'Reprenez la conversation la ou vous l avez laissee.',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    prov.currentRoom == null
+                        ? 'Chaque salon regroupe la conversation, les decisions et les actions. Commencez par creer un espace propre pour votre sujet.'
+                        : 'Salon actif: ${prov.currentRoom!.name}. Ouvrez-le directement ou creez un nouveau salon pour separer un nouveau sujet.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.45,
+                      color: scheme.onSurface.withValues(alpha: 0.72),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () => _showCreateDialog(context),
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Nouveau salon'),
+                      ),
+                      if (prov.currentRoom != null)
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              _openRoom(context, prov.currentRoom!),
+                          icon: const Icon(Icons.play_arrow_rounded),
+                          label: const Text('Ouvrir le salon actif'),
+                        )
+                      else
+                        OutlinedButton.icon(
+                          onPressed: () => prov.loadRooms(force: true),
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Actualiser la liste'),
+                        ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
-
           if (recommendedTemplate != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(18),
                   color: scheme.primary.withValues(alpha: 0.08),
                   border:
                       Border.all(color: scheme.primary.withValues(alpha: 0.25)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(recommendedTemplate.emoji,
-                        style: const TextStyle(fontSize: 20)),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Modele recommande: ${recommendedTemplate.name}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurface,
+                    Row(
+                      children: [
+                        Text(recommendedTemplate.emoji,
+                            style: const TextStyle(fontSize: 22)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Modele recommande: ${recommendedTemplate.name}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onSurface,
+                            ),
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Le meilleur point de depart si vous voulez ouvrir un salon sans hesiter sur la structure.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurface.withValues(alpha: 0.65),
                       ),
                     ),
+                    const SizedBox(height: 12),
                     FilledButton.tonalIcon(
                       onPressed: () => _createRecommendedChannel(context),
                       icon: const Icon(Icons.auto_awesome_rounded, size: 18),
@@ -272,29 +345,79 @@ class _SalonsScreenState extends State<SalonsScreen> {
                 ),
               ),
             ),
-
           if (prov.loadingTemplateStats || prov.templateStats.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: _TemplateStatsCard(
-                loading: prov.loadingTemplateStats,
-                stats: prov.templateStats,
-                insights: prov.templateInsights,
-                sinceDays: prov.templateStatsSinceDays,
-                groupBy: prov.templateStatsGroupBy,
-                onRefresh: () => prov.loadTemplateStats(force: true),
-                onSinceDaysChanged: (days) => prov.loadTemplateStats(
-                  force: true,
-                  sinceDays: days,
-                ),
-                onGroupByChanged: (groupBy) => prov.loadTemplateStats(
-                  force: true,
-                  groupBy: groupBy,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _showTemplateInsights = !_showTemplateInsights;
+                      });
+                    },
+                    icon: Icon(
+                      _showTemplateInsights
+                          ? Icons.unfold_less_rounded
+                          : Icons.insights_outlined,
+                    ),
+                    label: Text(
+                      _showTemplateInsights
+                          ? 'Masquer les insights IA'
+                          : 'Afficher les insights IA',
+                    ),
+                  ),
+                  if (_showTemplateInsights)
+                    _TemplateStatsCard(
+                      loading: prov.loadingTemplateStats,
+                      stats: prov.templateStats,
+                      insights: prov.templateInsights,
+                      sinceDays: prov.templateStatsSinceDays,
+                      groupBy: prov.templateStatsGroupBy,
+                      onRefresh: () => prov.loadTemplateStats(force: true),
+                      onSinceDaysChanged: (days) => prov.loadTemplateStats(
+                        force: true,
+                        sinceDays: days,
+                      ),
+                      onGroupByChanged: (groupBy) => prov.loadTemplateStats(
+                        force: true,
+                        groupBy: groupBy,
+                      ),
+                    ),
+                ],
               ),
             ),
-
-          // Body
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                Text(
+                  'Mes salons',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${prov.rooms.length}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: prov.loadingRooms
                 ? const Center(child: CircularProgressIndicator())
@@ -308,21 +431,18 @@ class _SalonsScreenState extends State<SalonsScreen> {
                             onCreate: () => _showCreateDialog(context),
                           )
                         : ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 120),
                             itemCount: prov.rooms.length,
                             separatorBuilder: (_, __) =>
-                                const SizedBox(height: 4),
-                            itemBuilder: (ctx, i) =>
-                                _RoomTile(room: prov.rooms[i]),
+                                const SizedBox(height: 10),
+                            itemBuilder: (ctx, i) => _RoomTile(
+                              room: prov.rooms[i],
+                              isActive:
+                                  prov.currentRoom?.id == prov.rooms[i].id,
+                            ),
                           ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'create_salon',
-        onPressed: () => _showCreateDialog(context),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Nouveau channel'),
       ),
     );
   }
@@ -376,19 +496,23 @@ class _SalonsScreenState extends State<SalonsScreen> {
 
 class _RoomTile extends StatelessWidget {
   final Room room;
-  const _RoomTile({required this.room});
+  final bool isActive;
+
+  const _RoomTile({required this.room, required this.isActive});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final initial = room.name.isNotEmpty ? room.name[0].toUpperCase() : '?';
+    final accent = isActive ? scheme.primary : scheme.outlineVariant;
 
-    return Card(
-      elevation: 0,
-      color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return Material(
+      color: isActive
+          ? scheme.primary.withValues(alpha: 0.05)
+          : scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -397,21 +521,31 @@ class _RoomTile extends StatelessWidget {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           child: Row(
             children: [
-              // Avatar
-              CircleAvatar(
-                backgroundColor: scheme.primaryContainer,
-                foregroundColor: scheme.onPrimaryContainer,
-                child: Text(
-                  initial,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? scheme.primary.withValues(alpha: 0.12)
+                      : scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: accent.withValues(alpha: 0.35)),
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color:
+                          isActive ? scheme.primary : scheme.onPrimaryContainer,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
-
-              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,7 +557,7 @@ class _RoomTile extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         Icon(
@@ -441,15 +575,58 @@ class _RoomTile extends StatelessWidget {
                             color: scheme.onSurface.withValues(alpha: 0.5),
                           ),
                         ),
+                        if (isActive) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Actif',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],
                 ),
               ),
-
-              Icon(
-                Icons.chevron_right_rounded,
-                color: scheme.onSurface.withValues(alpha: 0.3),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isActive ? 'Reprendre' : 'Ouvrir',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface.withValues(alpha: 0.75),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: scheme.onSurface.withValues(alpha: 0.45),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -682,14 +859,14 @@ class _EmptyState extends StatelessWidget {
                 size: 64, color: scheme.primary.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
             Text(
-              'Pas encore de channel',
+              'Pas encore de salon',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Créez un channel pour collaborer avec vos collègues.\nL’IA commune du channel vous aidera à produire, chercher et décider.',
+              'Créez un salon pour cadrer un sujet, garder les decisions au meme endroit et avancer sans vous disperser.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: scheme.onSurface.withValues(alpha: 0.55),
@@ -699,7 +876,7 @@ class _EmptyState extends StatelessWidget {
             FilledButton.icon(
               onPressed: onCreate,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Créer un channel'),
+              label: const Text('Créer un salon'),
             ),
           ],
         ),

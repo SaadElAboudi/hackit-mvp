@@ -5,8 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/room.dart';
 import '../providers/room_provider.dart';
 
-/// ExecutionBoard: Kanban-style view for decisions & tasks.
-/// Columns: Todo | In Progress | Blocked | Done
+/// Board d'execution: vue Kanban des taches et decisions.
 class ExecutionBoardScreen extends StatefulWidget {
   const ExecutionBoardScreen({super.key});
 
@@ -15,8 +14,8 @@ class ExecutionBoardScreen extends StatefulWidget {
 }
 
 class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
-  late Map<String, List<WorkspaceTask>> _tasksByStatus;
-  late Map<String, List<WorkspaceDecision>> _decisionsByStatus;
+  Map<String, List<WorkspaceTask>> _tasksByStatus = {};
+  Map<String, List<WorkspaceDecision>> _decisionsByStatus = {};
 
   @override
   void initState() {
@@ -50,22 +49,36 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
   }
 
   Future<void> _openRoom(Room room) async {
-    final prov = context.read<RoomProvider>();
-    await prov.openRoom(room);
-    if (!mounted) return;
-    setState(() {
-      _rebuildMaps();
-    });
+    try {
+      final prov = context.read<RoomProvider>();
+      await prov.openRoom(room);
+      if (!mounted) return;
+      setState(() {
+        _rebuildMaps();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Impossible d ouvrir le salon: $e')),
+      );
+    }
   }
 
   Future<void> _createGeneralRoom() async {
-    final prov = context.read<RoomProvider>();
-    final room = await prov.createRoom(
-      name: 'General',
-      displayName: prov.myUserId ?? 'Utilisateur',
-    );
-    if (room == null) return;
-    await _openRoom(room);
+    try {
+      final prov = context.read<RoomProvider>();
+      final room = await prov.createRoom(
+        name: 'General',
+        displayName: prov.myUserId ?? 'Utilisateur',
+      );
+      if (room == null) return;
+      await _openRoom(room);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Creation du salon impossible: $e')),
+      );
+    }
   }
 
   @override
@@ -78,22 +91,38 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
     WorkspaceTask task,
     String newStatus,
   ) async {
-    final prov = context.read<RoomProvider>();
-    await prov.updateTask(task, status: newStatus);
-    setState(() {
-      _rebuildMaps();
-    });
+    try {
+      final prov = context.read<RoomProvider>();
+      await prov.updateTask(task, status: newStatus);
+      if (!mounted) return;
+      setState(() {
+        _rebuildMaps();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Echec du changement de statut: $e')),
+      );
+    }
   }
 
   Future<void> _handleDecisionStatusChange(
     WorkspaceDecision decision,
     String newStatus,
   ) async {
-    final prov = context.read<RoomProvider>();
-    await prov.updateDecision(decision, status: newStatus);
-    setState(() {
-      _rebuildMaps();
-    });
+    try {
+      final prov = context.read<RoomProvider>();
+      await prov.updateDecision(decision, status: newStatus);
+      if (!mounted) return;
+      setState(() {
+        _rebuildMaps();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Echec du changement de statut: $e')),
+      );
+    }
   }
 
   @override
@@ -101,16 +130,18 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
     final prov = context.watch<RoomProvider>();
     final scheme = Theme.of(context).colorScheme;
 
+    _rebuildMaps();
+
     if (prov.currentRoom == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Execution Board')),
+        appBar: AppBar(title: const Text('Board d execution')),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Selectionnez un channel pour afficher le Kanban.',
+                'Selectionnez un salon pour afficher le Kanban.',
                 style:
                     TextStyle(color: scheme.onSurface.withValues(alpha: 0.75)),
               ),
@@ -145,7 +176,7 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
                     : prov.rooms.isEmpty
                         ? Center(
                             child: Text(
-                              'Aucun channel disponible.',
+                              'Aucun salon disponible.',
                               style: TextStyle(
                                 color: scheme.onSurface.withValues(alpha: 0.6),
                               ),
@@ -181,11 +212,11 @@ class _ExecutionBoardScreenState extends State<ExecutionBoardScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Execution Board'),
+          title: const Text('Board d execution'),
           elevation: 0,
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Tasks'),
+              Tab(text: 'Taches'),
               Tab(text: 'Decisions'),
             ],
           ),
@@ -431,8 +462,8 @@ class _KanbanColumn<T> extends StatelessWidget {
                     ),
                   )
                 : ListView.builder(
-                  primary: false,
-                  physics: const ClampingScrollPhysics(),
+                    primary: false,
+                    physics: const ClampingScrollPhysics(),
                     padding: const EdgeInsets.all(8),
                     itemCount: items.length,
                     itemBuilder: (ctx, idx) {
@@ -542,7 +573,7 @@ class _KanbanCard<T> extends StatelessWidget {
   void _showCardMenu(BuildContext context, ColorScheme scheme) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Card actions: edit, delete (coming soon)'),
+        content: Text('Actions carte: modifier, supprimer (bientot)'),
         duration: Duration(milliseconds: 2000),
       ),
     );
@@ -593,7 +624,7 @@ class _StatusChangeMenu extends StatelessWidget {
             Icon(Icons.arrow_drop_down_rounded, size: 14),
             SizedBox(width: 2),
             Text(
-              'Change status',
+              'Changer statut',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ],
@@ -606,13 +637,13 @@ class _StatusChangeMenu extends StatelessWidget {
 String _formatTaskStatus(String status) {
   switch (status) {
     case 'todo':
-      return 'To Do';
+      return 'A faire';
     case 'in_progress':
-      return 'In Progress';
+      return 'En cours';
     case 'blocked':
-      return 'Blocked';
+      return 'Bloque';
     case 'done':
-      return 'Done';
+      return 'Termine';
     default:
       return status;
   }
@@ -621,13 +652,13 @@ String _formatTaskStatus(String status) {
 String _formatDecisionStatus(String status) {
   switch (status) {
     case 'draft':
-      return 'Draft';
+      return 'Brouillon';
     case 'review':
-      return 'In Review';
+      return 'En revue';
     case 'approved':
-      return 'Approved';
+      return 'Approuve';
     case 'implemented':
-      return 'Implemented';
+      return 'Implemente';
     default:
       return status;
   }
@@ -635,15 +666,18 @@ String _formatDecisionStatus(String status) {
 
 String _formatDate(DateTime date) {
   final now = DateTime.now();
-  final diff = now.difference(date);
-  if (diff.inDays == 0) {
-    return 'Today';
-  } else if (diff.inDays == -1) {
-    return 'Tomorrow';
-  } else if (diff.inDays < 0 && diff.inDays > -7) {
-    return 'In ${-diff.inDays}d';
-  } else if (diff.inDays > 0 && diff.inDays < 7) {
-    return '${diff.inDays}d ago';
+  final today = DateTime(now.year, now.month, now.day);
+  final target = DateTime(date.year, date.month, date.day);
+  final dayDiff = target.difference(today).inDays;
+
+  if (dayDiff == 0) {
+    return 'Aujourd hui';
+  } else if (dayDiff == 1) {
+    return 'Demain';
+  } else if (dayDiff > 1 && dayDiff < 7) {
+    return 'Dans ${dayDiff}j';
+  } else if (dayDiff < 0 && dayDiff > -7) {
+    return 'Il y a ${-dayDiff}j';
   } else {
     return '${date.day}/${date.month}';
   }

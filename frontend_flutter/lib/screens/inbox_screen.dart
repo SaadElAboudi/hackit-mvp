@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../providers/room_provider.dart';
@@ -22,6 +21,13 @@ class _InboxScreenState extends State<InboxScreen> {
     'unassigned',
     'overdue',
   ];
+  final Map<String, String> _filterLabels = const {
+    'all': 'Tout',
+    'mine': 'A moi',
+    'team': 'Equipe',
+    'unassigned': 'Non assigne',
+    'overdue': 'En retard',
+  };
 
   List<Map<String, dynamic>> _items = [];
   bool _isLoading = true;
@@ -62,7 +68,7 @@ class _InboxScreenState extends State<InboxScreen> {
     if (!mounted) return null;
     setState(() {
       _isLoading = false;
-      _error = 'No room selected';
+      _error = 'Aucun salon selectionne';
     });
     return null;
   }
@@ -104,7 +110,7 @@ class _InboxScreenState extends State<InboxScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Failed to load inbox: $e';
+        _error = 'Echec du chargement de la boite: $e';
       });
     }
   }
@@ -128,6 +134,13 @@ class _InboxScreenState extends State<InboxScreen> {
       final prov = context.read<RoomProvider>();
       final roomId = prov.currentRoom?.id ?? '';
       final itemId = (item['itemId'] ?? '').toString();
+      if (roomId.isEmpty || itemId.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Element introuvable pour le report')),
+        );
+        return;
+      }
+
       final result = await _api.snoozeInboxItem(
         roomId,
         itemId,
@@ -139,14 +152,14 @@ class _InboxScreenState extends State<InboxScreen> {
       setState(() => _snoozed[itemId] = until);
       messenger.showSnackBar(
         SnackBar(
-            content: Text('Snoozed for $minutes min'),
+            content: Text('Reporte pour $minutes min'),
             duration: const Duration(seconds: 2)),
       );
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-            content: Text('Snooze failed: $e'), backgroundColor: Colors.red),
+            content: Text('Echec du report: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -177,8 +190,8 @@ class _InboxScreenState extends State<InboxScreen> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'SLA health: $health% • $total open items'
-              '${late > 0 ? ' • $late late' : ''}',
+              'Sante SLA: $health% • $total elements ouverts'
+              '${late > 0 ? ' • $late en retard' : ''}',
               style: TextStyle(fontSize: 12, color: barColor),
             ),
           ),
@@ -211,6 +224,55 @@ class _InboxScreenState extends State<InboxScreen> {
       default:
         return Icons.forum;
     }
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'task':
+        return 'Tache';
+      case 'decision':
+        return 'Decision';
+      case 'message':
+      default:
+        return 'Message';
+    }
+  }
+
+  Widget _buildInboxHero() {
+    final visibleCount = _items.length;
+    final selectedLabel = _filterLabels[_selectedFilter] ?? _selectedFilter;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.teal.shade700, Colors.cyan.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Queue d execution',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$visibleCount elements visibles • filtre: $selectedLabel',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.9),
+                ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showConvertModal(
@@ -253,7 +315,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     const Icon(Icons.task_alt, size: 20),
                     const SizedBox(width: 8),
                     Text(
-                      'Convert to Task',
+                      'Convertir en tache',
                       style: Theme.of(ctx).textTheme.titleMedium,
                     ),
                   ],
@@ -262,7 +324,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 TextField(
                   controller: titleCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Title *',
+                    labelText: 'Titre *',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -281,7 +343,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 TextField(
                   controller: ownerCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Owner name',
+                    labelText: 'Responsable',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -292,7 +354,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   builder: (_, date, __) => OutlinedButton.icon(
                     icon: const Icon(Icons.calendar_today, size: 16),
                     label: Text(date == null
-                        ? 'Set due date (optional)'
+                        ? 'Ajouter une echeance (optionnel)'
                         : '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}'),
                     onPressed: () async {
                       final picked = await showDatePicker(
@@ -319,7 +381,7 @@ class _InboxScreenState extends State<InboxScreen> {
                             if (title.isEmpty) {
                               ScaffoldMessenger.of(ctx).showSnackBar(
                                 const SnackBar(
-                                    content: Text('Title is required')),
+                                    content: Text('Le titre est requis')),
                               );
                               return;
                             }
@@ -327,10 +389,23 @@ class _InboxScreenState extends State<InboxScreen> {
                             try {
                               final prov = context.read<RoomProvider>();
                               final roomId = prov.currentRoom?.id ?? '';
-                              final api = ApiService(http.Client());
-                              await api.convertInboxItem(
+                              final itemId = item['itemId']?.toString() ?? '';
+                              if (roomId.isEmpty || itemId.isEmpty) {
+                                if (!ctx.mounted) return;
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Impossible de convertir cet element',
+                                    ),
+                                  ),
+                                );
+                                setModalState(() => isSubmitting = false);
+                                return;
+                              }
+
+                              await _api.convertInboxItem(
                                 roomId,
-                                item['itemId'].toString(),
+                                itemId,
                                 sourceType:
                                     (item['sourceType'] ?? 'room_message')
                                         .toString(),
@@ -343,7 +418,7 @@ class _InboxScreenState extends State<InboxScreen> {
                               Navigator.of(ctx).pop();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                    content: Text('Task created successfully')),
+                                    content: Text('Tache creee avec succes')),
                               );
                               // Remove the item from local list if it was a
                               // message/decision (task is already there)
@@ -359,7 +434,7 @@ class _InboxScreenState extends State<InboxScreen> {
                               if (!ctx.mounted) return;
                               ScaffoldMessenger.of(ctx).showSnackBar(
                                 SnackBar(
-                                    content: Text('Error: $e'),
+                                    content: Text('Erreur: $e'),
                                     backgroundColor: Colors.red),
                               );
                             }
@@ -370,7 +445,7 @@ class _InboxScreenState extends State<InboxScreen> {
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Create Task'),
+                        : const Text('Creer la tache'),
                   ),
                 ),
               ],
@@ -390,28 +465,32 @@ class _InboxScreenState extends State<InboxScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inbox'),
+        title: const Text('A traiter'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => _loadInbox(reset: true),
+            tooltip: 'Actualiser',
           ),
         ],
       ),
       body: Column(
         children: [
+          _buildInboxHero(),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search inbox...',
+                hintText: 'Rechercher une action ou un message...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.send),
                   onPressed: () => _loadInbox(reset: true),
                 ),
-                border: const OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 isDense: true,
               ),
               onSubmitted: (_) => _loadInbox(reset: true),
@@ -425,7 +504,7 @@ class _InboxScreenState extends State<InboxScreen> {
               itemBuilder: (_, index) {
                 final filter = _filters[index];
                 return ChoiceChip(
-                  label: Text(filter),
+                  label: Text(_filterLabels[filter] ?? filter),
                   selected: _selectedFilter == filter,
                   onSelected: (_) {
                     setState(() {
@@ -452,7 +531,9 @@ class _InboxScreenState extends State<InboxScreen> {
                             ? ListView(
                                 children: const [
                                   SizedBox(height: 120),
-                                  Center(child: Text('Inbox is empty')),
+                                  Center(
+                                      child: Text(
+                                          'Rien a traiter pour le moment')),
                                 ],
                               )
                             : ListView.builder(
@@ -467,7 +548,7 @@ class _InboxScreenState extends State<InboxScreen> {
                                       child: OutlinedButton(
                                         onPressed: () =>
                                             _loadInbox(reset: false),
-                                        child: const Text('Load more'),
+                                        child: const Text('Charger plus'),
                                       ),
                                     );
                                   }
@@ -476,89 +557,227 @@ class _InboxScreenState extends State<InboxScreen> {
                                   final sla =
                                       (item['sla'] ?? 'none').toString();
                                   final color = _slaColor(sla);
+                                  final sourceType =
+                                      (item['sourceType'] ?? '').toString();
+                                  final itemId =
+                                      (item['itemId'] ?? '').toString();
+                                  final channel =
+                                      (item['channel'] ?? '').toString();
+                                  final description =
+                                      (item['description'] ?? '').toString();
 
-                                  return ListTile(
-                                    leading: Icon(
-                                      _typeIcon(
-                                          (item['type'] ?? '').toString()),
-                                      color: color,
+                                  return Container(
+                                    margin: const EdgeInsets.fromLTRB(
+                                      12,
+                                      4,
+                                      12,
+                                      8,
                                     ),
-                                    title:
-                                        Text((item['title'] ?? '').toString()),
-                                    subtitle: Text(
-                                      [
-                                        (item['description'] ?? '').toString(),
-                                        if ((item['channel'] ?? '')
-                                            .toString()
-                                            .isNotEmpty)
-                                          '#${item['channel']}'
-                                      ]
-                                          .where((e) => e.trim().isNotEmpty)
-                                          .join(' • '),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      border: Border.all(
+                                          color: Colors.grey.shade200),
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.03),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 3),
+                                        )
+                                      ],
                                     ),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                color.withValues(alpha: 0.12),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                          child: Text(
-                                            sla,
-                                            style: TextStyle(color: color),
-                                          ),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              _typeIcon((item['type'] ?? '')
+                                                  .toString()),
+                                              color: color,
+                                              size: 20,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                (item['title'] ?? '')
+                                                    .toString(),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleSmall
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: color.withValues(
+                                                    alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                              child: Text(
+                                                sla,
+                                                style: TextStyle(
+                                                  color: color,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        const SizedBox(width: 4),
-                                        if (_snoozed.containsKey(
-                                            (item['itemId'] ?? '').toString()))
-                                          const Tooltip(
-                                            message: 'Snoozed',
-                                            child: Icon(Icons.snooze,
-                                                size: 16, color: Colors.grey),
-                                          )
-                                        else
-                                          PopupMenuButton<int>(
-                                            icon: const Icon(
-                                                Icons.snooze_outlined,
-                                                size: 18),
-                                            tooltip: 'Snooze',
-                                            itemBuilder: (_) => const [
-                                              PopupMenuItem(
-                                                  value: 30,
-                                                  child: Text('30 min')),
-                                              PopupMenuItem(
-                                                  value: 60,
-                                                  child: Text('1 hour')),
-                                              PopupMenuItem(
-                                                  value: 480,
-                                                  child: Text('8 hours')),
-                                              PopupMenuItem(
-                                                  value: 1440,
-                                                  child: Text('1 day')),
-                                              PopupMenuItem(
-                                                  value: 10080,
-                                                  child: Text('1 week')),
-                                            ],
-                                            onSelected: (minutes) =>
-                                                _snoozeItem(
-                                                    context, item, minutes),
+                                        const SizedBox(height: 6),
+                                        if (description.trim().isNotEmpty)
+                                          Text(
+                                            description,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: Colors.grey.shade700,
+                                                ),
                                           ),
-                                        IconButton(
-                                          icon: const Icon(Icons.add_task,
-                                              size: 20),
-                                          tooltip: 'Convert to task',
-                                          onPressed: () =>
-                                              _showConvertModal(context, item),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade100,
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                              child: Text(
+                                                _typeLabel((item['type'] ?? '')
+                                                    .toString()),
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall,
+                                              ),
+                                            ),
+                                            if (channel.trim().isNotEmpty)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.blue.shade50,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          999),
+                                                ),
+                                                child: Text(
+                                                  '#$channel',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        color: Colors
+                                                            .blue.shade700,
+                                                      ),
+                                                ),
+                                              ),
+                                            if (_snoozed.containsKey(itemId))
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.amber.shade50,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          999),
+                                                ),
+                                                child: Text(
+                                                  'Reporte',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        color: Colors
+                                                            .amber.shade800,
+                                                      ),
+                                                ),
+                                              ),
+                                          ],
                                         ),
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: [
+                                            if (!_snoozed.containsKey(itemId))
+                                              PopupMenuButton<int>(
+                                                icon: const Icon(
+                                                    Icons.snooze_outlined,
+                                                    size: 18),
+                                                tooltip: 'Reporter',
+                                                itemBuilder: (_) => const [
+                                                  PopupMenuItem(
+                                                    value: 30,
+                                                    child: Text('30 min'),
+                                                  ),
+                                                  PopupMenuItem(
+                                                    value: 60,
+                                                    child: Text('1 heure'),
+                                                  ),
+                                                  PopupMenuItem(
+                                                    value: 480,
+                                                    child: Text('8 heures'),
+                                                  ),
+                                                  PopupMenuItem(
+                                                    value: 1440,
+                                                    child: Text('1 jour'),
+                                                  ),
+                                                  PopupMenuItem(
+                                                    value: 10080,
+                                                    child: Text('1 semaine'),
+                                                  ),
+                                                ],
+                                                onSelected: (minutes) =>
+                                                    _snoozeItem(
+                                                  context,
+                                                  item,
+                                                  minutes,
+                                                ),
+                                              ),
+                                            const SizedBox(width: 4),
+                                            FilledButton.tonalIcon(
+                                              onPressed:
+                                                  sourceType == 'workspace_task'
+                                                      ? null
+                                                      : () => _showConvertModal(
+                                                            context,
+                                                            item,
+                                                          ),
+                                              icon: const Icon(Icons.add_task,
+                                                  size: 16),
+                                              label: const Text('Convertir'),
+                                            ),
+                                          ],
+                                        )
                                       ],
                                     ),
                                   );
