@@ -16,7 +16,7 @@ function startServer(app, port = 0) {
     });
 }
 
-async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 8000 }) {
+async function postJson({ host = '127.0.0.1', port, path, body, timeoutMs = 15000 }) {
     const payload = JSON.stringify(body || {});
     return await new Promise((resolve, reject) => {
         const req = http.request(

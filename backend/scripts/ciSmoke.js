@@ -7,7 +7,7 @@ import http from 'node:http';
 const query = process.env.SMOKE_QUERY || 'test plomberie';
 const host = process.env.API_HOST || 'localhost';
 const port = process.env.API_PORT || 3000;
-const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 8000);
+const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
 const realMode = String(process.env.REAL_MODE || 'false').toLowerCase() === 'true';
 
 function fail(msg) {

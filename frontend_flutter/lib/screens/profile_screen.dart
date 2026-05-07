@@ -92,7 +92,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 28),
 
-              _SectionTitle('Identité'),
+              const _SectionTitle('Identité'),
               const SizedBox(height: 12),
               TextField(
                 controller: _nameCtrl,

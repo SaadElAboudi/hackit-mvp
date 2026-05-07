@@ -235,7 +235,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
                 Text(
                   '${_artifact!.kind} • $versionCount version${versionCount != 1 ? 's' : ''}',
                   style: TextStyle(
-                      fontSize: 11, color: scheme.onSurface.withOpacity(0.55)),
+                      fontSize: 11, color: scheme.onSurface.withValues(alpha: 0.55)),
                 ),
             ],
           ),
@@ -340,7 +340,7 @@ class _ContentView extends StatelessWidget {
       return Center(
         child: Text(
           'Aucun contenu disponible.',
-          style: TextStyle(color: scheme.onSurface.withOpacity(0.4)),
+          style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.4)),
         ),
       );
     }
@@ -351,7 +351,7 @@ class _ContentView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           color: version!.status == 'approved'
-              ? Colors.green.withOpacity(0.1)
+              ? Colors.green.withValues(alpha: 0.1)
               : scheme.surfaceContainerLow,
           child: Row(
             children: [
@@ -362,13 +362,13 @@ class _ContentView extends StatelessWidget {
                 size: 15,
                 color: version!.status == 'approved'
                     ? Colors.green
-                    : scheme.onSurface.withOpacity(0.45),
+                    : scheme.onSurface.withValues(alpha: 0.45),
               ),
               const SizedBox(width: 6),
               Text(
                 'v${version!.number} · ${version!.status} · ${_fmt(version!.createdAt)}',
                 style: TextStyle(
-                    fontSize: 11, color: scheme.onSurface.withOpacity(0.55)),
+                    fontSize: 11, color: scheme.onSurface.withValues(alpha: 0.55)),
               ),
             ],
           ),
@@ -392,7 +392,7 @@ class _ContentView extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: scheme.onSurface.withOpacity(0.65),
+                        color: scheme.onSurface.withValues(alpha: 0.65),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -408,7 +408,7 @@ class _ContentView extends StatelessWidget {
                     'Aucun commentaire pour cette version.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: scheme.onSurface.withOpacity(0.5),
+                      color: scheme.onSurface.withValues(alpha: 0.5),
                     ),
                   )
                 else
@@ -479,17 +479,17 @@ class _VersionsPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
         border: Border(
-          left: BorderSide(color: scheme.outlineVariant.withOpacity(0.35)),
+          left: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
             child: Text(
               'Versions',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
           const Divider(height: 1),
@@ -503,7 +503,7 @@ class _VersionsPanel extends StatelessWidget {
                 return ListTile(
                   dense: true,
                   selected: selected,
-                  selectedTileColor: scheme.secondaryContainer.withOpacity(0.4),
+                  selectedTileColor: scheme.secondaryContainer.withValues(alpha: 0.4),
                   leading: CircleAvatar(
                     radius: 13,
                     backgroundColor: selected

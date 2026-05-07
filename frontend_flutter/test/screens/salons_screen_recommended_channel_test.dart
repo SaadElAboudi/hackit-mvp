@@ -27,7 +27,7 @@ class _FakeRoomProvider extends RoomProvider {
   int createCalls = 0;
 
   @override
-  Future<void> loadRooms() async {
+  Future<void> loadRooms({bool force = false}) async {
     loadingRooms = false;
     rooms = const [];
     notifyListeners();

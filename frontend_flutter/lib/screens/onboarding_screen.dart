@@ -81,7 +81,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     Text(
                       'Choisissez le prénom ou pseudo que vos collègues verront dans les salons.',
                       style: TextStyle(
-                          color: scheme.onSurface.withOpacity(0.6),
+                          color: scheme.onSurface.withValues(alpha: 0.6),
                           fontSize: 14),
                     ),
                     const SizedBox(height: 24),

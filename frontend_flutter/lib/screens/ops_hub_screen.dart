@@ -406,9 +406,9 @@ class _FeedbackInsightsCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Top win: ${digest.topWinPatterns.first}',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
-                color: const Color(0xFF2E8B57),
+                color: Color(0xFF2E8B57),
               ),
             ),
           ],
