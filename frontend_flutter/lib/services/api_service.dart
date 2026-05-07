@@ -48,6 +48,10 @@ class ApiService {
     return ApiService(http.Client());
   }
 
+  void dispose() {
+    _client.close();
+  }
+
   Map<String, dynamic> _decodeJsonObject(String raw,
       {Map<String, dynamic>? fallback}) {
     try {
@@ -343,10 +347,12 @@ class ApiService {
 
     final uri = Uri.parse('$baseUrl/api/rooms/$roomId/my-day');
     try {
-      final response = await _client.get(
-        uri,
-        headers: headers,
-      ).timeout(const Duration(seconds: 8));
+      final response = await _client
+          .get(
+            uri,
+            headers: headers,
+          )
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         return _decodeJsonObject(response.body);

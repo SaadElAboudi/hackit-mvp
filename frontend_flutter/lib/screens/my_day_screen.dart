@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import '../providers/room_provider.dart';
@@ -21,6 +20,7 @@ class MyDayScreen extends StatefulWidget {
 }
 
 class _MyDayScreenState extends State<MyDayScreen> {
+  final ApiService _apiService = ApiService.create();
   MyDayResponse? _myDay;
   bool _isLoading = true;
   String? _errorMessage;
@@ -34,13 +34,13 @@ class _MyDayScreenState extends State<MyDayScreen> {
     _refreshAll();
   }
 
-  Future<void> _refreshAll() async {
-    await _loadMyDay();
-    await _loadNudges();
-    await _loadReminders();
+  @override
+  void dispose() {
+    _apiService.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadMyDay() async {
+  Future<void> _refreshAll() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -50,8 +50,9 @@ class _MyDayScreenState extends State<MyDayScreen> {
       final prov = context.read<RoomProvider>();
       await prov.ensureCurrentRoom(createIfMissing: false);
 
-      final room = prov.currentRoom;
-      if (room == null) {
+      final roomId = prov.currentRoom?.id;
+      if (roomId == null) {
+        if (!mounted) return;
         setState(() {
           _isLoading = false;
           _errorMessage = 'No room selected. Navigate to Channels first.';
@@ -59,8 +60,23 @@ class _MyDayScreenState extends State<MyDayScreen> {
         return;
       }
 
-      final apiService = ApiService(http.Client());
-      final responseData = await apiService.getMyDay(room.id);
+      await Future.wait([
+        _loadMyDayForRoom(roomId),
+        _loadNudgesForRoom(roomId),
+        _loadRemindersForRoom(roomId),
+      ]);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Failed to load My Day: $e';
+      });
+    }
+  }
+
+  Future<void> _loadMyDayForRoom(String roomId) async {
+    try {
+      final responseData = await _apiService.getMyDay(roomId);
       final response = MyDayResponse.fromJson(responseData);
 
       if (!mounted) return;
@@ -71,22 +87,13 @@ class _MyDayScreenState extends State<MyDayScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Failed to load My Day: $e';
-      });
+      rethrow;
     }
   }
 
-  Future<void> _loadNudges() async {
+  Future<void> _loadNudgesForRoom(String roomId) async {
     try {
-      final prov = context.read<RoomProvider>();
-      final room = prov.currentRoom;
-      if (room == null) return;
-
-      final apiService = ApiService(http.Client());
-      final nudges = await apiService.getNudges(room.id);
+      final nudges = await _apiService.getNudges(roomId);
       if (!mounted) return;
       setState(() => _nudges = nudges);
     } catch (e) {
@@ -94,14 +101,9 @@ class _MyDayScreenState extends State<MyDayScreen> {
     }
   }
 
-  Future<void> _loadReminders() async {
+  Future<void> _loadRemindersForRoom(String roomId) async {
     try {
-      final prov = context.read<RoomProvider>();
-      final room = prov.currentRoom;
-      if (room == null) return;
-
-      final apiService = ApiService(http.Client());
-      final reminders = await apiService.getReminders(room.id);
+      final reminders = await _apiService.getReminders(roomId);
       if (!mounted) return;
       setState(() => _reminders = reminders);
     } catch (e) {
@@ -115,14 +117,13 @@ class _MyDayScreenState extends State<MyDayScreen> {
       final room = prov.currentRoom;
       if (room == null) return;
 
-      final apiService = ApiService(http.Client());
-      await apiService.snoozeReminder(room.id, reminderId, minutes);
+      await _apiService.snoozeReminder(room.id, reminderId, minutes);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Reminder snoozed for ${minutes}m')),
       );
-      await _loadReminders();
+      await _loadRemindersForRoom(room.id);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,8 +138,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
       final room = prov.currentRoom;
       if (room == null) return;
 
-      final apiService = ApiService(http.Client());
-      await apiService.dismissNudge(room.id, nudgeId, reason: reason);
+      await _apiService.dismissNudge(room.id, nudgeId, reason: reason);
 
       if (!mounted) return;
       setState(() {
@@ -164,8 +164,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
       final room = prov.currentRoom;
       if (room == null) return;
 
-      final apiService = ApiService(http.Client());
-      await apiService.executeTaskAction(
+      await _apiService.executeTaskAction(
         room.id,
         taskId,
         const {'type': 'mark_done'},
@@ -192,8 +191,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
       if (room == null) return;
 
       final deferUntil = DateTime.now().add(const Duration(days: 1));
-      final apiService = ApiService(http.Client());
-      await apiService.executeTaskAction(
+      await _apiService.executeTaskAction(
         room.id,
         taskId,
         {'type': 'defer', 'deferUntil': deferUntil.toIso8601String()},
@@ -258,7 +256,7 @@ class _MyDayScreenState extends State<MyDayScreen> {
           Text(_errorMessage!),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: _loadMyDay,
+            onPressed: _refreshAll,
             child: const Text('Retry'),
           ),
           if (_lastRequestId != null)

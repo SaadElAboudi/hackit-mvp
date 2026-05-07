@@ -13,6 +13,7 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
+  final ApiService _api = ApiService.create();
   final TextEditingController _searchController = TextEditingController();
   final List<String> _filters = const [
     'all',
@@ -34,17 +35,39 @@ class _InboxScreenState extends State<InboxScreen> {
   @override
   void initState() {
     super.initState();
-    _loadInbox(reset: true);
-    _loadSlaReport();
+    _bootstrapInbox();
   }
 
   @override
   void dispose() {
+    _api.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadInbox({required bool reset}) async {
+  Future<void> _bootstrapInbox() async {
+    final roomId = await _ensureCurrentRoomId();
+    if (roomId == null) return;
+    await Future.wait([
+      _loadInbox(reset: true, roomId: roomId),
+      _loadSlaReport(roomId: roomId),
+    ]);
+  }
+
+  Future<String?> _ensureCurrentRoomId() async {
+    final prov = context.read<RoomProvider>();
+    await prov.ensureCurrentRoom(createIfMissing: false);
+    final roomId = prov.currentRoom?.id;
+    if (roomId != null) return roomId;
+    if (!mounted) return null;
+    setState(() {
+      _isLoading = false;
+      _error = 'No room selected';
+    });
+    return null;
+  }
+
+  Future<void> _loadInbox({required bool reset, String? roomId}) async {
     if (reset) {
       setState(() {
         _isLoading = true;
@@ -53,21 +76,11 @@ class _InboxScreenState extends State<InboxScreen> {
     }
 
     try {
-      final prov = context.read<RoomProvider>();
-      await prov.ensureCurrentRoom(createIfMissing: false);
-      final room = prov.currentRoom;
-      if (room == null) {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _error = 'No room selected';
-        });
-        return;
-      }
+      final resolvedRoomId = roomId ?? await _ensureCurrentRoomId();
+      if (resolvedRoomId == null) return;
 
-      final api = ApiService(http.Client());
-      final response = await api.getInbox(
-        room.id,
+      final response = await _api.getInbox(
+        resolvedRoomId,
         filter: _selectedFilter == 'all' ? null : _selectedFilter,
         query: _searchController.text.trim().isEmpty
             ? null
@@ -96,14 +109,11 @@ class _InboxScreenState extends State<InboxScreen> {
     }
   }
 
-  Future<void> _loadSlaReport() async {
+  Future<void> _loadSlaReport({String? roomId}) async {
     try {
-      final prov = context.read<RoomProvider>();
-      await prov.ensureCurrentRoom(createIfMissing: false);
-      final room = prov.currentRoom;
-      if (room == null) return;
-      final api = ApiService(http.Client());
-      final report = await api.getInboxSlaReport(room.id);
+      final resolvedRoomId = roomId ?? await _ensureCurrentRoomId();
+      if (resolvedRoomId == null) return;
+      final report = await _api.getInboxSlaReport(resolvedRoomId);
       if (!mounted) return;
       setState(() => _slaReport = report);
     } catch (_) {
@@ -118,8 +128,7 @@ class _InboxScreenState extends State<InboxScreen> {
       final prov = context.read<RoomProvider>();
       final roomId = prov.currentRoom?.id ?? '';
       final itemId = (item['itemId'] ?? '').toString();
-      final api = ApiService(http.Client());
-      final result = await api.snoozeInboxItem(
+      final result = await _api.snoozeInboxItem(
         roomId,
         itemId,
         snoozeMinutes: minutes,

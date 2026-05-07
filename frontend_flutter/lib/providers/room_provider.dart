@@ -18,6 +18,7 @@ class RoomProvider extends ChangeNotifier {
   }) _logFeedbackSignal;
   final Set<String> _feedbackFailedMessageIds = <String>{};
   Future<bool>? _ensureRoomFuture;
+  int _roomLoadToken = 0;
 
   RoomProvider({
     RoomService? service,
@@ -115,7 +116,9 @@ class RoomProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadRooms() async {
+  Future<void> loadRooms({bool force = false}) async {
+    if (loadingRooms) return;
+    if (!force && rooms.isNotEmpty) return;
     loadingRooms = true;
     roomsError = null;
     notifyListeners();
@@ -336,8 +339,13 @@ class RoomProvider extends ChangeNotifier {
 
   String? get myUserId => ProjectService.currentUserId;
 
+  bool _isActiveRoomLoad(int token, String roomId) {
+    return _roomLoadToken == token && currentRoom?.id == roomId;
+  }
+
   Future<void> openRoom(Room room) async {
     debugPrint('$_tag openRoom: ${room.id} ("${room.name}")');
+    final loadToken = ++_roomLoadToken;
     // Close previous WS subscription
     await _wsSub?.cancel();
     _wsSub = null;
@@ -346,58 +354,112 @@ class RoomProvider extends ChangeNotifier {
     onlineUserIds = [];
     currentRoom = room;
     messages = [];
+    artifacts = [];
+    memoryItems = [];
+    missions = [];
+    decisions = [];
+    tasks = [];
+    shareHistory = [];
+    slackIntegration = null;
+    notionIntegration = null;
+    executionPulse = null;
     messagesError = null;
     loadingMessages = true;
+    loadingIntegrations = false;
+    loadingShareHistory = false;
+    loadingExecutionPulse = false;
     notifyListeners();
 
     try {
       final result = await _svc.getMessages(room.id);
-      currentRoom = result.room;
-      messages = result.messages;
-      final contextResults = await Future.wait([
-        _svc.listArtifacts(room.id),
-        _svc.listMemory(room.id),
-        _svc.listMissions(room.id),
+      final primaryResults = await Future.wait([
         _svc.listDecisions(room.id),
         _svc.listTasks(room.id),
       ]);
-      artifacts = contextResults[0] as List<RoomArtifact>;
-      memoryItems = contextResults[1] as List<RoomMemory>;
-      missions = contextResults[2] as List<RoomMission>;
-      decisions = contextResults[3] as List<WorkspaceDecision>;
-      tasks = contextResults[4] as List<WorkspaceTask>;
-      try {
-        executionPulse = await _svc.getExecutionPulse(room.id);
-      } catch (_) {
-        executionPulse = null;
-      }
+      if (!_isActiveRoomLoad(loadToken, room.id)) return;
 
-      // Keep integration/status loading best-effort so chat load never fails
-      // due to optional side panels.
-      try {
-        final slackFuture = _svc.getSlackIntegrationStatus(room.id);
-        final notionFuture = _svc.getNotionIntegrationStatus(room.id);
-        final historyFuture = _svc.listShareHistory(room.id, limit: 12);
-        slackIntegration = await slackFuture;
-        notionIntegration = await notionFuture;
-        shareHistory = await historyFuture;
-      } catch (_) {
-        slackIntegration = null;
-        notionIntegration = null;
-        shareHistory = [];
-      }
-      debugPrint('$_tag openRoom: loaded ${messages.length} messages');
+      currentRoom = result.room;
+      messages = result.messages;
+      decisions = primaryResults[0] as List<WorkspaceDecision>;
+      tasks = primaryResults[1] as List<WorkspaceTask>;
+      debugPrint(
+        '$_tag openRoom: loaded primary data '
+        '(${messages.length} messages, ${decisions.length} decisions, ${tasks.length} tasks)',
+      );
     } catch (e) {
       debugPrint('$_tag openRoom: error loading messages — $e');
       messagesError = _errorMessage(e);
     } finally {
-      loadingMessages = false;
-      notifyListeners();
+      if (_isActiveRoomLoad(loadToken, room.id)) {
+        loadingMessages = false;
+        notifyListeners();
+      }
     }
 
     // Subscribe to WS
     final stream = _svc.subscribeToRoom(room.id);
     _wsSub = stream.listen(_onWsEvent);
+
+    unawaited(_loadRoomSecondaryContext(room.id, loadToken));
+  }
+
+  Future<void> _loadRoomSecondaryContext(String roomId, int loadToken) async {
+    if (!_isActiveRoomLoad(loadToken, roomId)) return;
+
+    loadingIntegrations = true;
+    loadingShareHistory = true;
+    loadingExecutionPulse = true;
+    notifyListeners();
+
+    try {
+      final secondaryResults = await Future.wait([
+        _svc.listArtifacts(roomId),
+        _svc.listMemory(roomId),
+        _svc.listMissions(roomId),
+      ]);
+      if (_isActiveRoomLoad(loadToken, roomId)) {
+        artifacts = secondaryResults[0] as List<RoomArtifact>;
+        memoryItems = secondaryResults[1] as List<RoomMemory>;
+        missions = secondaryResults[2] as List<RoomMission>;
+      }
+
+      try {
+        final pulse = await _svc.getExecutionPulse(roomId);
+        if (_isActiveRoomLoad(loadToken, roomId)) {
+          executionPulse = pulse;
+        }
+      } catch (_) {
+        if (_isActiveRoomLoad(loadToken, roomId)) {
+          executionPulse = null;
+        }
+      }
+
+      try {
+        final integrationResults = await Future.wait([
+          _svc.getSlackIntegrationStatus(roomId),
+          _svc.getNotionIntegrationStatus(roomId),
+          _svc.listShareHistory(roomId, limit: 12),
+        ]);
+        if (_isActiveRoomLoad(loadToken, roomId)) {
+          slackIntegration = integrationResults[0] as RoomIntegrationStatus;
+          notionIntegration = integrationResults[1] as RoomIntegrationStatus;
+          shareHistory = integrationResults[2] as List<RoomShareHistoryItem>;
+        }
+      } catch (_) {
+        if (_isActiveRoomLoad(loadToken, roomId)) {
+          slackIntegration = null;
+          notionIntegration = null;
+          shareHistory = [];
+        }
+      }
+    } finally {
+      if (_isActiveRoomLoad(loadToken, roomId)) {
+        loadingIntegrations = false;
+        loadingShareHistory = false;
+        loadingExecutionPulse = false;
+        notifyListeners();
+      }
+    }
   }
 
   void _onWsEvent(WsRoomEvent event) {

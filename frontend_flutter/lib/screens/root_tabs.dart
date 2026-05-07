@@ -18,30 +18,45 @@ class RootTabs extends StatefulWidget {
 
 class _RootTabsState extends State<RootTabs> {
   int _selectedIndex = 0;
+  late final List<Widget?> _loadedTabs;
 
   @override
   void initState() {
     super.initState();
+    _loadedTabs = List<Widget?>.filled(5, null);
+    _loadedTabs[_selectedIndex] = _buildTab(_selectedIndex);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final prov = context.read<RoomProvider>();
       await prov.loadRooms();
-      await prov.loadTemplates();
-      await prov.loadTemplateStats();
 
       if (!mounted) return;
 
       final hasRoom = await prov.ensureCurrentRoom(createIfMissing: true);
-      if (hasRoom) {
-        await prov.refreshExecutionPulse(silent: true);
-        await prov.loadFeedbackDigest(silent: true);
-      }
 
       if (mounted && !hasRoom && _selectedIndex == 0) {
         setState(() {
-          _selectedIndex = 1;
+          _selectedIndex = 3;
+          _loadedTabs[_selectedIndex] = _buildTab(_selectedIndex);
         });
       }
     });
+  }
+
+  Widget _buildTab(int index) {
+    switch (index) {
+      case 0:
+        return const OpsHubScreen();
+      case 1:
+        return const MyDayScreen();
+      case 2:
+        return const InboxScreen();
+      case 3:
+        return const SalonsScreen();
+      case 4:
+        return const ExecutionBoardScreen();
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   @override
@@ -49,19 +64,16 @@ class _RootTabsState extends State<RootTabs> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: const [
-          OpsHubScreen(),
-          MyDayScreen(),
-          InboxScreen(),
-          SalonsScreen(),
-          ExecutionBoardScreen(),
-        ],
+        children: List<Widget>.generate(5, (index) {
+          return _loadedTabs[index] ?? const SizedBox.shrink();
+        }),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
           setState(() {
             _selectedIndex = index;
+            _loadedTabs[index] ??= _buildTab(index);
           });
         },
         destinations: const [
